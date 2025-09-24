@@ -34,4 +34,13 @@ This is an interactive web application built with Streamlit for visualizing and 
     ```bash
     streamlit run app.py
     ```
+3.  **Run the tests:**
+    To ensure code quality and prevent regressions, run the automated test suite.
+    ```bash
+    # Install development dependencies first
+    pip install -r requirements-dev.txt
+
+    # Run pytest
+    pytest
+    ```
 The app will open in your web browser. When no file is uploaded, it automatically uses sample data and displays a welcome message. This is the default state for development and exploration. To test with a real file, use the file uploader in the sidebar. The `sample_defect_data.xlsx` file in the root can be used for testing.

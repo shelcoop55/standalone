@@ -9,20 +9,19 @@ import numpy as np
 from typing import List
 from io import BytesIO
 
-# --- DEFINE PHYSICAL CONSTANTS ---
-# These are the fixed, real-world dimensions (in mm) of the panel.
-# These constants are imported by other modules (like plotting.py).
-PANEL_WIDTH = 600
-PANEL_HEIGHT = 600
-QUADRANT_WIDTH = PANEL_WIDTH / 2      # This will be 255
-QUADRANT_HEIGHT = PANEL_HEIGHT / 2    # This will be 255
+# Import constants from the configuration file
+from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE
+
+# --- DERIVED PHYSICAL CONSTANTS ---
+# These constants are calculated from the primary dimensions in config.py
+QUADRANT_WIDTH = PANEL_WIDTH / 2
+QUADRANT_HEIGHT = PANEL_HEIGHT / 2
 
 @st.cache_data
 def load_data(
     uploaded_files: List[BytesIO],
     panel_rows: int,
     panel_cols: int,
-    gap_size: int
 ) -> pd.DataFrame:
     """
     Loads defect data and calculates the true physical plot coordinates (plot_x, plot_y)
@@ -99,8 +98,8 @@ def load_data(
     plot_y_base = local_index_y * cell_height
 
     # Determine the physical offset (in mm) for the quadrant itself
-    x_offset = np.where(df['UNIT_INDEX_X'] >= panel_cols, QUADRANT_WIDTH + gap_size, 0)
-    y_offset = np.where(df['UNIT_INDEX_Y'] >= panel_rows, QUADRANT_HEIGHT + gap_size, 0)
+    x_offset = np.where(df['UNIT_INDEX_X'] >= panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
+    y_offset = np.where(df['UNIT_INDEX_Y'] >= panel_rows, QUADRANT_HEIGHT + GAP_SIZE, 0)
 
     # 4. Calculate the final plot coordinate with scaled jitter
     # The jitter places the defect randomly *inside* its cell, not just on the corner.

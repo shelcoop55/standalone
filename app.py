@@ -10,13 +10,32 @@ import pandas as pd
 import matplotlib.colors as mcolors
 
 # Import our modularized functions
-from src.config import BACKGROUND_COLOR, PLOT_AREA_COLOR, GRID_COLOR, TEXT_COLOR, PANEL_COLOR
+from src.config import BACKGROUND_COLOR, PLOT_AREA_COLOR, GRID_COLOR, TEXT_COLOR, PANEL_COLOR, GAP_SIZE
 from src.data_handler import load_data, QUADRANT_WIDTH, QUADRANT_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT
 from src.plotting import (
     create_grid_shapes, create_defect_traces,
     create_pareto_trace, create_grouped_pareto_trace
 )
 from src.reporting import generate_excel_report
+from src.enums import ViewMode, Quadrant
+
+def load_css(file_path: str) -> None:
+    """Loads a CSS file and injects it into the Streamlit app."""
+    with open(file_path) as f:
+        css = f.read()
+        # Define CSS variables from Python config
+        css_variables = f"""
+        <style>
+            :root {{
+                --background-color: {BACKGROUND_COLOR};
+                --text-color: {TEXT_COLOR};
+                --panel-color: {PANEL_COLOR};
+                --panel-hover-color: #d48c46;
+            }}
+            {css}
+        </style>
+        """
+        st.markdown(css_variables, unsafe_allow_html=True)
 
 # ==============================================================================
 # --- STREAMLIT APP MAIN LOGIC ---
@@ -30,18 +49,7 @@ def main() -> None:
     st.set_page_config(layout="wide", page_title="Panel Defect Analysis")
 
     # --- Apply Custom CSS for a Professional UI ---
-    st.markdown(f"""
-        <style>
-            .reportview-container {{ background-color: {BACKGROUND_COLOR}; }}
-            .sidebar .sidebar-content {{ background-color: #2E2E2E; border-right: 2px solid #4A4A4A; box-shadow: 5px 0px 15px rgba(0,0,0,0.3); }}
-            h1 {{ text-align: center; padding-bottom: 20px; }}
-            body, h2, h3, .stRadio, .stSelectbox, .stNumberInput {{ color: {TEXT_COLOR}; }}
-            .stDownloadButton > button, div[data-testid="stFormSubmitButton"] button {{ background-color: {PANEL_COLOR}; color: #FFFFFF; border: 1px solid #000000; font-weight: bold; }}
-            .stDownloadButton > button:hover, div[data-testid="stFormSubmitButton"] button:hover {{ background-color: #d48c46; color: #FFFFFF; border: 1px solid #FFFFFF; }}
-            .st-emotion-cache-1g8w9s4 p {{ color: #A0A0A0; font-size: 16px; }}
-            .st-emotion-cache-fplge9 div {{ font-size: 32px; color: {PANEL_COLOR}; font-weight: bold; }}
-        </style>
-    """, unsafe_allow_html=True)
+    load_css("assets/styles.css")
 
     # --- Initialize Session State ---
     if 'report_bytes' not in st.session_state: st.session_state.report_bytes = None
@@ -57,21 +65,39 @@ def main() -> None:
                 panel_rows = st.number_input("Panel Rows", min_value=1, value=7, help="Number of vertical units in a single quadrant.")
                 panel_cols = st.number_input("Panel Columns", min_value=1, value=7, help="Number of horizontal units in a single quadrant.")
                 lot_number = st.text_input("Lot Number (Optional)", help="Enter the Lot Number to display it on the defect map.")
-                # --- The physical gap is fixed at 10mm as requested ---
-                gap_size = 20
             submitted = st.form_submit_button("🚀 Run Analysis")
 
         st.divider()
         with st.expander("📊 Analysis Controls", expanded=True):
-            view_mode = st.radio("Select View",["Defect View", "Pareto View", "Summary View"], help="Choose the primary analysis view.", disabled=st.session_state.get('full_df') is None)
-            quadrant_selection = st.selectbox("Select Quadrant", ["All", "Q1", "Q2", "Q3", "Q4"], help="Filter data to a specific quadrant of the panel.", disabled=st.session_state.get('full_df') is None)
+            view_mode = st.radio("Select View", ViewMode.values(), help="Choose the primary analysis view.", disabled=st.session_state.get('full_df') is None)
+            quadrant_selection = st.selectbox("Select Quadrant", Quadrant.values(), help="Filter data to a specific quadrant of the panel.", disabled=st.session_state.get('full_df') is None)
 
         st.divider()
         with st.expander("📥 Reporting", expanded=True):
+            report_disabled = st.session_state.get('full_df') is None or st.session_state.full_df.empty
+
+            if st.button("Generate Report for Download", disabled=report_disabled):
+                with st.spinner("Generating Excel report..."):
+                    df = st.session_state.full_df
+                    params = st.session_state.analysis_params
+                    source_filenames = df['SOURCE_FILE'].unique().tolist()
+
+                    excel_bytes = generate_excel_report(
+                        full_df=df,
+                        panel_rows=params.get("panel_rows", 7),
+                        panel_cols=params.get("panel_cols", 7),
+                        source_filename=", ".join(source_filenames)
+                    )
+                    st.session_state.report_bytes = excel_bytes
+                    st.rerun()
+
             st.download_button(
-                label="Download Full Report", data=st.session_state.report_bytes if st.session_state.report_bytes is not None else b"",
-                file_name="full_defect_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                disabled=st.session_state.report_bytes is None
+                label="Download Full Report",
+                data=st.session_state.report_bytes if st.session_state.report_bytes is not None else b"",
+                file_name="full_defect_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                disabled=st.session_state.report_bytes is None,
+                help="Click 'Generate Report' first to enable download."
             )
 
     st.title("📊 Panel Defect Analysis Tool")
@@ -79,61 +105,57 @@ def main() -> None:
 
     if submitted:
         with st.spinner("Loading and analyzing data..."):
-            full_df = load_data(uploaded_files, panel_rows, panel_cols, gap_size)
+            full_df = load_data(uploaded_files, panel_rows, panel_cols)
             st.session_state.full_df = full_df
-            st.session_state.analysis_params = {"panel_rows": panel_rows, "panel_cols": panel_cols, "gap_size": gap_size, "lot_number": lot_number}
-            if not full_df.empty:
-                source_filenames = [f.name for f in uploaded_files] if uploaded_files else ["Sample Data"]
-                excel_report_bytes = generate_excel_report(full_df, panel_rows, panel_cols, ", ".join(source_filenames))
-                st.session_state.report_bytes = excel_report_bytes
-            else:
-                st.session_state.report_bytes = None
+            st.session_state.analysis_params = {"panel_rows": panel_rows, "panel_cols": panel_cols, "gap_size": GAP_SIZE, "lot_number": lot_number}
+            # Reset report bytes on new analysis
+            st.session_state.report_bytes = None
             st.rerun()
 
     if st.session_state.full_df is not None:
         full_df = st.session_state.full_df
         params = st.session_state.analysis_params
         panel_rows, panel_cols = params.get("panel_rows", 7), params.get("panel_cols", 7)
-        gap_size, lot_number = params.get("gap_size", 10), params.get("lot_number", "")
+        lot_number = params.get("lot_number", "")
 
         if full_df.empty:
             st.error("The loaded data is empty or invalid. Please check the source file and try again.")
             return
 
-        display_df = full_df[full_df['QUADRANT'] == quadrant_selection] if quadrant_selection != "All" else full_df
+        display_df = full_df[full_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else full_df
 
         # --- VIEW 1: DEFECT MAP ---
-        if view_mode == "Defect View":
+        if view_mode == ViewMode.DEFECT.value:
             fig = go.Figure()
             defect_traces = create_defect_traces(display_df)
             for trace in defect_traces: fig.add_trace(trace)
             
-            plot_shapes = create_grid_shapes(panel_rows, panel_cols, gap_size, quadrant_selection)
+            plot_shapes = create_grid_shapes(panel_rows, panel_cols, quadrant_selection)
 
             # --- *** FIX STARTS HERE: Define ranges for all quadrants and conditionally set them *** ---
             
             # 1. Define the physical axis ranges for each quadrant
             q1_x_range = [0, QUADRANT_WIDTH]
             q1_y_range = [0, QUADRANT_HEIGHT]
-            q2_x_range = [QUADRANT_WIDTH + gap_size, PANEL_WIDTH + gap_size]
+            q2_x_range = [QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
             q2_y_range = [0, QUADRANT_HEIGHT]
             q3_x_range = [0, QUADRANT_WIDTH]
-            q3_y_range = [QUADRANT_HEIGHT + gap_size, PANEL_HEIGHT + gap_size]
-            q4_x_range = [QUADRANT_WIDTH + gap_size, PANEL_WIDTH + gap_size]
-            q4_y_range = [QUADRANT_HEIGHT + gap_size, PANEL_HEIGHT + gap_size]
+            q3_y_range = [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
+            q4_x_range = [QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
+            q4_y_range = [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
 
             # 2. Set the plot's axis range and tick visibility based on the user's selection
-            if quadrant_selection == "All":
-                x_axis_range = [-gap_size, PANEL_WIDTH + gap_size]
-                y_axis_range = [-gap_size, PANEL_HEIGHT + gap_size]
+            if quadrant_selection == Quadrant.ALL.value:
+                x_axis_range = [-GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
+                y_axis_range = [-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
                 show_ticks = True
             else:
                 show_ticks = False # Hide tick labels in zoom view for clarity
-                if quadrant_selection == "Q1":
+                if quadrant_selection == Quadrant.Q1.value:
                     x_axis_range, y_axis_range = q1_x_range, q1_y_range
-                elif quadrant_selection == "Q2":
+                elif quadrant_selection == Quadrant.Q2.value:
                     x_axis_range, y_axis_range = q2_x_range, q2_y_range
-                elif quadrant_selection == "Q3":
+                elif quadrant_selection == Quadrant.Q3.value:
                     x_axis_range, y_axis_range = q3_x_range, q3_y_range
                 else: # Q4
                     x_axis_range, y_axis_range = q4_x_range, q4_y_range
@@ -143,10 +165,10 @@ def main() -> None:
             cell_width = QUADRANT_WIDTH / panel_cols
             cell_height = QUADRANT_HEIGHT / panel_rows
             x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-            x_tick_vals_q2 = [(QUADRANT_WIDTH + gap_size) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+            x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
             x_tick_vals = x_tick_vals_q1 + x_tick_vals_q2
             y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-            y_tick_vals_q3 = [(QUADRANT_HEIGHT + gap_size) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+            y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
             y_tick_vals = y_tick_vals_q1 + y_tick_vals_q3
             x_tick_text = list(range(panel_cols * 2))
             y_tick_text = list(range(panel_rows * 2))
@@ -161,17 +183,17 @@ def main() -> None:
                 height=800
             )
             
-            if lot_number and quadrant_selection == "All":
-                fig.add_annotation(x=PANEL_WIDTH + gap_size, y=PANEL_HEIGHT + gap_size, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=TEXT_COLOR), align="right", xanchor="right", yanchor="bottom")
+            if lot_number and quadrant_selection == Quadrant.ALL.value:
+                fig.add_annotation(x=PANEL_WIDTH + GAP_SIZE, y=PANEL_HEIGHT + GAP_SIZE, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=TEXT_COLOR), align="right", xanchor="right", yanchor="bottom")
             
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
 
         # --- VIEW 2: PARETO CHART ---
-        elif view_mode == "Pareto View":
+        elif view_mode == ViewMode.PARETO.value:
             st.subheader(f"Defect Pareto - Quadrant: {quadrant_selection}")
             fig = go.Figure()
             
-            if quadrant_selection == "All":
+            if quadrant_selection == Quadrant.ALL.value:
                 # Show grouped pareto for the full panel view
                 pareto_traces = create_grouped_pareto_trace(display_df)
                 for trace in pareto_traces:
@@ -189,10 +211,10 @@ def main() -> None:
                 legend=dict(title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR)),
                 height=600
             )
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
         
         # --- VIEW 3: SUMMARY ---
-        elif view_mode == "Summary View":
+        elif view_mode == ViewMode.SUMMARY.value:
             # Replaced with the provided Summary View block (clean)
             st.header(f"Statistical Summary for Quadrant: {quadrant_selection}")
 
@@ -200,7 +222,7 @@ def main() -> None:
                 st.info("No defects to summarize in the selected quadrant.")
                 return
 
-            if quadrant_selection != "All":
+            if quadrant_selection != Quadrant.ALL.value:
                 total_defects = len(display_df)
                 total_cells = panel_rows * panel_cols
                 defective_cells = len(display_df[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
@@ -257,7 +279,7 @@ def main() -> None:
                     legend=dict(font=dict(color=TEXT_COLOR)),
                     height=600
                 )
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
 
     else:

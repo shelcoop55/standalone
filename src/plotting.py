@@ -1,116 +1,99 @@
 """
 Plotting and Visualization Module.
 This version draws a true-to-scale simulation of a 510x510mm physical panel.
-UPDATED: Now includes an outer border frame.
+UPDATED: Now includes an outer border frame and has been refactored for clarity.
 """
 import plotly.graph_objects as go
 import pandas as pd
 from typing import List, Dict, Any
 
-from src.config import PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR
-# --- NEW: Import the physical dimensions from the data handler ---
-from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT
+from src.config import (
+    PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR,
+    PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE
+)
+from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT
 
-def create_grid_shapes(panel_rows: int, panel_cols: int, gap_size: int, quadrant: str = 'All') -> List[Dict[str, Any]]:
-    """
-    Creates the visual shapes for the panel grid in a fixed 510x510mm coordinate system.
-    The grid lines are scaled based on the number of rows/cols to fit the fixed quadrant size.
-    """
+# ==============================================================================
+# --- Private Helper Functions for Grid Creation ---
+# ==============================================================================
+
+def _draw_border_and_gaps() -> List[Dict[str, Any]]:
+    """Creates the shapes for the outer border and inner gaps of the panel."""
     shapes = []
-    
-    # --- NEW LOGIC: Calculate the physical size of each grid cell for drawing ---
+    gap_color = '#A8652A'
+    total_width_with_gap = PANEL_WIDTH + GAP_SIZE
+    total_height_with_gap = PANEL_HEIGHT + GAP_SIZE
+
+    # Outer border frame
+    shapes.extend([
+        # Top Border
+        dict(type="rect", x0=0, y0=total_height_with_gap, x1=total_width_with_gap, y1=total_height_with_gap + GAP_SIZE, fillcolor=gap_color, line_width=0, layer='below'),
+        # Bottom Border
+        dict(type="rect", x0=0, y0=-GAP_SIZE, x1=total_width_with_gap, y1=0, fillcolor=gap_color, line_width=0, layer='below'),
+        # Left Border
+        dict(type="rect", x0=-GAP_SIZE, y0=-GAP_SIZE, x1=0, y1=total_height_with_gap + GAP_SIZE, fillcolor=gap_color, line_width=0, layer='below'),
+        # Right Border
+        dict(type="rect", x0=total_width_with_gap, y0=-GAP_SIZE, x1=total_width_with_gap + GAP_SIZE, y1=total_height_with_gap + GAP_SIZE, fillcolor=gap_color, line_width=0, layer='below')
+    ])
+
+    # Inner gaps
+    shapes.extend([
+        # Vertical inner gap
+        dict(type="rect", x0=QUADRANT_WIDTH, y0=0, x1=QUADRANT_WIDTH + GAP_SIZE, y1=total_height_with_gap, fillcolor=gap_color, line_width=0, layer='below'),
+        # Horizontal inner gap
+        dict(type="rect", x0=0, y0=QUADRANT_HEIGHT, x1=total_width_with_gap, y1=QUADRANT_HEIGHT + GAP_SIZE, fillcolor=gap_color, line_width=0, layer='below')
+    ])
+    return shapes
+
+def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int) -> List[Dict[str, Any]]:
+    """Creates the shapes for the quadrant outlines and their internal grid lines."""
+    shapes = []
     cell_width = QUADRANT_WIDTH / panel_cols
     cell_height = QUADRANT_HEIGHT / panel_rows
 
-    # --- The origins are now defined by the fixed physical dimensions ---
-    all_origins = {
-        'Q1': (0, 0),
-        'Q2': (QUADRANT_WIDTH + gap_size, 0),
-        'Q3': (0, QUADRANT_HEIGHT + gap_size),
-        'Q4': (QUADRANT_WIDTH + gap_size, QUADRANT_HEIGHT + gap_size)
-    }
-    
-    origins_to_draw = all_origins if quadrant == 'All' else {quadrant: all_origins[quadrant]}
-    
-    # --- Draw the gap/saw street shapes if showing the full panel ---
-    if quadrant == 'All':
-        gap_color = '#A8652A' # A color for the gap and border
-        total_width_with_gap = PANEL_WIDTH + gap_size
-        total_height_with_gap = PANEL_HEIGHT + gap_size
-        
-        # --- NEW CODE BLOCK STARTS HERE ---
-        # --- Draw the outer border frame ---
-        
-        # Top Border
-        shapes.append(dict(
-            type="rect", x0=0, y0=total_height_with_gap, x1=total_width_with_gap, y1=total_height_with_gap + gap_size,
-            fillcolor=gap_color, line_width=0, layer='below'
-        ))
-        # Bottom Border
-        shapes.append(dict(
-            type="rect", x0=0, y0=-gap_size, x1=total_width_with_gap, y1=0,
-            fillcolor=gap_color, line_width=0, layer='below'
-        ))
-        # Left Border
-        shapes.append(dict(
-            type="rect", x0=-gap_size, y0=-gap_size, x1=0, y1=total_height_with_gap + gap_size,
-            fillcolor=gap_color, line_width=0, layer='below'
-        ))
-        # Right Border
-        shapes.append(dict(
-            type="rect", x0=total_width_with_gap, y0=-gap_size, x1=total_width_with_gap + gap_size, y1=total_height_with_gap + gap_size,
-            fillcolor=gap_color, line_width=0, layer='below'
-        ))
-        
-        # --- NEW CODE BLOCK ENDS HERE ---
-
-        # Vertical inner gap
-        shapes.append(dict(
-            type="rect", x0=QUADRANT_WIDTH, y0=0, x1=QUADRANT_WIDTH + gap_size, y1=total_height_with_gap,
-            fillcolor=gap_color, line_width=0, layer='below'
-        ))
-        # Horizontal inner gap
-        shapes.append(dict(
-            type="rect", x0=0, y0=QUADRANT_HEIGHT, x1=total_width_with_gap, y1=QUADRANT_HEIGHT + gap_size,
-            fillcolor=gap_color, line_width=0, layer='below'
-        ))
-
-    # --- Draw the quadrants and their internal grid lines ---
     for x_start, y_start in origins_to_draw.values():
-        # Draw the main quadrant rectangle outline
         shapes.append(dict(
-            type="rect",
-            x0=x_start, y0=y_start,
-            x1=x_start + QUADRANT_WIDTH, y1=y_start + QUADRANT_HEIGHT,
-            line=dict(color=GRID_COLOR, width=2),
-            fillcolor=PANEL_COLOR,
-            layer='below'
+            type="rect", x0=x_start, y0=y_start, x1=x_start + QUADRANT_WIDTH, y1=y_start + QUADRANT_HEIGHT,
+            line=dict(color=GRID_COLOR, width=2), fillcolor=PANEL_COLOR, layer='below'
         ))
-        
-        # Draw vertical grid lines based on calculated cell_width
         for i in range(1, panel_cols):
             line_x = x_start + (i * cell_width)
-            shapes.append(dict(
-                type="line", x0=line_x, y0=y_start, x1=line_x, y1=y_start + QUADRANT_HEIGHT,
-                line=dict(color=GRID_COLOR, width=1, dash='solid'), opacity=0.5, layer='below'
-            ))
-        
-        # Draw horizontal grid lines based on calculated cell_height
+            shapes.append(dict(type="line", x0=line_x, y0=y_start, x1=line_x, y1=y_start + QUADRANT_HEIGHT, line=dict(color=GRID_COLOR, width=1, dash='solid'), opacity=0.5, layer='below'))
         for i in range(1, panel_rows):
             line_y = y_start + (i * cell_height)
-            shapes.append(dict(
-                type="line", x0=x_start, y0=line_y, x1=x_start + QUADRANT_WIDTH, y1=line_y,
-                line=dict(color=GRID_COLOR, width=1, dash='solid'), opacity=0.5, layer='below'
-            ))
+            shapes.append(dict(type="line", x0=x_start, y0=line_y, x1=x_start + QUADRANT_WIDTH, y1=line_y, line=dict(color=GRID_COLOR, width=1, dash='solid'), opacity=0.5, layer='below'))
             
     return shapes
 
-# --- The functions below are unchanged ---
+# ==============================================================================
+# --- Public API Functions ---
+# ==============================================================================
+
+def create_grid_shapes(panel_rows: int, panel_cols: int, quadrant: str = 'All') -> List[Dict[str, Any]]:
+    """
+    Creates the visual shapes for the panel grid in a fixed 510x510mm coordinate system.
+    This function orchestrates calls to private helpers to build the grid.
+    """
+    all_origins = {
+        'Q1': (0, 0),
+        'Q2': (QUADRANT_WIDTH + GAP_SIZE, 0),
+        'Q3': (0, QUADRANT_HEIGHT + GAP_SIZE),
+        'Q4': (QUADRANT_WIDTH + GAP_SIZE, QUADRANT_HEIGHT + GAP_SIZE)
+    }
+
+    origins_to_draw = all_origins if quadrant == 'All' else {quadrant: all_origins[quadrant]}
+
+    shapes = []
+    if quadrant == 'All':
+        shapes.extend(_draw_border_and_gaps())
+
+    shapes.extend(_draw_quadrant_grids(origins_to_draw, panel_rows, panel_cols))
+
+    return shapes
 
 def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
     """
     Creates a list of scatter traces, one for each defect type in the dataframe.
-    This function is unchanged as it plots the pre-calculated 'plot_x' and 'plot_y'.
     """
     traces = []
     for dtype, color in defect_style_map.items():
@@ -132,7 +115,7 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
     
 def create_pareto_trace(df: pd.DataFrame) -> go.Bar:
     """
-    This function is unchanged. It operates on categorical data only.
+    Creates a single bar trace for a Pareto chart.
     """
     if df.empty:
         return go.Bar(name='Pareto')
@@ -147,7 +130,7 @@ def create_pareto_trace(df: pd.DataFrame) -> go.Bar:
 
 def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
     """
-    This function is unchanged. It operates on categorical data only.
+    Creates a list of bar traces for a grouped Pareto chart (by quadrant).
     """
     if df.empty:
         return []

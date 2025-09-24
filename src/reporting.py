@@ -9,7 +9,131 @@ and analytical value.
 import pandas as pd
 import io
 from datetime import datetime
-from src.config import PANEL_COLOR
+from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES
+
+# ==============================================================================
+# --- Private Helper Functions for Report Generation ---
+# ==============================================================================
+
+def _define_formats(workbook):
+    """Defines all the custom formats used in the Excel report."""
+    formats = {
+        'title': workbook.add_format({'bold': True, 'font_size': 18, 'font_color': PANEL_COLOR, 'valign': 'vcenter'}),
+        'subtitle': workbook.add_format({'bold': True, 'font_size': 12, 'valign': 'vcenter'}),
+        'header': workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'fg_color': '#DDEBF7', 'border': 1, 'align': 'center'}),
+        'cell': workbook.add_format({'border': 1}),
+        'percent': workbook.add_format({'num_format': '0.00%', 'border': 1}),
+        'density': workbook.add_format({'num_format': '0.00', 'border': 1}),
+        'critical': workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+    }
+    return formats
+
+def _write_report_header(worksheet, formats, source_filename):
+    """Writes the main header section to a worksheet."""
+    worksheet.set_row(0, 30)
+    worksheet.merge_range('A1:D1', 'Panel Defect Analysis Report', formats['title'])
+    worksheet.write('A2', 'Source File:', formats['subtitle'])
+    worksheet.write('B2', source_filename)
+    worksheet.write('A3', 'Report Date:', formats['subtitle'])
+    worksheet.write('B3', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+def _create_summary_sheet(writer, formats, full_df, panel_rows, panel_cols, source_filename):
+    """Creates the 'Quarterly Summary' sheet with KPIs and a chart."""
+    workbook = writer.book
+    worksheet = workbook.add_worksheet('Quarterly Summary')
+
+    _write_report_header(worksheet, formats, source_filename)
+
+    kpi_data = []
+    quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
+
+    for quad in quadrants:
+        quad_df = full_df[full_df['QUADRANT'] == quad]
+        total_defects = len(quad_df)
+        density = total_defects / (panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
+        kpi_data.append({"Quadrant": quad, "Total Defects": total_defects, "Defect Density": density})
+
+    total_defects_all = len(full_df)
+    density_all = total_defects_all / (4 * panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
+    kpi_data.append({"Quadrant": "Total", "Total Defects": total_defects_all, "Defect Density": density_all})
+
+    summary_df = pd.DataFrame(kpi_data)
+
+    start_row = 5
+    summary_df.to_excel(writer, sheet_name='Quarterly Summary', startrow=start_row, header=False, index=False)
+
+    for col_num, value in enumerate(summary_df.columns.values):
+        worksheet.write(start_row - 1, col_num, value, formats['header'])
+        
+    for row_num in range(len(summary_df)):
+        worksheet.write(row_num + start_row, 0, summary_df.iloc[row_num, 0], formats['cell'])
+        worksheet.write(row_num + start_row, 1, summary_df.iloc[row_num, 1], formats['cell'])
+        worksheet.write(row_num + start_row, 2, summary_df.iloc[row_num, 2], formats['density'])
+
+    worksheet.autofit()
+
+    chart = workbook.add_chart({'type': 'column'})
+    chart.add_series({
+        'name': 'Total Defects by Quadrant',
+        'categories': ['Quarterly Summary', start_row, 0, start_row + len(quadrants) - 1, 0],
+        'values': ['Quarterly Summary', start_row, 1, start_row + len(quadrants) - 1, 1],
+        'fill': {'color': PANEL_COLOR},
+        'border': {'color': '#000000'},
+        'data_labels': {'value': True}
+    })
+    chart.set_title({'name': 'Defect Count Comparison by Quadrant'})
+    chart.set_legend({'position': 'none'})
+    chart.set_y_axis({'name': 'Count'})
+    chart.set_style(10)
+    worksheet.insert_chart('E2', chart, {'x_scale': 1.5, 'y_scale': 1.5})
+
+def _create_top_defects_sheets(writer, formats, full_df):
+    """Creates a separate sheet for the top defects of each quadrant."""
+    quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
+    for quad in quadrants:
+        quad_df = full_df[full_df['QUADRANT'] == quad]
+        if not quad_df.empty:
+            sheet_name = f'{quad} Top Defects'
+
+            top_offenders = quad_df['DEFECT_TYPE'].value_counts().reset_index()
+            top_offenders.columns = ['Defect Type', 'Count']
+            top_offenders['Percentage'] = (top_offenders['Count'] / len(quad_df))
+            
+            top_offenders.to_excel(writer, sheet_name=sheet_name, startrow=1, header=False, index=False)
+
+            worksheet = writer.sheets[sheet_name]
+
+            for col_num, value in enumerate(top_offenders.columns.values):
+                worksheet.write(0, col_num, value, formats['header'])
+            worksheet.set_column('C:C', 12, formats['percent'])
+            worksheet.autofit()
+
+def _create_full_defect_list_sheet(writer, formats, full_df):
+    """Creates the sheet with a full list of all defects and conditional formatting."""
+    workbook = writer.book
+    report_columns = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'QUADRANT', 'SOURCE_FILE']
+    final_df = full_df[[col for col in report_columns if col in full_df.columns]]
+
+    worksheet = workbook.add_worksheet('Full Defect List')
+    final_df.to_excel(writer, sheet_name='Full Defect List', startrow=1, header=False, index=False)
+
+    for col_num, value in enumerate(final_df.columns.values):
+        worksheet.write(0, col_num, value, formats['header'])
+
+    formula_parts = [f'$C2="{defect_type}"' for defect_type in CRITICAL_DEFECT_TYPES]
+    criteria_formula = f"=OR({', '.join(formula_parts)})"
+
+    worksheet.conditional_format('A2:E{}'.format(len(final_df) + 1), {
+        'type': 'formula',
+        'criteria': criteria_formula,
+        'format': formats['critical']
+    })
+
+    worksheet.autofit()
+
+# ==============================================================================
+# --- Public API Function ---
+# ==============================================================================
 
 def generate_excel_report(
     full_df: pd.DataFrame,
@@ -20,136 +144,17 @@ def generate_excel_report(
     """
     Generates a comprehensive, multi-sheet Excel report.
 
-    The report includes:
-    - A summary sheet with KPI metrics and a themed bar chart.
-    - A professional header with the report title, source file, and timestamp.
-    - Separate sheets for the top defects in each quadrant.
-    - A full list of all defects with conditional formatting to highlight critical issues.
-
-    Args:
-        full_df (pd.DataFrame): The complete, unfiltered dataframe of defect data.
-        panel_rows (int): The number of rows in a single panel.
-        panel_cols (int): The number of columns in a single panel.
-        source_filename (str): The name of the source data file for the report header.
-
-    Returns:
-        bytes: The generated Excel file as an in-memory bytes object.
+    This function orchestrates calls to private helpers to build the report.
     """
     output_buffer = io.BytesIO()
 
     with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
         workbook = writer.book
-        
-        # --- Define Professional Formats ---
-        title_format = workbook.add_format({'bold': True, 'font_size': 18, 'font_color': PANEL_COLOR, 'valign': 'vcenter'})
-        subtitle_format = workbook.add_format({'bold': True, 'font_size': 12, 'valign': 'vcenter'})
-        header_format = workbook.add_format({
-            'bold': True, 'text_wrap': True, 'valign': 'top', 
-            'fg_color': '#DDEBF7', 'border': 1, 'align': 'center'
-        })
-        cell_format = workbook.add_format({'border': 1})
-        percent_format = workbook.add_format({'num_format': '0.00%', 'border': 1})
-        density_format = workbook.add_format({'num_format': '0.00', 'border': 1})
-        critical_defect_format = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+        formats = _define_formats(workbook)
 
-        # --- Sheet 1: Quarterly Summary ---
-        worksheet = workbook.add_worksheet('Quarterly Summary')
-
-        # --- Header ---
-        worksheet.set_row(0, 30)
-        worksheet.merge_range('A1:D1', 'Panel Defect Analysis Report', title_format)
-        worksheet.write('A2', 'Source File:', subtitle_format)
-        worksheet.write('B2', source_filename)
-        worksheet.write('A3', 'Report Date:', subtitle_format)
-        worksheet.write('B3', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-        kpi_data = []
-        quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
-        
-        for quad in quadrants:
-            quad_df = full_df[full_df['QUADRANT'] == quad]
-            total_defects = len(quad_df)
-            density = total_defects / (panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
-            kpi_data.append({"Quadrant": quad, "Total Defects": total_defects, "Defect Density": density})
-        
-        total_defects_all = len(full_df)
-        density_all = total_defects_all / (4 * panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
-        kpi_data.append({"Quadrant": "Total", "Total Defects": total_defects_all, "Defect Density": density_all})
-        
-        summary_df = pd.DataFrame(kpi_data)
-        
-        # --- Write Data Table ---
-        start_row = 5
-        summary_df.to_excel(writer, sheet_name='Quarterly Summary', startrow=start_row, header=False, index=False)
-        
-        for col_num, value in enumerate(summary_df.columns.values):
-            worksheet.write(start_row - 1, col_num, value, header_format)
-            
-        for row_num in range(len(summary_df)):
-            worksheet.write(row_num + start_row, 0, summary_df.iloc[row_num, 0], cell_format)
-            worksheet.write(row_num + start_row, 1, summary_df.iloc[row_num, 1], cell_format)
-            worksheet.write(row_num + start_row, 2, summary_df.iloc[row_num, 2], density_format)
-
-        worksheet.autofit()
-        
-        # --- Themed Chart ---
-        chart = workbook.add_chart({'type': 'column'})
-        chart.add_series({
-            'name':       'Total Defects by Quadrant',
-            'categories': ['Quarterly Summary', start_row, 0, start_row + len(quadrants) - 1, 0],
-            'values':     ['Quarterly Summary', start_row, 1, start_row + len(quadrants) - 1, 1],
-            'fill':       {'color': PANEL_COLOR},
-            'border':     {'color': '#000000'},
-            'data_labels': {'value': True}
-        })
-        chart.set_title({'name': 'Defect Count Comparison by Quadrant'})
-        chart.set_legend({'position': 'none'})
-        chart.set_y_axis({'name': 'Count'})
-        chart.set_style(10) # A built-in style that looks clean
-        worksheet.insert_chart('E2', chart, {'x_scale': 1.5, 'y_scale': 1.5})
-
-        # --- Create a separate sheet for each quadrant's top offenders ---
-        for quad in quadrants:
-            quad_df = full_df[full_df['QUADRANT'] == quad]
-            if not quad_df.empty:
-                sheet_name = f'{quad} Top Defects'
-                
-                top_offenders = quad_df['DEFECT_TYPE'].value_counts().reset_index()
-                top_offenders.columns = ['Defect Type', 'Count']
-                top_offenders['Percentage'] = (top_offenders['Count'] / len(quad_df))
-                
-                # 1. Write the dataframe to the new sheet first
-                top_offenders.to_excel(writer, sheet_name=sheet_name, startrow=1, header=False, index=False)
-                
-                # 2. Get the worksheet object that pandas just created
-                worksheet = writer.sheets[sheet_name]
-
-                # 3. Now, format the sheet
-                for col_num, value in enumerate(top_offenders.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                worksheet.set_column('C:C', 12, percent_format)
-                worksheet.autofit()
-
-        # --- Final Sheet: Full Defect List (with Conditional Formatting) ---
-        report_columns = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'QUADRANT', 'SOURCE_FILE']
-        final_df = full_df[[col for col in report_columns if col in full_df.columns]]
-
-        # Use a new worksheet for the full list
-        full_list_worksheet = workbook.add_worksheet('Full Defect List')
-        final_df.to_excel(writer, sheet_name='Full Defect List', startrow=1, header=False, index=False)
-
-        for col_num, value in enumerate(final_df.columns.values):
-            full_list_worksheet.write(0, col_num, value, header_format)
-
-        # Apply conditional formatting to the correct worksheet
-        full_list_worksheet.conditional_format('A2:E{}'.format(len(final_df) + 1), {
-            'type': 'formula',
-            'criteria': '=OR($C2="Short", $C2="Cut/Short")',
-            'format': critical_defect_format
-        })
-
-        full_list_worksheet.autofit()
+        _create_summary_sheet(writer, formats, full_df, panel_rows, panel_cols, source_filename)
+        _create_top_defects_sheets(writer, formats, full_df)
+        _create_full_defect_list_sheet(writer, formats, full_df)
 
     excel_bytes = output_buffer.getvalue()
     return excel_bytes
-
