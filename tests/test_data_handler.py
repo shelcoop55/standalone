@@ -25,7 +25,7 @@ def test_excel_file() -> list[BytesIO]:
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Defect')
+        df.to_excel(writer, index=False, sheet_name='Defects')
     output.seek(0)
 
     # Mimic Streamlit's UploadedFile object by adding a 'name' attribute
@@ -46,7 +46,7 @@ def test_excel_file_missing_cols() -> list[BytesIO]:
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Defect')
+        df.to_excel(writer, index=False, sheet_name='Defects')
     output.seek(0)
     output.name = "missing_cols.xlsx"
     return [output]
