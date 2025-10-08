@@ -32,7 +32,7 @@ def load_data(
         for uploaded_file in uploaded_files:
             try:
                 # Read only the sheet named "Defect"
-                df = pd.read_excel(uploaded_file, sheet_name='Defects', engine='openpyxl')
+                df = pd.read_excel(uploaded_file, sheet_name='Defect', engine='openpyxl')
                 df['SOURCE_FILE'] = uploaded_file.name
                 all_dfs.append(df)
             except ValueError:

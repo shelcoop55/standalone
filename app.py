@@ -277,15 +277,33 @@ def main() -> None:
                 )
 
             else:
+                # --- NEW: Panel-Wide KPIs ---
+                st.markdown("### Panel-Wide KPIs (Filtered)")
+                total_defects = len(display_df)
+                # Total cells for the entire 2x2 panel
+                total_cells = (panel_rows * panel_cols) * 4
+                defective_cells = len(display_df[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
+                defect_density = total_defects / total_cells if total_cells > 0 else 0
+                yield_estimate = (total_cells - defective_cells) / total_cells if total_cells > 0 else 0
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Filtered Defect Count", f"{total_defects:,}")
+                col2.metric("Filtered Defect Density", f"{defect_density:.2f} defects/cell")
+                col3.metric("Filtered Yield Estimate", f"{yield_estimate:.2%}")
+                st.divider()
+                # --- END NEW ---
+
                 st.markdown("### Quarterly KPI Breakdown")
 
                 kpi_data = []
                 quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
+                # Note: For the breakdown, we use the 'filtered_df' which is only filtered by
+                # verification, not by quadrant, to get accurate per-quadrant counts.
                 for quad in quadrants:
-                    quad_df = full_df[full_df['QUADRANT'] == quad]
-                    total_defects = len(quad_df)
-                    density = total_defects / (panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
-                    kpi_data.append({"Quadrant": quad, "Total Defects": total_defects, "Defect Density": f"{density:.2f}"})
+                    quad_df = filtered_df[filtered_df['QUADRANT'] == quad]
+                    total_quad_defects = len(quad_df)
+                    quad_density = total_quad_defects / (panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
+                    kpi_data.append({"Quadrant": quad, "Total Defects": total_quad_defects, "Defect Density": f"{quad_density:.2f}"})
 
                 kpi_df = pd.DataFrame(kpi_data)
                 st.dataframe(kpi_df, width='stretch')
