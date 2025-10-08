@@ -14,7 +14,8 @@ from src.config import BACKGROUND_COLOR, PLOT_AREA_COLOR, GRID_COLOR, TEXT_COLOR
 from src.data_handler import load_data, QUADRANT_WIDTH, QUADRANT_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT
 from src.plotting import (
     create_grid_shapes, create_defect_traces,
-    create_pareto_trace, create_grouped_pareto_trace
+    create_pareto_trace, create_grouped_pareto_trace,
+    create_verification_donut_chart
 )
 from src.reporting import generate_excel_report
 from src.enums import ViewMode, Quadrant
@@ -154,67 +155,77 @@ def main() -> None:
 
         # --- VIEW 1: DEFECT MAP ---
         if view_mode == ViewMode.DEFECT.value:
-            fig = go.Figure()
-            defect_traces = create_defect_traces(display_df)
-            for trace in defect_traces: fig.add_trace(trace)
-            
-            plot_shapes = create_grid_shapes(panel_rows, panel_cols, quadrant_selection)
+            # Create a two-column layout
+            col1, col2 = st.columns([3, 1])
 
-            # --- *** FIX STARTS HERE: Define ranges for all quadrants and conditionally set them *** ---
-            
-            # 1. Define the physical axis ranges for each quadrant
-            q1_x_range = [0, QUADRANT_WIDTH]
-            q1_y_range = [0, QUADRANT_HEIGHT]
-            q2_x_range = [QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
-            q2_y_range = [0, QUADRANT_HEIGHT]
-            q3_x_range = [0, QUADRANT_WIDTH]
-            q3_y_range = [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
-            q4_x_range = [QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
-            q4_y_range = [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
+            with col1:
+                fig = go.Figure()
+                defect_traces = create_defect_traces(display_df)
+                for trace in defect_traces: fig.add_trace(trace)
 
-            # 2. Set the plot's axis range and tick visibility based on the user's selection
-            if quadrant_selection == Quadrant.ALL.value:
-                x_axis_range = [-GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
-                y_axis_range = [-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
-                show_ticks = True
-            else:
-                show_ticks = False # Hide tick labels in zoom view for clarity
-                if quadrant_selection == Quadrant.Q1.value:
-                    x_axis_range, y_axis_range = q1_x_range, q1_y_range
-                elif quadrant_selection == Quadrant.Q2.value:
-                    x_axis_range, y_axis_range = q2_x_range, q2_y_range
-                elif quadrant_selection == Quadrant.Q3.value:
-                    x_axis_range, y_axis_range = q3_x_range, q3_y_range
-                else: # Q4
-                    x_axis_range, y_axis_range = q4_x_range, q4_y_range
-            
-            # --- *** FIX ENDS HERE *** ---
+                plot_shapes = create_grid_shapes(panel_rows, panel_cols, quadrant_selection)
 
-            cell_width = QUADRANT_WIDTH / panel_cols
-            cell_height = QUADRANT_HEIGHT / panel_rows
-            x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-            x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-            x_tick_vals = x_tick_vals_q1 + x_tick_vals_q2
-            y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-            y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-            y_tick_vals = y_tick_vals_q1 + y_tick_vals_q3
-            x_tick_text = list(range(panel_cols * 2))
-            y_tick_text = list(range(panel_rows * 2))
+                # --- *** FIX STARTS HERE: Define ranges for all quadrants and conditionally set them *** ---
 
-            fig.update_layout(
-                title=dict(text=f"Panel Defect Map - Quadrant: {quadrant_selection} ({len(display_df)} Defects)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
-                xaxis=dict(title="Unit Column Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=x_tick_vals if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
-                yaxis=dict(title="Unit Row Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=y_tick_vals if show_ticks else [], ticktext=y_tick_text if show_ticks else [], range=y_axis_range, scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
-                plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, shapes=plot_shapes,
-                legend=dict(title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR), x=1.02, y=1, xanchor='left', yanchor='top'),
-                hoverlabel=dict(bgcolor="#4A4A4A", font_size=14, font_family="sans-serif"),
-                height=800
-            )
+                # 1. Define the physical axis ranges for each quadrant
+                q1_x_range = [0, QUADRANT_WIDTH]
+                q1_y_range = [0, QUADRANT_HEIGHT]
+                q2_x_range = [QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
+                q2_y_range = [0, QUADRANT_HEIGHT]
+                q3_x_range = [0, QUADRANT_WIDTH]
+                q3_y_range = [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
+                q4_x_range = [QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
+                q4_y_range = [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
+
+                # 2. Set the plot's axis range and tick visibility based on the user's selection
+                if quadrant_selection == Quadrant.ALL.value:
+                    x_axis_range = [-GAP_SIZE, PANEL_WIDTH + GAP_SIZE]
+                    y_axis_range = [-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]
+                    show_ticks = True
+                else:
+                    show_ticks = False # Hide tick labels in zoom view for clarity
+                    if quadrant_selection == Quadrant.Q1.value:
+                        x_axis_range, y_axis_range = q1_x_range, q1_y_range
+                    elif quadrant_selection == Quadrant.Q2.value:
+                        x_axis_range, y_axis_range = q2_x_range, q2_y_range
+                    elif quadrant_selection == Quadrant.Q3.value:
+                        x_axis_range, y_axis_range = q3_x_range, q3_y_range
+                    else: # Q4
+                        x_axis_range, y_axis_range = q4_x_range, q4_y_range
+
+                # --- *** FIX ENDS HERE *** ---
+
+                cell_width = QUADRANT_WIDTH / panel_cols
+                cell_height = QUADRANT_HEIGHT / panel_rows
+                x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+                x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+                x_tick_vals = x_tick_vals_q1 + x_tick_vals_q2
+                y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+                y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+                y_tick_vals = y_tick_vals_q1 + y_tick_vals_q3
+                x_tick_text = list(range(panel_cols * 2))
+                y_tick_text = list(range(panel_rows * 2))
+
+                fig.update_layout(
+                    title=dict(text=f"Panel Defect Map - Quadrant: {quadrant_selection} ({len(display_df)} Defects)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
+                    xaxis=dict(title="Unit Column Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=x_tick_vals if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
+                    yaxis=dict(title="Unit Row Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=y_tick_vals if show_ticks else [], ticktext=y_tick_text if show_ticks else [], range=y_axis_range, scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
+                    plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, shapes=plot_shapes,
+                    legend=dict(title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR), x=1.02, y=1, xanchor='left', yanchor='top'),
+                    hoverlabel=dict(bgcolor="#4A4A4A", font_size=14, font_family="sans-serif"),
+                    height=800
+                )
+
+                if lot_number and quadrant_selection == Quadrant.ALL.value:
+                    fig.add_annotation(x=PANEL_WIDTH + GAP_SIZE, y=PANEL_HEIGHT + GAP_SIZE, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=TEXT_COLOR), align="right", xanchor="right", yanchor="bottom")
+
+                st.plotly_chart(fig, use_container_width=True)
             
-            if lot_number and quadrant_selection == Quadrant.ALL.value:
-                fig.add_annotation(x=PANEL_WIDTH + GAP_SIZE, y=PANEL_HEIGHT + GAP_SIZE, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=TEXT_COLOR), align="right", xanchor="right", yanchor="bottom")
-            
-            st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                # Add the new verification status donut chart
+                st.markdown("---")
+                donut_fig = create_verification_donut_chart(display_df)
+                st.plotly_chart(donut_fig, use_container_width=True)
 
         # --- VIEW 2: PARETO CHART ---
         elif view_mode == ViewMode.PARETO.value:

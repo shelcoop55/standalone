@@ -148,3 +148,59 @@ def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
                 y=pivot[quadrant]
             ))
     return traces
+
+def create_verification_donut_chart(df: pd.DataFrame) -> go.Figure:
+    """
+    Creates a donut chart showing the breakdown of defect verification statuses.
+    """
+    if df.empty or 'Verification' not in df.columns:
+        fig = go.Figure()
+        fig.update_layout(
+            title_text="No Data to Display",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color=TEXT_COLOR,
+            xaxis=dict(showgrid=False, zeroline=False, visible=False),
+            yaxis=dict(showgrid=False, zeroline=False, visible=False),
+        )
+        return fig
+
+    verification_counts = df['Verification'].value_counts()
+
+    # Define a specific color map for verification statuses for clarity
+    color_map = {
+        'T': '#2ECC71',   # Green for True
+        'F': '#E74C3C',   # Red for False
+        'TA': '#F39C12',  # Orange for True-Acceptable
+    }
+
+    colors = [color_map.get(status, '#BDC3C7') for status in verification_counts.index]
+
+    fig = go.Figure(data=[go.Pie(
+        labels=verification_counts.index,
+        values=verification_counts.values,
+        hole=.4,
+        marker=dict(colors=colors, line=dict(color='#000000', width=2)),
+        textinfo='percent+value',
+        hoverinfo='label+percent',
+        insidetextorientation='radial',
+        textfont=dict(size=14, color=TEXT_COLOR)
+    )])
+
+    fig.update_layout(
+        title=dict(text="Verification Status", font=dict(size=20, color=TEXT_COLOR), x=0.5),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=True,
+        legend=dict(
+            font=dict(color=TEXT_COLOR),
+            x=0.5,
+            y=-0.1,
+            xanchor='center',
+            orientation='h'
+        ),
+        height=400,
+        margin=dict(t=60, b=80, l=0, r=0)
+    )
+
+    return fig

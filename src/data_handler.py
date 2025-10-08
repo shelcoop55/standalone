@@ -79,7 +79,7 @@ def load_data(
             'UNIT_INDEX_X': np.random.randint(0, total_units_x, size=number_of_defects),
             'UNIT_INDEX_Y': np.random.randint(0, total_units_y, size=number_of_defects),
             'DEFECT_TYPE': np.random.choice([ 'Nick', 'Short', 'Missing Feature', 'Cut', 'Fine Short', 'Pad Violation', 'Island', 'Cut/Short', 'Nick/Protrusion' ], size=number_of_defects),
-            'Verification': np.random.choice(['T', 'F', 'T-', 'TA'], size=number_of_defects, p=[0.6, 0.15, 0.15, 0.1]),
+            'Verification': np.random.choice(['T', 'F', 'TA'], size=number_of_defects, p=[0.7, 0.15, 0.15]),
             'SOURCE_FILE': ['Sample Data'] * number_of_defects
         }
         df = pd.DataFrame(defect_data)
