@@ -73,20 +73,8 @@ def main() -> None:
             view_mode = st.radio("Select View", ViewMode.values(), help="Choose the primary analysis view.", disabled=st.session_state.get('full_df') is None)
             quadrant_selection = st.selectbox("Select Quadrant", Quadrant.values(), help="Filter data to a specific quadrant of the panel.", disabled=st.session_state.get('full_df') is None)
 
-            # --- New Verification Filter ---
-            verification_options = []
-            df = st.session_state.get('full_df')
-            # Check if df exists, is not empty, and has the 'Verification' column
-            if df is not None and not df.empty and 'Verification' in df.columns:
-                verification_options = sorted(df['Verification'].unique().tolist())
-
-            verification_selection = st.multiselect(
-                "Filter by Verification Status",
-                options=verification_options,
-                default=verification_options,
-                help="Filter defects by their verification status (e.g., T, F, T-).",
-                disabled=not verification_options  # Disable if no options are available
-            )
+            # Defer the creation of this filter until the main app body
+            verification_selection = []
 
         st.divider()
         with st.expander("📥 Reporting", expanded=True):
@@ -145,6 +133,17 @@ def main() -> None:
         if full_df.empty:
             st.error("The loaded data is empty or invalid. Please check the source file and try again.")
             return
+
+        # --- NEW: Create and apply filters now that we know data is loaded ---
+        with st.sidebar.expander("📊 Analysis Controls", expanded=True):
+            # Re-create the verification filter here, inside the data-loaded block
+            verification_options = sorted(full_df['Verification'].unique().tolist())
+            verification_selection = st.multiselect(
+                "Filter by Verification Status",
+                options=verification_options,
+                default=verification_options,
+                help="Filter defects by their verification status (e.g., T, F, TA)."
+            )
 
         # --- Apply Filters ---
         # 1. Apply Verification Status Filter first on the full dataset
