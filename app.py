@@ -136,17 +136,20 @@ def main() -> None:
         # --- NEW: Create and apply filters now that we know data is loaded ---
         with st.sidebar.expander("📊 Analysis Controls", expanded=True):
             # Re-create the verification filter here, inside the data-loaded block
-            verification_options = sorted(full_df['Verification'].unique().tolist())
-            verification_selection = st.multiselect(
+            verification_options = ['All'] + sorted(full_df['Verification'].unique().tolist())
+            verification_selection = st.radio(
                 "Filter by Verification Status",
                 options=verification_options,
-                default=verification_options,
-                help="Filter defects by their verification status (e.g., T, F, TA)."
+                index=0,
+                help="Select a single verification status to filter by, or 'All' to clear."
             )
 
         # --- Apply Filters ---
         # 1. Apply Verification Status Filter first on the full dataset
-        filtered_df = full_df[full_df['Verification'].isin(verification_selection)]
+        if verification_selection != 'All':
+            filtered_df = full_df[full_df['Verification'] == verification_selection]
+        else:
+            filtered_df = full_df # No filter applied
 
         # 2. Apply Quadrant Filter on the already-filtered data
         display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
