@@ -45,12 +45,19 @@ def load_data(
         df = pd.concat(all_dfs, ignore_index=True)
         st.sidebar.success(f"{len(uploaded_files)} file(s) loaded successfully!")
         
+        # Handle the new 'Verification' column for backward compatibility
+        if 'Verification' not in df.columns:
+            df['Verification'] = 'T'
+        else:
+            # Clean up the verification column, filling NaNs with 'T'
+            df['Verification'] = df['Verification'].astype(str).fillna('T').str.strip()
+
         required_columns = ['DEFECT_ID', 'DEFECT_TYPE', 'UNIT_INDEX_X', 'UNIT_INDEX_Y']
         if not all(col in df.columns for col in required_columns):
             st.error(f"One or more uploaded files are missing required columns: {required_columns}")
             return pd.DataFrame()
             
-        df = df[required_columns + ['SOURCE_FILE']]
+        df = df[required_columns + ['Verification', 'SOURCE_FILE']]
         df.dropna(subset=required_columns, inplace=True)
         df['UNIT_INDEX_X'] = df['UNIT_INDEX_X'].astype(int)
         df['UNIT_INDEX_Y'] = df['UNIT_INDEX_Y'].astype(int)
@@ -67,6 +74,7 @@ def load_data(
             'UNIT_INDEX_X': np.random.randint(0, total_units_x, size=number_of_defects),
             'UNIT_INDEX_Y': np.random.randint(0, total_units_y, size=number_of_defects),
             'DEFECT_TYPE': np.random.choice([ 'Nick', 'Short', 'Missing Feature', 'Cut', 'Fine Short', 'Pad Violation', 'Island', 'Cut/Short', 'Nick/Protrusion' ], size=number_of_defects),
+            'Verification': np.random.choice(['T', 'F', 'T-', 'TA'], size=number_of_defects, p=[0.6, 0.15, 0.15, 0.1]),
             'SOURCE_FILE': ['Sample Data'] * number_of_defects
         }
         df = pd.DataFrame(defect_data)

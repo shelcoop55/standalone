@@ -72,6 +72,20 @@ def main() -> None:
             view_mode = st.radio("Select View", ViewMode.values(), help="Choose the primary analysis view.", disabled=st.session_state.get('full_df') is None)
             quadrant_selection = st.selectbox("Select Quadrant", Quadrant.values(), help="Filter data to a specific quadrant of the panel.", disabled=st.session_state.get('full_df') is None)
 
+            # --- New Verification Filter ---
+            verification_options = []
+            if st.session_state.get('full_df') is not None:
+                # Get unique, sorted verification statuses
+                verification_options = sorted(st.session_state.full_df['Verification'].unique().tolist())
+
+            verification_selection = st.multiselect(
+                "Filter by Verification Status",
+                options=verification_options,
+                default=verification_options,
+                help="Filter defects by their verification status (e.g., T, F, T-).",
+                disabled=st.session_state.get('full_df') is None
+            )
+
         st.divider()
         with st.expander("📥 Reporting", expanded=True):
             report_disabled = st.session_state.get('full_df') is None or st.session_state.full_df.empty
@@ -80,10 +94,11 @@ def main() -> None:
                 with st.spinner("Generating Excel report..."):
                     df = st.session_state.full_df
                     params = st.session_state.analysis_params
-                    source_filenames = df['SOURCE_FILE'].unique().tolist()
+                    # Use the filtered DataFrame for the report
+                    source_filenames = display_df['SOURCE_FILE'].unique().tolist()
 
                     excel_bytes = generate_excel_report(
-                        full_df=df,
+                        full_df=display_df,
                         panel_rows=params.get("panel_rows", 7),
                         panel_cols=params.get("panel_cols", 7),
                         source_filename=", ".join(source_filenames)
@@ -122,7 +137,12 @@ def main() -> None:
             st.error("The loaded data is empty or invalid. Please check the source file and try again.")
             return
 
-        display_df = full_df[full_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else full_df
+        # --- Apply Filters ---
+        # 1. Apply Verification Status Filter first on the full dataset
+        filtered_df = full_df[full_df['Verification'].isin(verification_selection)]
+
+        # 2. Apply Quadrant Filter on the already-filtered data
+        display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
 
         # --- VIEW 1: DEFECT MAP ---
         if view_mode == ViewMode.DEFECT.value:
