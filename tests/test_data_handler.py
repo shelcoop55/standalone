@@ -19,12 +19,13 @@ def test_excel_file() -> list[BytesIO]:
         'DEFECT_TYPE': ['Nick', 'Short', 'Cut', 'Nick'],
         'UNIT_INDEX_X': [0, 1, 0, 1],
         'UNIT_INDEX_Y': [0, 0, 1, 1],
+        'Verification': ['T', 'F', 'T', 'TA'],
     }
     df = pd.DataFrame(data)
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        df.to_excel(writer, index=False, sheet_name='Defect')
     output.seek(0)
 
     # Mimic Streamlit's UploadedFile object by adding a 'name' attribute
@@ -45,7 +46,7 @@ def test_excel_file_missing_cols() -> list[BytesIO]:
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        df.to_excel(writer, index=False, sheet_name='Defect')
     output.seek(0)
     output.name = "missing_cols.xlsx"
     return [output]

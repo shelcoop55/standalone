@@ -31,11 +31,16 @@ def load_data(
         all_dfs = []
         for uploaded_file in uploaded_files:
             try:
-                df = pd.read_excel(uploaded_file, engine='openpyxl')
+                # Read only the sheet named "Defect"
+                df = pd.read_excel(uploaded_file, sheet_name='Defect', engine='openpyxl')
                 df['SOURCE_FILE'] = uploaded_file.name
                 all_dfs.append(df)
+            except ValueError:
+                # This error occurs if the "Defect" sheet is not found
+                st.error(f"Error in '{uploaded_file.name}': A sheet named 'Defect' was not found. Please ensure the file contains a 'Defect' sheet.")
+                continue
             except Exception as e:
-                st.error(f"Error reading '{uploaded_file.name}': {e}")
+                st.error(f"An unexpected error occurred while reading '{uploaded_file.name}': {e}")
                 continue
 
         if not all_dfs:

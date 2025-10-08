@@ -74,16 +74,17 @@ def main() -> None:
 
             # --- New Verification Filter ---
             verification_options = []
-            if st.session_state.get('full_df') is not None:
-                # Get unique, sorted verification statuses
-                verification_options = sorted(st.session_state.full_df['Verification'].unique().tolist())
+            df = st.session_state.get('full_df')
+            # Check if df exists, is not empty, and has the 'Verification' column
+            if df is not None and not df.empty and 'Verification' in df.columns:
+                verification_options = sorted(df['Verification'].unique().tolist())
 
             verification_selection = st.multiselect(
                 "Filter by Verification Status",
                 options=verification_options,
                 default=verification_options,
                 help="Filter defects by their verification status (e.g., T, F, T-).",
-                disabled=st.session_state.get('full_df') is None
+                disabled=not verification_options  # Disable if no options are available
             )
 
         st.divider()
@@ -92,13 +93,20 @@ def main() -> None:
 
             if st.button("Generate Report for Download", disabled=report_disabled):
                 with st.spinner("Generating Excel report..."):
-                    df = st.session_state.full_df
+                    # Re-apply filters here to get the correct df for the report
+                    full_df = st.session_state.full_df
+
+                    # 1. Apply Verification Status Filter
+                    report_df = full_df[full_df['Verification'].isin(verification_selection)]
+
+                    # 2. Apply Quadrant Filter
+                    report_df = report_df[report_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else report_df
+
                     params = st.session_state.analysis_params
-                    # Use the filtered DataFrame for the report
-                    source_filenames = display_df['SOURCE_FILE'].unique().tolist()
+                    source_filenames = report_df['SOURCE_FILE'].unique().tolist()
 
                     excel_bytes = generate_excel_report(
-                        full_df=display_df,
+                        full_df=report_df,
                         panel_rows=params.get("panel_rows", 7),
                         panel_cols=params.get("panel_cols", 7),
                         source_filename=", ".join(source_filenames)
