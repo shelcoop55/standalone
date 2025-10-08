@@ -14,8 +14,7 @@ from src.config import BACKGROUND_COLOR, PLOT_AREA_COLOR, GRID_COLOR, TEXT_COLOR
 from src.data_handler import load_data, QUADRANT_WIDTH, QUADRANT_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT
 from src.plotting import (
     create_grid_shapes, create_defect_traces,
-    create_pareto_trace, create_grouped_pareto_trace,
-    create_verification_donut_chart
+    create_pareto_trace, create_grouped_pareto_trace
 )
 from src.reporting import generate_excel_report
 from src.enums import ViewMode, Quadrant
@@ -221,10 +220,20 @@ def main() -> None:
                 st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                # Add the new verification status donut chart
-                st.markdown("---")
-                donut_fig = create_verification_donut_chart(display_df)
-                st.plotly_chart(donut_fig, use_container_width=True)
+                st.subheader("Verification Summary")
+
+                if not display_df.empty:
+                    verification_counts = display_df['Verification'].value_counts()
+
+                    true_count = int(verification_counts.get('T', 0))
+                    false_count = int(verification_counts.get('F', 0))
+                    ta_count = int(verification_counts.get('TA', 0))
+
+                    st.metric(label="True Defects (T)", value=f"{true_count:,}")
+                    st.metric(label="False Defects (F)", value=f"{false_count:,}")
+                    st.metric(label="Acceptable Defects (TA)", value=f"{ta_count:,}")
+                else:
+                    st.info("No data to summarize.")
 
         # --- VIEW 2: PARETO CHART ---
         elif view_mode == ViewMode.PARETO.value:
