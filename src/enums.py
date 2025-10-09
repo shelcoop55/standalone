@@ -12,7 +12,6 @@ class ViewMode(Enum):
     DEFECT = "Defect View"
     PARETO = "Pareto View"
     SUMMARY = "Summary View"
-    STILL_ALIVE = "Still Alive View"
 
     @classmethod
     def values(cls) -> list[str]:
