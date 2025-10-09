@@ -148,3 +148,42 @@ def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
                 y=pivot[quadrant]
             ))
     return traces
+
+def create_verification_status_chart(df: pd.DataFrame) -> List[go.Bar]:
+    """
+    Creates traces for a grouped, stacked bar chart showing the verification
+    status (T, F, TA) for each defect type, grouped by quadrant.
+    """
+    if df.empty:
+        return []
+
+    # Group data by defect type, quadrant, and verification status
+    grouped = df.groupby(['DEFECT_TYPE', 'QUADRANT', 'Verification']).size().unstack(fill_value=0)
+
+    # Ensure all verification statuses exist as columns
+    for status in ['T', 'F', 'TA']:
+        if status not in grouped.columns:
+            grouped[status] = 0
+
+    grouped = grouped.reset_index()
+
+    # Define the multi-level x-axis
+    x_axis_data = [grouped['DEFECT_TYPE'], grouped['QUADRANT']]
+
+    # Define colors and names for the legend
+    status_map = {
+        'T': {'name': 'True', 'color': '#2ca02c'},  # Muted green
+        'F': {'name': 'False', 'color': '#d62728'}, # Muted red
+        'TA': {'name': 'Acceptable', 'color': '#8c564b'} # Muted brown/gray
+    }
+
+    traces = []
+    for status, details in status_map.items():
+        traces.append(go.Bar(
+            name=details['name'],
+            x=x_axis_data,
+            y=grouped[status],
+            marker_color=details['color']
+        ))
+
+    return traces

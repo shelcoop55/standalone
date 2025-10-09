@@ -14,7 +14,7 @@ from src.config import BACKGROUND_COLOR, PLOT_AREA_COLOR, GRID_COLOR, TEXT_COLOR
 from src.data_handler import load_data, QUADRANT_WIDTH, QUADRANT_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT
 from src.plotting import (
     create_grid_shapes, create_defect_traces,
-    create_pareto_trace, create_grouped_pareto_trace
+    create_pareto_trace, create_grouped_pareto_trace, create_verification_status_chart
 )
 from src.reporting import generate_excel_report
 from src.enums import ViewMode, Quadrant
@@ -391,20 +391,29 @@ def main() -> None:
                     st.info("No data to display for the quarterly breakdown based on current filters.")
 
                 st.divider()
-                st.markdown("### Defect Distribution by Quadrant")
+                st.markdown("### Defect Verification Status by Quadrant")
                 fig = go.Figure()
-                grouped_traces = create_grouped_pareto_trace(full_df)
-                for trace in grouped_traces: 
+
+                # Use the new function to get traces for the grouped stacked chart
+                # The data should be based on the globally filtered data
+                verification_traces = create_verification_status_chart(display_df)
+                for trace in verification_traces:
                     fig.add_trace(trace)
 
                 fig.update_layout(
-                    title=dict(text="Defect Count by Type and Quadrant", font=dict(color=TEXT_COLOR)),
-                    barmode='group',
-                    xaxis=dict(title="Defect Type", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)),
+                    title=dict(text="Verification Status by Defect Type and Quadrant", font=dict(color=TEXT_COLOR)),
+                    barmode='stack',  # Stack the T, F, TA values
+                    xaxis=dict(
+                        title="Defect Type & Quadrant",
+                        title_font=dict(color=TEXT_COLOR),
+                        tickfont=dict(color=TEXT_COLOR),
+                        categoryorder='array',
+                        categoryarray=sorted(display_df['DEFECT_TYPE'].unique())
+                    ),
                     yaxis=dict(title="Count", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)),
                     plot_bgcolor=PLOT_AREA_COLOR,
                     paper_bgcolor=BACKGROUND_COLOR,
-                    legend=dict(font=dict(color=TEXT_COLOR)),
+                    legend=dict(title="Verification Status", font=dict(color=TEXT_COLOR)),
                     height=600
                 )
                 st.plotly_chart(fig, use_container_width=True)
