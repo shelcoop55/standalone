@@ -152,8 +152,8 @@ def main() -> None:
                 map_shapes = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
                 fig.update_layout(
                     title=dict(text=f"Still Alive Map ({len(true_defect_coords)} Defective Cells)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
-                    xaxis=dict(range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE], showgrid=False, zeroline=False, showticklabels=False, title=""),
-                    yaxis=dict(range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE], scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showticklabels=False, title=""),
+                    xaxis=dict(range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], showgrid=False, zeroline=False, showticklabels=False, title=""),
+                    yaxis=dict(range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)], scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showticklabels=False, title=""),
                     plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, shapes=map_shapes, height=800, margin=dict(l=20, r=20, t=80, b=20)
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -203,7 +203,7 @@ def main() -> None:
                 y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
                 y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
                 x_tick_text, y_tick_text = list(range(panel_cols * 2)), list(range(panel_rows * 2))
-                x_axis_range, y_axis_range, show_ticks = [-GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE], True
+                x_axis_range, y_axis_range, show_ticks = [-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], [-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)], True
                 if quadrant_selection != Quadrant.ALL.value:
                     show_ticks = False
                     ranges = {'Q1': ([0, QUADRANT_WIDTH], [0, QUADRANT_HEIGHT]), 'Q2': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [0, QUADRANT_HEIGHT]), 'Q3': ([0, QUADRANT_WIDTH], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]), 'Q4': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE])}
