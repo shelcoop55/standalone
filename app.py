@@ -22,8 +22,9 @@ from src.plotting import (
     create_pareto_trace, create_grouped_pareto_trace,
     create_verification_status_chart, create_still_alive_map
 )
-from src.reporting import generate_excel_report, generate_visual_map_report, generate_coordinate_list_report
+from src.reporting import generate_excel_report, generate_coordinate_list_report
 from src.enums import ViewMode, Quadrant
+from src.utils import get_bu_name_from_filename
 
 def load_css(file_path: str) -> None:
     """Loads a CSS file and injects it into the Streamlit app."""
@@ -127,12 +128,19 @@ def main() -> None:
 
         with st.expander("Select View", expanded=True):
             layer_keys = sorted(st.session_state.layer_data.keys())
+            # Create a mapping from layer number to a representative BU name
+            bu_names = {
+                num: get_bu_name_from_filename(st.session_state.layer_data[num]['SOURCE_FILE'].iloc[0])
+                for num in layer_keys
+            }
+
             num_buttons = len(layer_keys) + 1
             cols = st.columns(num_buttons)
             for i, layer_num in enumerate(layer_keys):
                 with cols[i]:
+                    bu_name = bu_names.get(layer_num, f"Layer {layer_num}")
                     is_active = st.session_state.active_view == 'layer' and st.session_state.selected_layer == layer_num
-                    if st.button(f"Layer {layer_num}", key=f"layer_btn_{layer_num}", use_container_width=True, type="primary" if is_active else "secondary"):
+                    if st.button(bu_name, key=f"layer_btn_{layer_num}", use_container_width=True, type="primary" if is_active else "secondary"):
                         st.session_state.active_view = 'layer'
                         st.session_state.selected_layer = layer_num
                         st.rerun()
@@ -150,10 +158,29 @@ def main() -> None:
                 true_defect_coords = get_true_defect_coordinates(st.session_state.layer_data)
                 fig = go.Figure()
                 map_shapes = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
+                # Define axis ticks and labels for clarity
+                cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
+                x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+                x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+                y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+                y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+                x_tick_text = list(range(panel_cols * 2))
+                y_tick_text = list(range(panel_rows * 2))
+
                 fig.update_layout(
                     title=dict(text=f"Still Alive Map ({len(true_defect_coords)} Defective Cells)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
-                    xaxis=dict(range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], showgrid=False, zeroline=False, showticklabels=False, title=""),
-                    yaxis=dict(range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)], scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showticklabels=False, title=""),
+                    xaxis=dict(
+                        title="Unit Column Index", range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)],
+                        tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text,
+                        showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
+                        title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+                    ),
+                    yaxis=dict(
+                        title="Unit Row Index", range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
+                        tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text,
+                        scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
+                        title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+                    ),
                     plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, shapes=map_shapes, height=800, margin=dict(l=20, r=20, t=80, b=20)
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -168,22 +195,7 @@ def main() -> None:
                 st.metric("Defective Cells", f"{defective_cell_count:,}")
                 st.divider()
 
-                st.subheader("Download Reports")
-
-                # Button for the visual map report
-                visual_report_bytes = generate_visual_map_report(
-                    defective_coords=true_defect_coords,
-                    panel_rows=panel_rows,
-                    panel_cols=panel_cols,
-                    alive_color=ALIVE_CELL_COLOR,
-                    defective_color=DEFECTIVE_CELL_COLOR
-                )
-                st.download_button(
-                    label="Download Visual Map Report",
-                    data=visual_report_bytes,
-                    file_name="still_alive_visual_map.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                st.subheader("Download Report")
 
                 # Button for the coordinate list report
                 coordinate_report_bytes = generate_coordinate_list_report(true_defect_coords)

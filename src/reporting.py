@@ -135,38 +135,6 @@ def _create_full_defect_list_sheet(writer, formats, full_df):
 # --- Public API Function ---
 # ==============================================================================
 
-def generate_visual_map_report(
-    defective_coords: set,
-    panel_rows: int,
-    panel_cols: int,
-    alive_color: str,
-    defective_color: str
-) -> bytes:
-    """
-    Generates an Excel report that visually represents the Still Alive map.
-    """
-    output_buffer = io.BytesIO()
-    total_rows, total_cols = panel_rows * 2, panel_cols * 2
-
-    with pd.ExcelWriter(output_buffer, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('Visual Still Alive Map')
-
-        # Define formats for cell colors
-        alive_format = workbook.add_format({'bg_color': alive_color})
-        defective_format = workbook.add_format({'bg_color': defective_color})
-
-        # Set column widths to be small and square-like
-        worksheet.set_column(0, total_cols - 1, 2)
-
-        # Write the data, coloring cells based on defect status
-        for r in range(total_rows):
-            for c in range(total_cols):
-                cell_format = defective_format if (c, r) in defective_coords else alive_format
-                worksheet.write(r, c, '', cell_format)
-
-    return output_buffer.getvalue()
-
 def generate_coordinate_list_report(defective_coords: set) -> bytes:
     """
     Generates a simple Excel report of unique defective cell coordinates.
