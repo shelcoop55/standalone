@@ -83,19 +83,25 @@ def load_data(
             st.sidebar.success(f"{len(layer_data)} layer(s) loaded successfully!")
 
     else:
-        st.sidebar.info("No file uploaded. Displaying sample data for 3 layers (Layer 2 has Front/Back).")
+        st.sidebar.info("No file uploaded. Displaying sample data for 3 layers (all with Front/Back).")
         total_units_x = 2 * panel_cols
         total_units_y = 2 * panel_rows
         layer_data = {}
 
-        # Define properties for sample layers, including sides
+        # Define properties for sample layers, including sides for all layers
         sample_layers = {
-            1: {'F': {'num_defects': 75, 'defect_types': ['Nick', 'Short', 'Cut']}},
+            1: {
+                'F': {'num_defects': 75, 'defect_types': ['Nick', 'Short', 'Cut']},
+                'B': {'num_defects': 30, 'defect_types': ['Backside Nick', 'Handling Scratch']}
+            },
             2: {
                 'F': {'num_defects': 120, 'defect_types': ['Fine Short', 'Pad Violation', 'Island', 'Short']},
                 'B': {'num_defects': 40, 'defect_types': ['Backside Scratch', 'Contamination']}
             },
-            3: {'F': {'num_defects': 50, 'defect_types': ['Missing Feature', 'Cut/Short', 'Nick/Protrusion']}}
+            3: {
+                'F': {'num_defects': 50, 'defect_types': ['Missing Feature', 'Cut/Short', 'Nick/Protrusion']},
+                'B': {'num_defects': 25, 'defect_types': ['Backside Residue', 'Epoxy Smear']}
+            }
         }
 
         for layer_num, sides in sample_layers.items():

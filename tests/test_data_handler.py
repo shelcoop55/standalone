@@ -75,15 +75,17 @@ def test_load_data_sample_generation(monkeypatch):
 
     assert isinstance(layer_data, dict)
     assert set(layer_data.keys()) == {1, 2, 3}
-    # Layer 1 and 3 have only Front side
-    assert list(layer_data[1].keys()) == ['F']
+    # All layers should now have Front and Back sides
+    for i in range(1, 4):
+        assert set(layer_data[i].keys()) == {'F', 'B'}
+
+    # Check counts for a few examples
     assert len(layer_data[1]['F']) == 75
-    assert list(layer_data[3].keys()) == ['F']
-    assert len(layer_data[3]['F']) == 50
-    # Layer 2 has Front and Back sides
-    assert set(layer_data[2].keys()) == {'F', 'B'}
+    assert len(layer_data[1]['B']) == 30
     assert len(layer_data[2]['F']) == 120
     assert len(layer_data[2]['B']) == 40
+    assert len(layer_data[3]['F']) == 50
+    assert len(layer_data[3]['B']) == 25
     assert 'plot_x' in layer_data[1]['F'].columns
     assert 'SIDE' in layer_data[2]['B'].columns
 
