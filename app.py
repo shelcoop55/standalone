@@ -173,20 +173,26 @@ def main() -> None:
                     st.session_state.active_view = 'still_alive'
                     st.rerun()
 
-            # --- Side Selection Buttons (only if a layer is selected and has multiple sides) ---
+            # --- Side Selection Radio Toggle (only if a layer is selected and has multiple sides) ---
             selected_layer_num = st.session_state.get('selected_layer')
             if selected_layer_num and st.session_state.active_view == 'layer':
                 layer_info = st.session_state.layer_data.get(selected_layer_num, {})
-                if len(layer_info) > 1: # More than one side available
-                    side_cols = st.columns(len(layer_info))
+                if len(layer_info) > 1:  # More than one side available
                     sorted_sides = sorted(layer_info.keys())
-                    for i, side in enumerate(sorted_sides):
-                        with side_cols[i]:
-                            side_name = "Front" if side == 'F' else "Back"
-                            is_side_active = st.session_state.selected_side == side
-                            if st.button(side_name, key=f"side_btn_{side}", use_container_width=True, type="primary" if is_side_active else "secondary"):
-                                st.session_state.selected_side = side
-                                st.rerun()
+                    side_options = {s: "Front" if s == 'F' else "Back" for s in sorted_sides}
+
+                    selected_side = st.radio(
+                        "Select Side",
+                        options=list(side_options.keys()),
+                        format_func=lambda s: side_options[s],
+                        index=list(side_options.keys()).index(st.session_state.selected_side),
+                        horizontal=True,
+                        key="side_selector"
+                    )
+
+                    if selected_side != st.session_state.selected_side:
+                        st.session_state.selected_side = selected_side
+                        st.rerun()
 
         st.divider()
 
