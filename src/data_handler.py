@@ -75,7 +75,9 @@ def load_data(
         # Consolidate dataframes for each layer/side
         for layer_num, sides in layer_data.items():
             for side, dfs in sides.items():
-                layer_data[layer_num][side] = pd.concat(dfs, ignore_index=True)
+                layer_data[layer_num][side] = _add_plotting_coordinates(
+                    pd.concat(dfs, ignore_index=True), panel_rows, panel_cols
+                )
 
         if layer_data:
             st.sidebar.success(f"{len(layer_data)} layer(s) loaded successfully!")
@@ -108,41 +110,47 @@ def load_data(
                     'SOURCE_FILE': [f'Sample Data Layer {layer_num}{side}'] * props['num_defects'],
                     'SIDE': side
                 }
-                layer_data[layer_num][side] = pd.DataFrame(defect_data)
+                df = pd.DataFrame(defect_data)
+                layer_data[layer_num][side] = _add_plotting_coordinates(df, panel_rows, panel_cols)
 
-    # Post-process all dataframes
-    for layer_num, sides in layer_data.items():
-        for side, df in sides.items():
-            conditions = [
-                (df['UNIT_INDEX_X'] < panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
-            (df['UNIT_INDEX_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
-            (df['UNIT_INDEX_X'] < panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows),
-            (df['UNIT_INDEX_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows)
-        ]
-        choices = ['Q1', 'Q2', 'Q3', 'Q4']
-        df['QUADRANT'] = np.select(conditions, choices, default='Other')
-
-        cell_width = QUADRANT_WIDTH / panel_cols
-        cell_height = QUADRANT_HEIGHT / panel_rows
-
-        local_index_x = df['UNIT_INDEX_X'] % panel_cols
-        local_index_y = df['UNIT_INDEX_Y'] % panel_rows
-
-        plot_x_base = local_index_x * cell_width
-        plot_y_base = local_index_y * cell_height
-
-        x_offset = np.where(df['UNIT_INDEX_X'] >= panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
-        y_offset = np.where(df['UNIT_INDEX_Y'] >= panel_rows, QUADRANT_HEIGHT + GAP_SIZE, 0)
-
-        jitter_x = np.random.rand(len(df)) * cell_width * 0.8 + (cell_width * 0.1)
-        jitter_y = np.random.rand(len(df)) * cell_height * 0.8 + (cell_height * 0.1)
-
-        df['plot_x'] = plot_x_base + x_offset + jitter_x
-        df['plot_y'] = plot_y_base + y_offset + jitter_y
-
-        layer_data[layer_num][side] = df
-    
     return layer_data
+
+
+def _add_plotting_coordinates(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> pd.DataFrame:
+    """Adds QUADRANT and plot_x, plot_y coordinates to a DataFrame."""
+    if df.empty:
+        return df
+
+    # Calculate quadrant
+    conditions = [
+        (df['UNIT_INDEX_X'] < panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
+        (df['UNIT_INDEX_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
+        (df['UNIT_INDEX_X'] < panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows),
+        (df['UNIT_INDEX_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows)
+    ]
+    choices = ['Q1', 'Q2', 'Q3', 'Q4']
+    df['QUADRANT'] = np.select(conditions, choices, default='Other')
+
+    # Calculate plotting coordinates
+    cell_width = QUADRANT_WIDTH / panel_cols
+    cell_height = QUADRANT_HEIGHT / panel_rows
+
+    local_index_x = df['UNIT_INDEX_X'] % panel_cols
+    local_index_y = df['UNIT_INDEX_Y'] % panel_rows
+
+    plot_x_base = local_index_x * cell_width
+    plot_y_base = local_index_y * cell_height
+
+    x_offset = np.where(df['UNIT_INDEX_X'] >= panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
+    y_offset = np.where(df['UNIT_INDEX_Y'] >= panel_rows, QUADRANT_HEIGHT + GAP_SIZE, 0)
+
+    jitter_x = np.random.rand(len(df)) * cell_width * 0.8 + (cell_width * 0.1)
+    jitter_y = np.random.rand(len(df)) * cell_height * 0.8 + (cell_height * 0.1)
+
+    df['plot_x'] = plot_x_base + x_offset + jitter_x
+    df['plot_y'] = plot_y_base + y_offset + jitter_y
+    
+    return df
 
 def get_true_defect_coordinates(layer_data: Dict[int, Dict[str, pd.DataFrame]]) -> Set[Tuple[int, int]]:
     """
