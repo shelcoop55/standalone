@@ -26,6 +26,22 @@ TEXT_COLOR = '#FFFFFF'       # White text for readability on the dark background
 ALIVE_CELL_COLOR = '#2ECC71' # A vibrant green for cells without "True" defects.
 DEFECTIVE_CELL_COLOR = '#E74C3C' # A strong red for cells with "True" defects.
 
+# --- Fallback Color Palette ---
+# A list of visually distinct colors to be used for new, unrecognized defect types.
+# This ensures that any defect from an uploaded file will get a color for plotting.
+FALLBACK_COLORS = [
+    '#FF6347',  # Tomato
+    '#4682B4',  # SteelBlue
+    '#32CD32',  # LimeGreen
+    '#FFD700',  # Gold
+    '#6A5ACD',  # SlateBlue
+    '#40E0D0',  # Turquoise
+    '#DA70D6',  # Orchid
+    '#FFA500',  # Orange
+    '#20B2AA',  # LightSeaGreen
+    '#8A2BE2'   # BlueViolet
+]
+
 # --- Reporting Constants ---
 CRITICAL_DEFECT_TYPES = ["Short", "Cut/Short"]
 
