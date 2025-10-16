@@ -173,26 +173,20 @@ def main() -> None:
                     st.session_state.active_view = 'still_alive'
                     st.rerun()
 
-            # --- Side Selection Radio Toggle (only if a layer is selected and has multiple sides) ---
+            # --- Side Selection Buttons (only if a layer is selected and has multiple sides) ---
             selected_layer_num = st.session_state.get('selected_layer')
             if selected_layer_num and st.session_state.active_view == 'layer':
                 layer_info = st.session_state.layer_data.get(selected_layer_num, {})
-                if len(layer_info) > 1:  # More than one side available
+                if len(layer_info) > 1: # More than one side available
+                    side_cols = st.columns(len(layer_info))
                     sorted_sides = sorted(layer_info.keys())
-                    side_options = {s: "Front" if s == 'F' else "Back" for s in sorted_sides}
-
-                    selected_side = st.radio(
-                        "Select Side",
-                        options=list(side_options.keys()),
-                        format_func=lambda s: side_options[s],
-                        index=list(side_options.keys()).index(st.session_state.selected_side),
-                        horizontal=True,
-                        key="side_selector"
-                    )
-
-                    if selected_side != st.session_state.selected_side:
-                        st.session_state.selected_side = selected_side
-                        st.rerun()
+                    for i, side in enumerate(sorted_sides):
+                        with side_cols[i]:
+                            side_name = "Front" if side == 'F' else "Back"
+                            is_side_active = st.session_state.selected_side == side
+                            if st.button(side_name, key=f"side_btn_{side}", use_container_width=True, type="primary" if is_side_active else "secondary"):
+                                st.session_state.selected_side = side
+                                st.rerun()
 
         st.divider()
 
@@ -331,15 +325,20 @@ def main() -> None:
 
                     # For yield calculations, we need the full layer data (all sides)
                     full_layer_df = pd.concat(layer_info.values(), ignore_index=True)
-                    quad_yield_df = full_layer_df[full_layer_df['QUADRANT'] == quadrant_selection]
-                    true_yield_defects = quad_yield_df[quad_yield_df['Verification'] == 'T']
-                    defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
-                    yield_estimate = (total_cells - defective_cells) / total_cells if total_cells > 0 else 0
+                    yield_df = full_layer_df[full_layer_df['QUADRANT'] == quadrant_selection]
+                    true_yield_defects = yield_df[yield_df['Verification'] == 'T']
+                    combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
+                    yield_estimate = (total_cells - combined_defective_cells) / total_cells if total_cells > 0 else 0
+
+                    # For the displayed metric, only count true defects on the selected side
+                    selected_side_yield_df = display_df[display_df['QUADRANT'] == quadrant_selection]
+                    true_defects_selected_side = selected_side_yield_df[selected_side_yield_df['Verification'] == 'T']
+                    defective_cells_selected_side = len(true_defects_selected_side[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
 
                     st.markdown("### Key Performance Indicators (KPIs)")
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Total Defect Count", f"{total_defects:,}")
-                    col2.metric("True Defective Cells", f"{defective_cells:,}")
+                    col2.metric("True Defective Cells", f"{defective_cells_selected_side:,}")
                     col3.metric("Defect Density", f"{defect_density:.2f} defects/cell")
                     col4.metric("Yield Estimate", f"{yield_estimate:.2%}")
                     st.divider()
@@ -358,12 +357,16 @@ def main() -> None:
                     # For yield calculations, we need the full layer data (all sides)
                     full_layer_df = pd.concat(layer_info.values(), ignore_index=True)
                     true_yield_defects = full_layer_df[full_layer_df['Verification'] == 'T']
-                    defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
-                    yield_estimate = (total_cells - defective_cells) / total_cells if total_cells > 0 else 0
+                    combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
+                    yield_estimate = (total_cells - combined_defective_cells) / total_cells if total_cells > 0 else 0
+
+                    # For the displayed metric, only count true defects on the selected side
+                    true_defects_selected_side = display_df[display_df['Verification'] == 'T']
+                    defective_cells_selected_side = len(true_defects_selected_side[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
 
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Filtered Defect Count", f"{total_defects:,}")
-                    col2.metric("True Defective Cells", f"{defective_cells:,}")
+                    col2.metric("True Defective Cells", f"{defective_cells_selected_side:,}")
                     col3.metric("Filtered Defect Density", f"{defect_density:.2f} defects/cell")
                     col4.metric("Filtered Yield Estimate", f"{yield_estimate:.2%}")
                     st.divider()
@@ -377,13 +380,17 @@ def main() -> None:
 
                         # For yield calculations, we need the full layer data (all sides)
                         full_layer_df = pd.concat(layer_info.values(), ignore_index=True)
-                        quad_yield_df = full_layer_df[full_layer_df['QUADRANT'] == quad]
-                        true_yield_defects = quad_yield_df[quad_yield_df['Verification'] == 'T']
-                        defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
-                        yield_estimate = (total_cells_per_quad - defective_cells) / total_cells_per_quad if total_cells_per_quad > 0 else 0
+                        yield_df = full_layer_df[full_layer_df['QUADRANT'] == quad]
+                        true_yield_defects = yield_df[yield_df['Verification'] == 'T']
+                        combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
+                        yield_estimate = (total_cells_per_quad - combined_defective_cells) / total_cells_per_quad if total_cells_per_quad > 0 else 0
+
+                        # For the displayed metric, only count true defects on the selected side
+                        selected_side_yield_df = quad_view_df[quad_view_df['Verification'] == 'T']
+                        defective_cells_selected_side = len(selected_side_yield_df[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
 
                         verification_counts = quad_view_df['Verification'].value_counts()
-                        kpi_data.append({"Quadrant": quad, "Total Defects": total_quad_defects, "True (T)": int(verification_counts.get('T', 0)), "False (F)": int(verification_counts.get('F', 0)), "Acceptable (TA)": int(verification_counts.get('TA', 0)), "True Defective Cells": defective_cells, "Yield": f"{yield_estimate:.2%}"})
+                        kpi_data.append({"Quadrant": quad, "Total Defects": total_quad_defects, "True (T)": int(verification_counts.get('T', 0)), "False (F)": int(verification_counts.get('F', 0)), "Acceptable (TA)": int(verification_counts.get('TA', 0)), "True Defective Cells": defective_cells_selected_side, "Yield": f"{yield_estimate:.2%}"})
                     if kpi_data:
                         kpi_df = pd.DataFrame(kpi_data)
                         kpi_df = kpi_df[['Quadrant', 'Total Defects', 'True (T)', 'False (F)', 'Acceptable (TA)', 'True Defective Cells', 'Yield']]
