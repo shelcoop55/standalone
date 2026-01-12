@@ -23,7 +23,7 @@ from src.plotting import (
     create_verification_status_chart, create_still_alive_map,
     create_defect_sankey, create_defect_sunburst,
     create_still_alive_figure, create_defect_map_figure, create_pareto_figure,
-    create_unit_grid_heatmap, create_hexbin_heatmap
+    create_unit_grid_heatmap, create_density_contour_map, create_hexbin_density_map
 )
 from src.reporting import generate_excel_report, generate_coordinate_list_report, generate_zip_package
 from src.enums import ViewMode, Quadrant
@@ -369,16 +369,26 @@ def main() -> None:
                 full_side_df = side_df
 
                 # 1. Grid Density Map
-                st.subheader("1. Unit Grid Density")
+                st.subheader("1. Unit Grid Density (Yield Loss)")
+                st.markdown("Visualizes defect counts per logical unit cell. Darker cells indicate higher yield loss.")
                 fig_grid = create_unit_grid_heatmap(full_side_df, panel_rows, panel_cols)
                 st.plotly_chart(fig_grid, use_container_width=True)
 
                 st.divider()
 
-                # 2. Hexbin / Hotspot Map
-                st.subheader("2. Defect Hotspots (Physical Coordinates)")
-                fig_hex = create_hexbin_heatmap(full_side_df, panel_rows, panel_cols)
+                # 2. Contour / Hotspot Map
+                st.subheader("2. Smoothed Defect Density (Hotspots)")
+                st.markdown("Identifies high-density clusters using physical coordinates. Good for seeing 'clouds' of defects.")
+                fig_hex = create_density_contour_map(full_side_df, panel_rows, panel_cols)
                 st.plotly_chart(fig_hex, use_container_width=True)
+
+                st.divider()
+
+                # 3. High-Res Coordinate Density
+                st.subheader("3. Coordinate Density Raster")
+                st.markdown("A pixelated view of defect accumulation based on precise X/Y coordinates.")
+                fig_raster = create_hexbin_density_map(full_side_df, panel_rows, panel_cols)
+                st.plotly_chart(fig_raster, use_container_width=True)
 
             elif view_mode == ViewMode.INSIGHTS.value:
                 st.header(f"Insights & Flow Analysis - Layer {st.session_state.selected_layer} - Quadrant: {quadrant_selection}")

@@ -27,21 +27,34 @@ ALIVE_CELL_COLOR = '#2ECC71' # A vibrant green for cells without "True" defects.
 DEFECTIVE_CELL_COLOR = '#E74C3C' # A strong red for cells with "True" defects.
 
 # Colors for Verification Status (Sankey Chart)
-VERIFICATION_COLOR_SAFE = '#2ECC71'   # Green for "Safe" / False Alarms
-VERIFICATION_COLOR_DEFECT = '#E74C3C' # Red for True Defects
+VERIFICATION_COLOR_SAFE = '#00FF7F'   # Spring Green (Bright Neon)
+VERIFICATION_COLOR_DEFECT = '#FF3131' # Neon Red
+
+# --- Neon Color Palette ---
+# High-contrast, saturated colors for the Sankey chart in Dark Mode.
+NEON_PALETTE = [
+    '#00FFFF', # Cyan
+    '#FF00FF', # Magenta
+    '#FFFF00', # Yellow
+    '#00FF00', # Lime
+    '#FF4500', # OrangeRed
+    '#1E90FF', # DodgerBlue
+    '#FF1493', # DeepPink
+    '#7FFF00', # Chartreuse
+    '#FFD700', # Gold
+    '#00CED1'  # DarkTurquoise
+]
 
 # --- Fallback Color Palette ---
 # A list of visually distinct colors to be used for new, unrecognized defect types.
 # This ensures that any defect from an uploaded file will get a color for plotting.
-FALLBACK_COLORS = [
+FALLBACK_COLORS = NEON_PALETTE + [
     '#FF6347',  # Tomato
     '#4682B4',  # SteelBlue
     '#32CD32',  # LimeGreen
-    '#FFD700',  # Gold
     '#6A5ACD',  # SlateBlue
     '#40E0D0',  # Turquoise
     '#DA70D6',  # Orchid
-    '#FFA500',  # Orange
     '#20B2AA',  # LightSeaGreen
     '#8A2BE2'   # BlueViolet
 ]
@@ -92,4 +105,3 @@ def load_defect_styles() -> Dict[str, str]:
         }
 
 defect_style_map: Dict[str, str] = load_defect_styles()
-
