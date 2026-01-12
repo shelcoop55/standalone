@@ -180,7 +180,7 @@ def create_defect_map_figure(df: pd.DataFrame, panel_rows: int, panel_cols: int,
 
     fig.update_layout(
         title=dict(text=final_title, font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
-        xaxis=dict(title="Unit Column Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=x_tick_vals_q1 + x_tick_vals_q2 if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
+        xaxis=dict(title="Unit Column Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=x_tick_vals_q1 + x_tick_vals_q2 if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, constrain='domain', showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
         yaxis=dict(title="Unit Row Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=y_tick_vals_q1 + y_tick_vals_q3 if show_ticks else [], ticktext=y_tick_text if show_ticks else [], range=y_axis_range, scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
         plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, legend=dict(title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR), x=1.02, y=1, xanchor='left', yanchor='top'),
         hoverlabel=dict(bgcolor="#4A4A4A", font_size=14, font_family="sans-serif"), height=800
@@ -301,7 +301,7 @@ def create_still_alive_figure(panel_rows: int, panel_cols: int, true_defect_coor
     fig.update_layout(
         title=dict(text=f"Still Alive Map ({len(true_defect_coords)} Defective Cells)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
         xaxis=dict(
-            title="Unit Column Index", range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)],
+            title="Unit Column Index", range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], constrain='domain',
             tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text,
             showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
             title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
@@ -521,6 +521,7 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int)
             tickmode='linear', dtick=1,
             showgrid=False, zeroline=False,
             range=[-0.5, total_global_cols - 0.5],
+            constrain='domain',
             title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
         ),
         yaxis=dict(
@@ -572,7 +573,7 @@ def create_density_contour_map(df: pd.DataFrame, panel_rows: int, panel_cols: in
 
     fig.update_layout(
         title=dict(text="2. Smoothed Defect Density (Hotspots)", font=dict(color=TEXT_COLOR, size=18)),
-        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], tickfont=dict(color=TEXT_COLOR)),
+        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], constrain='domain', tickfont=dict(color=TEXT_COLOR)),
         yaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2], scaleanchor="x", scaleratio=1, tickfont=dict(color=TEXT_COLOR)),
         shapes=shapes,
         plot_bgcolor=PLOT_AREA_COLOR,
@@ -624,7 +625,7 @@ def create_hexbin_density_map(df: pd.DataFrame, panel_rows: int, panel_cols: int
 
     fig.update_layout(
         title=dict(text="3. High-Res Coordinate Density (Raster)", font=dict(color=TEXT_COLOR, size=18)),
-        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], tickfont=dict(color=TEXT_COLOR)),
+        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], constrain='domain', tickfont=dict(color=TEXT_COLOR)),
         yaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2], scaleanchor="x", scaleratio=1, tickfont=dict(color=TEXT_COLOR)),
         shapes=shapes,
         plot_bgcolor=PLOT_AREA_COLOR,
