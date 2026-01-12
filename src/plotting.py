@@ -143,8 +143,9 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
             custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
 
             # Hover Template: Verification Status -> Description -> Defect Type -> Unit Index -> Defect ID
+            # Requested format: "Description : Short on Surface (AOI)"
             hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
-                             "<i>%{customdata[5]}</i><br>"
+                             "Description : %{customdata[5]}<br>"
                              "Type: %{customdata[2]}<br>"
                              "Unit Index (X, Y): (%{customdata[0]}, %{customdata[1]})<br>"
                              "Defect ID: %{customdata[3]}"
@@ -235,3 +236,175 @@ def create_still_alive_map(panel_rows: int, panel_cols: int, true_defect_coords:
     shapes.extend(create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
 
     return shapes
+
+def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
+    """
+    Creates a Sankey diagram mapping Defect Types (Left) to Verification Status (Right).
+    Only returns a figure if HAS_VERIFICATION_DATA is true.
+    """
+    if df.empty:
+        return None
+
+    has_verification = df['HAS_VERIFICATION_DATA'].iloc[0] if 'HAS_VERIFICATION_DATA' in df.columns else False
+    if not has_verification:
+        return None
+
+    # Prepare data for Sankey
+    # Group by [DEFECT_TYPE, Verification] and count
+    sankey_df = df.groupby(['DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+
+    # Create unique labels list
+    defect_types = sankey_df['DEFECT_TYPE'].unique().tolist()
+    verification_statuses = sankey_df['Verification'].unique().tolist()
+
+    # To differentiate if a label name exists in both columns (unlikely but safe), we can suffix them internally or just combine
+    all_labels = defect_types + verification_statuses
+
+    # Map labels to indices
+    label_map = {label: i for i, label in enumerate(all_labels)}
+
+    sources = []
+    targets = []
+    values = []
+
+    for _, row in sankey_df.iterrows():
+        sources.append(label_map[row['DEFECT_TYPE']])
+        targets.append(label_map[row['Verification']])
+        values.append(row['Count'])
+
+    # Colors for nodes
+    # We can use a palette.
+    node_colors = ["#1f77b4"] * len(defect_types) + ["#ff7f0e"] * len(verification_statuses)
+
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=0.5),
+            label=all_labels,
+            color=node_colors
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values
+        )
+    )])
+
+    fig.update_layout(title_text="Defect Type → Verification Flow", font_size=10, height=600, paper_bgcolor='rgba(0,0,0,0)')
+    return fig
+
+def create_defect_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int, quadrant_selection: str) -> go.Figure:
+    """
+    Creates a density heatmap (Histogram2dContour) of defect locations.
+    """
+    if df.empty:
+        return go.Figure()
+
+    # Create the density plot
+    fig = go.Figure(go.Histogram2dContour(
+        x=df['plot_x'],
+        y=df['plot_y'],
+        colorscale='Hot',
+        reversescale=True,
+        xaxis='x',
+        yaxis='y',
+        ncontours=20
+    ))
+
+    # Overlay the grid for context
+    shapes = create_grid_shapes(panel_rows, panel_cols, quadrant_selection, fill=False)
+
+    # Define axes ranges similar to the main defect map
+    x_axis_range = [-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)]
+    y_axis_range = [-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)]
+
+    if quadrant_selection != 'All':
+         ranges = {
+            'Q1': ([0, QUADRANT_WIDTH], [0, QUADRANT_HEIGHT]),
+            'Q2': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [0, QUADRANT_HEIGHT]),
+            'Q3': ([0, QUADRANT_WIDTH], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]),
+            'Q4': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE])
+        }
+         x_axis_range, y_axis_range = ranges[quadrant_selection]
+
+    fig.update_layout(
+        xaxis=dict(range=x_axis_range, showgrid=False, zeroline=False, showline=True, mirror=True),
+        yaxis=dict(range=y_axis_range, showgrid=False, zeroline=False, showline=True, mirror=True, scaleanchor="x", scaleratio=1),
+        shapes=shapes,
+        plot_bgcolor=PANEL_COLOR,
+        height=700,
+        title_text="Defect Density Heatmap"
+    )
+    return fig
+
+def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
+    """
+    Creates a Sunburst chart: Quadrant -> Defect Type -> Verification (if avail).
+    """
+    if df.empty:
+        return go.Figure()
+
+    has_verification = df['HAS_VERIFICATION_DATA'].iloc[0] if 'HAS_VERIFICATION_DATA' in df.columns else False
+
+    if has_verification:
+        path = ['QUADRANT', 'DEFECT_TYPE', 'Verification']
+    else:
+        path = ['QUADRANT', 'DEFECT_TYPE']
+
+    # 1. Aggregate
+    if has_verification:
+        grouped = df.groupby(['QUADRANT', 'DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+    else:
+        grouped = df.groupby(['QUADRANT', 'DEFECT_TYPE']).size().reset_index(name='Count')
+
+    # Build lists
+    ids = []
+    labels = []
+    parents = []
+    values = []
+
+    # Root
+    total_count = grouped['Count'].sum()
+    ids.append("Total")
+    labels.append("Total")
+    parents.append("")
+    values.append(total_count)
+
+    # Level 1: Quadrants
+    for quad in grouped['QUADRANT'].unique():
+        quad_count = grouped[grouped['QUADRANT'] == quad]['Count'].sum()
+        ids.append(f"{quad}")
+        labels.append(quad)
+        parents.append("Total")
+        values.append(quad_count)
+
+        # Level 2: Defect Type
+        quad_df = grouped[grouped['QUADRANT'] == quad]
+        for dtype in quad_df['DEFECT_TYPE'].unique():
+            dtype_count = quad_df[quad_df['DEFECT_TYPE'] == dtype]['Count'].sum()
+            ids.append(f"{quad}-{dtype}")
+            labels.append(dtype)
+            parents.append(f"{quad}")
+            values.append(dtype_count)
+
+            # Level 3: Verification (if exists)
+            if has_verification:
+                dtype_df = quad_df[quad_df['DEFECT_TYPE'] == dtype]
+                for ver in dtype_df['Verification'].unique():
+                    ver_count = dtype_df[dtype_df['Verification'] == ver]['Count'].sum()
+                    ids.append(f"{quad}-{dtype}-{ver}")
+                    labels.append(ver)
+                    parents.append(f"{quad}-{dtype}")
+                    values.append(ver_count)
+
+    fig = go.Figure(go.Sunburst(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues="total"
+    ))
+    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), height=500)
+
+    return fig

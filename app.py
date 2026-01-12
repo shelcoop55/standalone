@@ -22,7 +22,7 @@ from src.plotting import (
     create_pareto_trace, create_grouped_pareto_trace,
     create_verification_status_chart, create_still_alive_map
 )
-from src.reporting import generate_excel_report, generate_coordinate_list_report
+from src.reporting import generate_excel_report, generate_coordinate_list_report, generate_zip_package
 from src.enums import ViewMode, Quadrant
 from src.utils import get_bu_name_from_filename
 from src.documentation import TECHNICAL_DOCUMENTATION
@@ -91,13 +91,20 @@ def main() -> None:
             st.divider()
 
             with st.expander("📥 Reporting", expanded=True):
-                if st.button("Generate Report for Download", disabled=is_still_alive_view, help="Reporting is disabled for the Still Alive view."):
-                    with st.spinner("Generating Excel report..."):
-                        # For reporting, we want to combine both Front and Back data if available
+                st.subheader("Generate Report")
+                col_rep1, col_rep2 = st.columns(2)
+                with col_rep1:
+                    include_excel = st.checkbox("Excel Report", value=True)
+                    include_coords = st.checkbox("Coordinate List", value=True)
+                with col_rep2:
+                    include_map = st.checkbox("Defect Map (HTML)", value=True)
+                    include_insights = st.checkbox("Insights Charts", value=True)
+
+                if st.button("Generate Download Package", disabled=is_still_alive_view, help="Generate a ZIP file with all selected items."):
+                    with st.spinner("Generating Package..."):
                         layer_info = st.session_state.layer_data.get(st.session_state.selected_layer, {})
                         if layer_info:
                             all_sides_df = pd.concat(layer_info.values(), ignore_index=True)
-
                             report_df = all_sides_df
                             if verification_selection != 'All': report_df = report_df[report_df['Verification'] == verification_selection]
                             if quadrant_selection != Quadrant.ALL.value: report_df = report_df[report_df['QUADRANT'] == quadrant_selection]
@@ -105,18 +112,25 @@ def main() -> None:
                             params = st.session_state.analysis_params
                             source_filenames = report_df['SOURCE_FILE'].unique().tolist()
 
-                            excel_bytes = generate_excel_report(
+                            true_defect_coords = get_true_defect_coordinates(st.session_state.layer_data)
+
+                            zip_bytes = generate_zip_package(
                                 full_df=report_df,
                                 panel_rows=params.get("panel_rows", 7),
                                 panel_cols=params.get("panel_cols", 7),
-                                source_filename=", ".join(source_filenames),
                                 quadrant_selection=quadrant_selection,
-                                verification_selection=verification_selection
+                                verification_selection=verification_selection,
+                                source_filename=", ".join(source_filenames),
+                                true_defect_coords=true_defect_coords,
+                                include_excel=include_excel,
+                                include_coords=include_coords,
+                                include_map=include_map,
+                                include_insights=include_insights
                             )
-                            st.session_state.report_bytes = excel_bytes
+                            st.session_state.report_bytes = zip_bytes
                             st.rerun()
 
-                st.download_button("Download Full Report", data=st.session_state.report_bytes or b"", file_name=f"defect_report_layer_{st.session_state.selected_layer}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=st.session_state.report_bytes is None)
+                st.download_button("Download Package (ZIP)", data=st.session_state.report_bytes or b"", file_name=f"defect_package_layer_{st.session_state.selected_layer}.zip", mime="application/zip", disabled=st.session_state.report_bytes is None)
 
                 st.markdown("---")
                 if st.button("Defect Documentation", use_container_width=True):
@@ -354,6 +368,36 @@ def main() -> None:
                     fig.add_trace(create_pareto_trace(display_df))
                 fig.update_layout(xaxis=dict(title="Defect Type", categoryorder='total descending'), plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, height=600)
                 st.plotly_chart(fig, use_container_width=True)
+            elif view_mode == ViewMode.INSIGHTS.value:
+                st.header(f"Insights & Flow Analysis - Layer {st.session_state.selected_layer} - Quadrant: {quadrant_selection}")
+
+                # 1. Defect Density Heatmap (Always visible if data exists)
+                st.subheader("1. Defect Density Heatmap")
+                st.markdown("Visualizes defect hotspots across the panel surface. Useful for identifying process issues.")
+                heatmap_fig = create_defect_heatmap(display_df, panel_rows, panel_cols, quadrant_selection)
+                st.plotly_chart(heatmap_fig, use_container_width=True)
+
+                st.divider()
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    # 2. Sunburst Chart
+                    st.subheader("2. Defect Composition Hierarchy")
+                    st.markdown("Breakdown: Quadrant → Defect Type → Verification")
+                    sunburst_fig = create_defect_sunburst(display_df)
+                    st.plotly_chart(sunburst_fig, use_container_width=True)
+
+                with col2:
+                    # 3. Sankey Diagram (Only if verification data exists)
+                    st.subheader("3. Defect Verification Flow")
+                    st.markdown("Flow from **Defect Type** to **Verification Status**. Helps tune AOI sensitivity.")
+                    sankey_fig = create_defect_sankey(display_df)
+                    if sankey_fig:
+                        st.plotly_chart(sankey_fig, use_container_width=True)
+                    else:
+                        st.info("Sankey diagram requires Verification data. Please upload data with a 'Verification' column.")
+
             elif view_mode == ViewMode.SUMMARY.value:
                 st.header(f"Statistical Summary for Layer {st.session_state.selected_layer}, Quadrant: {quadrant_selection}")
                 if display_df.empty:

@@ -8,8 +8,9 @@ and analytical value.
 """
 import pandas as pd
 import io
+import plotly.graph_objects as go
 from datetime import datetime
-from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES
+from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES, PLOT_AREA_COLOR, BACKGROUND_COLOR
 
 # ==============================================================================
 # --- Private Helper Functions for Report Generation ---
@@ -254,3 +255,72 @@ def generate_excel_report(
 
     excel_bytes = output_buffer.getvalue()
     return excel_bytes
+
+import zipfile
+import json
+from src.plotting import create_defect_traces, create_defect_sankey, create_defect_heatmap, create_defect_sunburst, create_grid_shapes
+
+def generate_zip_package(
+    full_df: pd.DataFrame,
+    panel_rows: int,
+    panel_cols: int,
+    quadrant_selection: str,
+    verification_selection: str,
+    source_filename: str,
+    true_defect_coords: set,
+    include_excel: bool = True,
+    include_coords: bool = True,
+    include_map: bool = True,
+    include_insights: bool = True
+) -> bytes:
+    """
+    Generates a ZIP file containing selected report components.
+    Includes Excel reports, coordinate lists, and interactive HTML charts.
+    """
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+
+        # 1. Excel Report
+        if include_excel:
+            excel_bytes = generate_excel_report(
+                full_df, panel_rows, panel_cols, source_filename, quadrant_selection, verification_selection
+            )
+            zip_file.writestr("Defect_Analysis_Report.xlsx", excel_bytes)
+
+        # 2. Coordinate List (CSV/Excel)
+        if include_coords:
+            coord_bytes = generate_coordinate_list_report(true_defect_coords)
+            zip_file.writestr("Defective_Cell_Coordinates.xlsx", coord_bytes)
+
+        # 3. Defect Map (Interactive HTML)
+        if include_map:
+            # Recreate figure logic briefly
+            # Note: We duplicate some logic from app.py here to ensure standalone generation
+            # Ideally, refactor create_defect_map_figure in plotting.py, but for now we construct it.
+            fig = go.Figure(data=create_defect_traces(full_df))
+            fig.update_layout(
+                shapes=create_grid_shapes(panel_rows, panel_cols, quadrant_selection),
+                title=f"Panel Defect Map - {quadrant_selection}",
+                height=800,
+                plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR
+            )
+            html_content = fig.to_html(full_html=True, include_plotlyjs='cdn')
+            zip_file.writestr("Defect_Map.html", html_content)
+
+        # 4. Insights Charts (Interactive HTML)
+        if include_insights:
+            # Heatmap
+            heatmap_fig = create_defect_heatmap(full_df, panel_rows, panel_cols, quadrant_selection)
+            zip_file.writestr("Insights_Heatmap.html", heatmap_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+
+            # Sunburst
+            sunburst_fig = create_defect_sunburst(full_df)
+            zip_file.writestr("Insights_Sunburst.html", sunburst_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+
+            # Sankey (if applicable)
+            sankey_fig = create_defect_sankey(full_df)
+            if sankey_fig:
+                zip_file.writestr("Insights_Sankey.html", sankey_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+
+    return zip_buffer.getvalue()
