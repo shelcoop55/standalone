@@ -20,7 +20,8 @@ from src.data_handler import (
 from src.plotting import (
     create_grid_shapes, create_defect_traces,
     create_pareto_trace, create_grouped_pareto_trace,
-    create_verification_status_chart, create_still_alive_map
+    create_verification_status_chart, create_still_alive_map,
+    create_defect_sankey, create_defect_sunburst
 )
 from src.reporting import generate_excel_report, generate_coordinate_list_report, generate_zip_package
 from src.enums import ViewMode, Quadrant

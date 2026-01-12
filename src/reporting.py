@@ -258,7 +258,7 @@ def generate_excel_report(
 
 import zipfile
 import json
-from src.plotting import create_defect_traces, create_defect_sankey, create_defect_heatmap, create_defect_sunburst, create_grid_shapes
+from src.plotting import create_defect_traces, create_defect_sankey, create_defect_sunburst, create_grid_shapes
 
 def generate_zip_package(
     full_df: pd.DataFrame,
@@ -310,10 +310,6 @@ def generate_zip_package(
 
         # 4. Insights Charts (Interactive HTML)
         if include_insights:
-            # Heatmap
-            heatmap_fig = create_defect_heatmap(full_df, panel_rows, panel_cols, quadrant_selection)
-            zip_file.writestr("Insights_Heatmap.html", heatmap_fig.to_html(full_html=True, include_plotlyjs='cdn'))
-
             # Sunburst
             sunburst_fig = create_defect_sunburst(full_df)
             zip_file.writestr("Insights_Sunburst.html", sunburst_fig.to_html(full_html=True, include_plotlyjs='cdn'))
