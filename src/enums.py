@@ -12,6 +12,7 @@ class ViewMode(Enum):
     DEFECT = "Defect View"
     PARETO = "Pareto View"
     SUMMARY = "Summary View"
+    INSIGHTS = "Insights View"
 
     @classmethod
     def values(cls) -> list[str]:
