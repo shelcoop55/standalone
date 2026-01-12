@@ -10,7 +10,8 @@ from typing import List, Dict, Any, Set, Tuple
 from src.config import (
     PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR,
     PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE,
-    ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS
+    ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS, SAFE_VERIFICATION_VALUES,
+    VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT
 )
 from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT
 from src.documentation import VERIFICATION_DESCRIPTIONS
@@ -237,6 +238,19 @@ def create_still_alive_map(panel_rows: int, panel_cols: int, true_defect_coords:
 
     return shapes
 
+def hex_to_rgba(hex_color: str, opacity: float = 0.5) -> str:
+    """Helper to convert hex color to rgba string for Plotly without matplotlib dependency."""
+    try:
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) == 6:
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return f'rgba({r}, {g}, {b}, {opacity})'
+        return f'rgba(128, 128, 128, {opacity})'
+    except ValueError:
+        return f'rgba(128, 128, 128, {opacity})' # Fallback grey
+
 def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
     """
     Creates a Sankey diagram mapping Defect Types (Left) to Verification Status (Right).
@@ -257,10 +271,6 @@ def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
     defect_types = sankey_df['DEFECT_TYPE'].unique().tolist()
     verification_statuses = sankey_df['Verification'].unique().tolist()
 
-    # --- FIX FOR OVERLAPPING LABELS ---
-    # Even if "Short" appears in both Defect Type and Verification, they are distinct nodes in the flow.
-    # We map sources to the first N indices, and targets to the next M indices.
-
     all_labels = defect_types + verification_statuses
 
     # Create independent maps for source and target
@@ -274,7 +284,35 @@ def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
     sources = []
     targets = []
     values = []
+    link_colors = []
 
+    # Assign colors to source nodes (Defect Types) using defect_style_map
+    source_colors_hex = []
+    fallback_idx = 0
+
+    # 1. Colors for Defect Types (Left Side)
+    for dtype in defect_types:
+        if dtype in defect_style_map:
+            color = defect_style_map[dtype]
+        else:
+            color = FALLBACK_COLORS[fallback_idx % len(FALLBACK_COLORS)]
+            fallback_idx += 1
+        source_colors_hex.append(color)
+
+    # 2. Colors for Verification Status (Right Side)
+    # Logic: Green for 'Safe' (N, GE57), Red/Orange for others
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+    target_colors_hex = []
+
+    for status in verification_statuses:
+        if status.upper() in safe_values_upper:
+            target_colors_hex.append(VERIFICATION_COLOR_SAFE)
+        else:
+            target_colors_hex.append(VERIFICATION_COLOR_DEFECT)
+
+    node_colors = source_colors_hex + target_colors_hex
+
+    # 3. Build Links and Link Colors
     for _, row in sankey_df.iterrows():
         s_idx = source_map[row['DEFECT_TYPE']]
         t_idx = target_map[row['Verification']]
@@ -282,32 +320,38 @@ def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
         targets.append(t_idx)
         values.append(row['Count'])
 
-    # Colors for nodes
-    node_colors = ["#1f77b4"] * len(defect_types) + ["#ff7f0e"] * len(verification_statuses)
+        # Link color = Source Color with opacity
+        source_hex = source_colors_hex[s_idx]
+        link_colors.append(hex_to_rgba(source_hex, opacity=0.4))
 
     fig = go.Figure(data=[go.Sankey(
         node=dict(
-            pad=15,
-            thickness=20,
+            pad=20,          # Increased padding for elegance
+            thickness=10,    # Thinner nodes for elegance
             line=dict(color="black", width=0.5),
             label=all_labels,
-            color=node_colors
+            color=node_colors,
         ),
         link=dict(
             source=sources,
             target=targets,
-            value=values
-        )
+            value=values,
+            color=link_colors # Apply dynamic link colors
+        ),
+        textfont=dict(size=14, color=TEXT_COLOR, family="Arial Black") # Global font setting for the trace
     )])
 
-    # Set background color explicitly to match the app theme, which also fixes the "Black and White" export issue
-    # where transparency resulted in white backgrounds in standard viewers.
+    # Set background color explicitly to match the app theme
     fig.update_layout(
-        title_text="Defect Type → Verification Flow",
-        font=dict(size=12, color=TEXT_COLOR),
+        title=dict(
+            text="Defect Type → Verification Flow",
+            font=dict(size=20, color=TEXT_COLOR) # Larger Title
+        ),
+        font=dict(size=14, color=TEXT_COLOR), # Base font size
         height=600,
         paper_bgcolor=BACKGROUND_COLOR,
-        plot_bgcolor=PLOT_AREA_COLOR
+        plot_bgcolor=PLOT_AREA_COLOR,
+        margin=dict(l=20, r=20, t=50, b=20)
     )
     return fig
 

@@ -26,6 +26,10 @@ TEXT_COLOR = '#FFFFFF'       # White text for readability on the dark background
 ALIVE_CELL_COLOR = '#2ECC71' # A vibrant green for cells without "True" defects.
 DEFECTIVE_CELL_COLOR = '#E74C3C' # A strong red for cells with "True" defects.
 
+# Colors for Verification Status (Sankey Chart)
+VERIFICATION_COLOR_SAFE = '#2ECC71'   # Green for "Safe" / False Alarms
+VERIFICATION_COLOR_DEFECT = '#E74C3C' # Red for True Defects
+
 # --- Fallback Color Palette ---
 # A list of visually distinct colors to be used for new, unrecognized defect types.
 # This ensures that any defect from an uploaded file will get a color for plotting.
