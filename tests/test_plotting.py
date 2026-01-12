@@ -16,6 +16,8 @@ def sample_plot_df() -> pd.DataFrame:
     data = {
         'DEFECT_ID': [101, 102, 103, 104],
         'DEFECT_TYPE': ['Nick', 'Short', 'Cut', 'Nick'],
+        'Verification': ['Under Verification', 'Under Verification', 'Under Verification', 'Under Verification'],
+        'HAS_VERIFICATION_DATA': [False, False, False, False],
         'UNIT_INDEX_X': [0, 1, 0, 1],
         'UNIT_INDEX_Y': [0, 0, 1, 1],
         'QUADRANT': ['Q1', 'Q2', 'Q3', 'Q4'],

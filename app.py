@@ -367,8 +367,20 @@ def main() -> None:
                     col4.metric("Yield Estimate", f"{yield_estimate:.2%}")
                     st.divider()
                     st.markdown("### Top Defect Types")
-                    top_offenders = display_df['DEFECT_TYPE'].value_counts().reset_index()
-                    top_offenders.columns = ['Defect Type', 'Count']
+
+                    # Check if verification data exists (using the flag from the first row)
+                    has_verification = display_df['HAS_VERIFICATION_DATA'].iloc[0] if not display_df.empty and 'HAS_VERIFICATION_DATA' in display_df.columns else False
+
+                    if has_verification:
+                         # Group by both Defect Type and Verification Status
+                        top_offenders = display_df.groupby(['DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+                        top_offenders.rename(columns={'DEFECT_TYPE': 'Defect Type'}, inplace=True)
+                        top_offenders = top_offenders.sort_values(by='Count', ascending=False).reset_index(drop=True)
+                    else:
+                        # Standard grouping by Defect Type only
+                        top_offenders = display_df['DEFECT_TYPE'].value_counts().reset_index()
+                        top_offenders.columns = ['Defect Type', 'Count']
+
                     top_offenders['Percentage'] = (top_offenders['Count'] / total_defects) * 100
                     theme_cmap = mcolors.LinearSegmentedColormap.from_list("theme_cmap", [PLOT_AREA_COLOR, PANEL_COLOR])
                     st.dataframe(top_offenders.style.format({'Percentage': '{:.2f}%'}).background_gradient(cmap=theme_cmap, subset=['Count']), use_container_width=True)
