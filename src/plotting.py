@@ -8,7 +8,7 @@ import pandas as pd
 from typing import List, Dict, Any, Set, Tuple
 
 from src.config import (
-    PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR,
+    PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR,
     PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE,
     ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS
 )
@@ -257,23 +257,32 @@ def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
     defect_types = sankey_df['DEFECT_TYPE'].unique().tolist()
     verification_statuses = sankey_df['Verification'].unique().tolist()
 
-    # To differentiate if a label name exists in both columns (unlikely but safe), we can suffix them internally or just combine
+    # --- FIX FOR OVERLAPPING LABELS ---
+    # Even if "Short" appears in both Defect Type and Verification, they are distinct nodes in the flow.
+    # We map sources to the first N indices, and targets to the next M indices.
+
     all_labels = defect_types + verification_statuses
 
-    # Map labels to indices
-    label_map = {label: i for i, label in enumerate(all_labels)}
+    # Create independent maps for source and target
+    # Source Map: Maps Defect Type string to index 0..N-1
+    source_map = {label: i for i, label in enumerate(defect_types)}
+
+    # Target Map: Maps Verification string to index N..N+M-1
+    offset = len(defect_types)
+    target_map = {label: i + offset for i, label in enumerate(verification_statuses)}
 
     sources = []
     targets = []
     values = []
 
     for _, row in sankey_df.iterrows():
-        sources.append(label_map[row['DEFECT_TYPE']])
-        targets.append(label_map[row['Verification']])
+        s_idx = source_map[row['DEFECT_TYPE']]
+        t_idx = target_map[row['Verification']]
+        sources.append(s_idx)
+        targets.append(t_idx)
         values.append(row['Count'])
 
     # Colors for nodes
-    # We can use a palette.
     node_colors = ["#1f77b4"] * len(defect_types) + ["#ff7f0e"] * len(verification_statuses)
 
     fig = go.Figure(data=[go.Sankey(
@@ -291,7 +300,15 @@ def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
         )
     )])
 
-    fig.update_layout(title_text="Defect Type → Verification Flow", font_size=10, height=600, paper_bgcolor='rgba(0,0,0,0)')
+    # Set background color explicitly to match the app theme, which also fixes the "Black and White" export issue
+    # where transparency resulted in white backgrounds in standard viewers.
+    fig.update_layout(
+        title_text="Defect Type → Verification Flow",
+        font=dict(size=12, color=TEXT_COLOR),
+        height=600,
+        paper_bgcolor=BACKGROUND_COLOR,
+        plot_bgcolor=PLOT_AREA_COLOR
+    )
     return fig
 
 def create_defect_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int, quadrant_selection: str) -> go.Figure:
@@ -340,23 +357,19 @@ def create_defect_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int, qu
 
 def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
     """
-    Creates a Sunburst chart: Quadrant -> Defect Type -> Verification (if avail).
+    Creates a Sunburst chart: Defect Type -> Verification (if avail).
+    Hierarchy: Total -> Defect Type -> Verification Status
     """
     if df.empty:
         return go.Figure()
 
     has_verification = df['HAS_VERIFICATION_DATA'].iloc[0] if 'HAS_VERIFICATION_DATA' in df.columns else False
 
-    if has_verification:
-        path = ['QUADRANT', 'DEFECT_TYPE', 'Verification']
-    else:
-        path = ['QUADRANT', 'DEFECT_TYPE']
-
     # 1. Aggregate
     if has_verification:
-        grouped = df.groupby(['QUADRANT', 'DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+        grouped = df.groupby(['DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
     else:
-        grouped = df.groupby(['QUADRANT', 'DEFECT_TYPE']).size().reset_index(name='Count')
+        grouped = df.groupby(['DEFECT_TYPE']).size().reset_index(name='Count')
 
     # Build lists
     ids = []
@@ -367,36 +380,27 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
     # Root
     total_count = grouped['Count'].sum()
     ids.append("Total")
-    labels.append("Total")
+    labels.append(f"Total<br>{total_count}")
     parents.append("")
     values.append(total_count)
 
-    # Level 1: Quadrants
-    for quad in grouped['QUADRANT'].unique():
-        quad_count = grouped[grouped['QUADRANT'] == quad]['Count'].sum()
-        ids.append(f"{quad}")
-        labels.append(quad)
+    # Level 1: Defect Type
+    for dtype in grouped['DEFECT_TYPE'].unique():
+        dtype_count = grouped[grouped['DEFECT_TYPE'] == dtype]['Count'].sum()
+        ids.append(f"{dtype}")
+        labels.append(dtype)
         parents.append("Total")
-        values.append(quad_count)
+        values.append(dtype_count)
 
-        # Level 2: Defect Type
-        quad_df = grouped[grouped['QUADRANT'] == quad]
-        for dtype in quad_df['DEFECT_TYPE'].unique():
-            dtype_count = quad_df[quad_df['DEFECT_TYPE'] == dtype]['Count'].sum()
-            ids.append(f"{quad}-{dtype}")
-            labels.append(dtype)
-            parents.append(f"{quad}")
-            values.append(dtype_count)
-
-            # Level 3: Verification (if exists)
-            if has_verification:
-                dtype_df = quad_df[quad_df['DEFECT_TYPE'] == dtype]
-                for ver in dtype_df['Verification'].unique():
-                    ver_count = dtype_df[dtype_df['Verification'] == ver]['Count'].sum()
-                    ids.append(f"{quad}-{dtype}-{ver}")
-                    labels.append(ver)
-                    parents.append(f"{quad}-{dtype}")
-                    values.append(ver_count)
+        # Level 2: Verification (if exists)
+        if has_verification:
+            dtype_df = grouped[grouped['DEFECT_TYPE'] == dtype]
+            for ver in dtype_df['Verification'].unique():
+                ver_count = dtype_df[dtype_df['Verification'] == ver]['Count'].sum()
+                ids.append(f"{dtype}-{ver}")
+                labels.append(ver)
+                parents.append(f"{dtype}")
+                values.append(ver_count)
 
     fig = go.Figure(go.Sunburst(
         ids=ids,
@@ -405,6 +409,12 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
         values=values,
         branchvalues="total"
     ))
-    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), height=500)
+    # IMPROVEMENT: Fix "Black and White" export by setting dark theme colors
+    fig.update_layout(
+        margin=dict(t=0, l=0, r=0, b=0),
+        height=500,
+        paper_bgcolor=BACKGROUND_COLOR,
+        font=dict(color=TEXT_COLOR)
+    )
 
     return fig

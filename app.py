@@ -75,6 +75,11 @@ def main() -> None:
 
         if st.session_state.get('layer_data'):
 
+            # IMPROVEMENT: Add a Reset Button to clear the analysis
+            if st.button("🔄 Reset Analysis", type="secondary", help="Clears all loaded data and resets the tool."):
+                st.session_state.clear()
+                st.rerun()
+
             # --- Get the active dataframe based on selected layer and side ---
             active_df = pd.DataFrame()
             selected_layer_num = st.session_state.get('selected_layer')
@@ -131,7 +136,13 @@ def main() -> None:
                             st.session_state.report_bytes = zip_bytes
                             st.rerun()
 
-                st.download_button("Download Package (ZIP)", data=st.session_state.report_bytes or b"", file_name=f"defect_package_layer_{st.session_state.selected_layer}.zip", mime="application/zip", disabled=st.session_state.report_bytes is None)
+                # IMPROVEMENT: Add Lot Number to filename if available
+                # Use session_state directly as 'params' is local to the block above
+                params_local = st.session_state.get('analysis_params', {})
+                lot_num_str = f"_{params_local.get('lot_number', '')}" if params_local.get('lot_number') else ""
+                zip_filename = f"defect_package_layer_{st.session_state.selected_layer}{lot_num_str}.zip"
+
+                st.download_button("Download Package (ZIP)", data=st.session_state.report_bytes or b"", file_name=zip_filename, mime="application/zip", disabled=st.session_state.report_bytes is None)
 
                 st.markdown("---")
                 if st.button("Defect Documentation", use_container_width=True):
@@ -377,7 +388,7 @@ def main() -> None:
                 with col1:
                     # 1. Sunburst Chart
                     st.subheader("1. Defect Composition Hierarchy")
-                    st.markdown("Breakdown: Quadrant → Defect Type → Verification")
+                    st.markdown("Breakdown: Defect Type → Verification Status")
                     sunburst_fig = create_defect_sunburst(display_df)
                     st.plotly_chart(sunburst_fig, use_container_width=True)
 

@@ -6,9 +6,11 @@ from src.plotting import (
     create_defect_traces,
     create_pareto_trace,
     create_grouped_pareto_trace,
-    create_still_alive_map
+    create_still_alive_map,
+    create_defect_sankey,
+    create_defect_sunburst
 )
-from src.config import ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, PANEL_COLOR
+from src.config import ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, PANEL_COLOR, TEXT_COLOR, BACKGROUND_COLOR
 
 @pytest.fixture
 def sample_plot_df() -> pd.DataFrame:
@@ -81,3 +83,81 @@ def test_create_still_alive_map():
     # Test grid lines (they have a width > 0)
     grid_lines = [s for s in shapes if s.get('type') == 'line']
     assert len(grid_lines) > 0, "Grid lines should be drawn over the colored cells"
+
+def test_create_defect_sankey_overlap():
+    """
+    Tests that create_defect_sankey correctly handles overlapping labels
+    between DEFECT_TYPE and Verification columns.
+    """
+    df = pd.DataFrame({
+        'DEFECT_TYPE': ['Short', 'Cut'],
+        'Verification': ['Short', 'N'], # 'Short' overlaps
+        'HAS_VERIFICATION_DATA': [True, True]
+    })
+
+    fig = create_defect_sankey(df)
+    assert fig is not None, "Sankey figure should be created"
+
+    # Extract data from the figure
+    sankey = fig.data[0]
+    node_labels = sankey.node.label
+    links = sankey.link
+
+    # We expect 4 distinct nodes: Cut, Short (Defect), Short (Verif), N
+    # Although the label list might just say "Cut", "Short", "Short", "N"
+    assert len(node_labels) == 4, f"Expected 4 nodes, got {len(node_labels)}: {node_labels}"
+
+    # Check labels (order matters based on implementation: defect types then verification)
+    # groupby sorts keys:
+    # Row 0: Cut, N
+    # Row 1: Short, Short
+    # Defect Types unique: ['Cut', 'Short']
+    # Verif unique: ['N', 'Short']
+    # Combined: ['Cut', 'Short', 'N', 'Short']
+
+    expected_labels = ['Cut', 'Short', 'N', 'Short']
+    assert list(node_labels) == expected_labels
+
+    # Check connections based on above indices:
+    # Cut (Defect) is index 0
+    # Short (Defect) is index 1
+    # N (Verif) is index 2
+    # Short (Verif) is index 3
+
+    # Link 1: Cut -> N should be 0 -> 2
+    # Link 2: Short -> Short should be 1 -> 3
+
+    # Sources and Targets
+    sources = list(links.source)
+    targets = list(links.target)
+
+    # Verify Cut -> N
+    # Find index where source is 0
+    idx_cut = sources.index(0)
+    assert targets[idx_cut] == 2
+
+    # Verify Short -> Short
+    idx_short = sources.index(1)
+    assert targets[idx_short] == 3
+
+    # Verify colors/template setting for export
+    assert fig.layout.paper_bgcolor == BACKGROUND_COLOR
+    assert fig.layout.font.color == TEXT_COLOR
+
+def test_create_defect_sunburst_styles(sample_plot_df):
+    """
+    Tests that the sunburst chart has correct export styles.
+    """
+    # Enable verification data simulation
+    sample_plot_df['HAS_VERIFICATION_DATA'] = True
+
+    fig = create_defect_sunburst(sample_plot_df)
+
+    assert fig.layout.paper_bgcolor == BACKGROUND_COLOR
+    assert fig.layout.font.color == TEXT_COLOR
+
+    # Check total label logic
+    # We need to dig into the trace data
+    trace = fig.data[0]
+    # Check if root label contains "Total<br>"
+    assert any("Total<br>" in label for label in trace.labels)
