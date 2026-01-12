@@ -25,6 +25,7 @@ from src.plotting import (
 from src.reporting import generate_excel_report, generate_coordinate_list_report
 from src.enums import ViewMode, Quadrant
 from src.utils import get_bu_name_from_filename
+from src.documentation import TECHNICAL_DOCUMENTATION
 
 def load_css(file_path: str) -> None:
     """Loads a CSS file and injects it into the Streamlit app."""
@@ -116,6 +117,11 @@ def main() -> None:
                             st.rerun()
 
                 st.download_button("Download Full Report", data=st.session_state.report_bytes or b"", file_name=f"defect_report_layer_{st.session_state.selected_layer}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=st.session_state.report_bytes is None)
+
+                st.markdown("---")
+                if st.button("Defect Documentation", use_container_width=True):
+                    st.session_state.active_view = 'documentation'
+                    st.rerun()
         else:
             with st.expander("📊 Analysis Controls", expanded=True):
                 st.radio("Select View", ViewMode.values(), disabled=True)
@@ -125,6 +131,10 @@ def main() -> None:
             with st.expander("📥 Reporting", expanded=True):
                 st.button("Generate Report for Download", disabled=True)
                 st.download_button("Download Full Report", b"", disabled=True)
+                st.markdown("---")
+                if st.button("Defect Documentation", use_container_width=True):
+                     st.session_state.active_view = 'documentation'
+                     st.rerun()
 
     st.title("📊 Panel Defect Analysis Tool")
     st.markdown("<br>", unsafe_allow_html=True)
@@ -150,6 +160,18 @@ def main() -> None:
         st.session_state.analysis_params = {"panel_rows": panel_rows, "panel_cols": panel_cols, "gap_size": GAP_SIZE, "lot_number": lot_number}
         st.session_state.report_bytes = None
         st.rerun()
+
+    if st.session_state.active_view == 'documentation':
+        if st.button("⬅️ Back to Analysis"):
+            # Restore previous view or default to layer view
+            if st.session_state.get('layer_data'):
+                st.session_state.active_view = 'layer'
+            else:
+                 st.session_state.active_view = 'layer' # Will fall back to empty state
+            st.rerun()
+
+        st.markdown(TECHNICAL_DOCUMENTATION)
+        return # Stop execution to show only documentation
 
     if st.session_state.get('layer_data'):
         params = st.session_state.analysis_params

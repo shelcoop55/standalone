@@ -13,6 +13,7 @@ from src.config import (
     ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS
 )
 from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT
+from src.documentation import VERIFICATION_DESCRIPTIONS
 
 # ==============================================================================
 # --- Private Helper Functions for Grid Creation ---
@@ -128,9 +129,23 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
     for group_val, color in local_style_map.items():
         dff = df[df[group_col] == group_val]
         if not dff.empty:
-            custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification']
-            hovertemplate = ("<b>Type: %{customdata[2]}</b><br>"
-                             "Status: %{customdata[4]}<br>"
+            # Map descriptions if available
+            # If group_col is Verification, use that code. Else use Verification col if it exists.
+
+            # We want to create a Description column for customdata
+            # Assuming 'Verification' column holds the code (e.g., 'CU22')
+            if 'Verification' in dff.columns:
+                 dff = dff.copy() # Avoid SettingWithCopyWarning
+                 dff['Description'] = dff['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
+            else:
+                 dff['Description'] = "N/A"
+
+            custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
+
+            # Hover Template: Verification Status -> Description -> Defect Type -> Unit Index -> Defect ID
+            hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
+                             "<i>%{customdata[5]}</i><br>"
+                             "Type: %{customdata[2]}<br>"
                              "Unit Index (X, Y): (%{customdata[0]}, %{customdata[1]})<br>"
                              "Defect ID: %{customdata[3]}"
                              "<extra></extra>")
