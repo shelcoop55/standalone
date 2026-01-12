@@ -372,26 +372,18 @@ def main() -> None:
             elif view_mode == ViewMode.INSIGHTS.value:
                 st.header(f"Insights & Flow Analysis - Layer {st.session_state.selected_layer} - Quadrant: {quadrant_selection}")
 
-                # 1. Defect Density Heatmap (Always visible if data exists)
-                st.subheader("1. Defect Density Heatmap")
-                st.markdown("Visualizes defect hotspots across the panel surface. Useful for identifying process issues.")
-                heatmap_fig = create_defect_heatmap(display_df, panel_rows, panel_cols, quadrant_selection)
-                st.plotly_chart(heatmap_fig, use_container_width=True)
-
-                st.divider()
-
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    # 2. Sunburst Chart
-                    st.subheader("2. Defect Composition Hierarchy")
+                    # 1. Sunburst Chart
+                    st.subheader("1. Defect Composition Hierarchy")
                     st.markdown("Breakdown: Quadrant → Defect Type → Verification")
                     sunburst_fig = create_defect_sunburst(display_df)
                     st.plotly_chart(sunburst_fig, use_container_width=True)
 
                 with col2:
-                    # 3. Sankey Diagram (Only if verification data exists)
-                    st.subheader("3. Defect Verification Flow")
+                    # 2. Sankey Diagram (Only if verification data exists)
+                    st.subheader("2. Defect Verification Flow")
                     st.markdown("Flow from **Defect Type** to **Verification Status**. Helps tune AOI sensitivity.")
                     sankey_fig = create_defect_sankey(display_df)
                     if sankey_fig:
