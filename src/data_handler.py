@@ -11,7 +11,7 @@ from typing import List, Dict, Set, Tuple
 from io import BytesIO
 
 # Import constants from the configuration file
-from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE
+from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, SAFE_VERIFICATION_VALUES
 
 # --- DERIVED PHYSICAL CONSTANTS ---
 # These constants are calculated from the primary dimensions in config.py
@@ -49,8 +49,15 @@ def load_data(
                 df['SOURCE_FILE'] = file_name
                 df['SIDE'] = side
 
-                if 'Verification' not in df.columns: df['Verification'] = 'T'
-                else: df['Verification'] = df['Verification'].astype(str).fillna('T').str.strip()
+                # --- VERIFICATION LOGIC UPDATE ---
+                # 1. If 'Verification' column is missing, create it and mark as "Under Verification".
+                # 2. If it exists, fill NaN/Blanks with 'N' (Safe).
+                if 'Verification' not in df.columns:
+                    df['Verification'] = 'Under Verification'
+                else:
+                    df['Verification'] = df['Verification'].fillna('N').astype(str).str.strip()
+                    # Also handle empty strings that might result from stripping
+                    df['Verification'] = df['Verification'].replace('', 'N')
 
                 required_columns = ['DEFECT_ID', 'DEFECT_TYPE', 'UNIT_INDEX_X', 'UNIT_INDEX_Y']
                 if not all(col in df.columns for col in required_columns):
@@ -171,6 +178,9 @@ def get_true_defect_coordinates(layer_data: Dict[int, Dict[str, pd.DataFrame]]) 
     """
     Aggregates all "True" defects from all layers and sides to find unique
     defective cell coordinates for the Still Alive map.
+
+    Updated Logic:
+    A "True Defect" is any defect whose Verification value is NOT in the SAFE_VERIFICATION_VALUES list.
     """
     if not isinstance(layer_data, dict) or not layer_data:
         return set()
@@ -188,7 +198,13 @@ def get_true_defect_coordinates(layer_data: Dict[int, Dict[str, pd.DataFrame]]) 
     if all_layers_df.empty or 'Verification' not in all_layers_df.columns:
         return set()
 
-    true_defects_df = all_layers_df[all_layers_df['Verification'] == 'T']
+    # Filter for True Defects: Value NOT in SAFE_VERIFICATION_VALUES (case-insensitive)
+    # We use upper() for comparison
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+
+    # Identify true defects
+    is_true_defect = ~all_layers_df['Verification'].str.upper().isin(safe_values_upper)
+    true_defects_df = all_layers_df[is_true_defect]
 
     if true_defects_df.empty:
         return set()

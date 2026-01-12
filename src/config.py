@@ -45,6 +45,19 @@ FALLBACK_COLORS = [
 # --- Reporting Constants ---
 CRITICAL_DEFECT_TYPES = ["Short", "Cut/Short"]
 
+# --- Verification Logic ---
+# Values in the 'Verification' column that are considered "Safe" (Non-Defects).
+# Any value NOT in this list is treated as a "True Defect" that impacts yield.
+# Comparisons should be case-insensitive.
+SAFE_VERIFICATION_VALUES = [
+    'GE57',
+    'N',
+    'TA',
+    'FALSE',
+    'FALSE ALARM',
+    'F'
+]
+
 # --- Defect Styling (Loaded from JSON) ---
 import json
 from pathlib import Path

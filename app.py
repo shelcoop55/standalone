@@ -11,7 +11,7 @@ import matplotlib.colors as mcolors
 # Import our modularized functions
 from src.config import (
     BACKGROUND_COLOR, PLOT_AREA_COLOR, GRID_COLOR, TEXT_COLOR, PANEL_COLOR, GAP_SIZE,
-    ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR
+    ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, SAFE_VERIFICATION_VALUES
 )
 from src.data_handler import (
     load_data, get_true_defect_coordinates,
@@ -337,6 +337,9 @@ def main() -> None:
                 if display_df.empty:
                     st.info("No defects to summarize in the selected quadrant.")
                     return
+                # Helper set for safe values check
+                safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+
                 if quadrant_selection != Quadrant.ALL.value:
                     total_defects = len(display_df)
                     total_cells = panel_rows * panel_cols
@@ -345,13 +348,15 @@ def main() -> None:
                     # For yield calculations, we need the full layer data (all sides)
                     full_layer_df = pd.concat(layer_info.values(), ignore_index=True)
                     yield_df = full_layer_df[full_layer_df['QUADRANT'] == quadrant_selection]
-                    true_yield_defects = yield_df[yield_df['Verification'] == 'T']
+
+                    # Logic: True defect if NOT in safe list
+                    true_yield_defects = yield_df[~yield_df['Verification'].str.upper().isin(safe_values_upper)]
                     combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
                     yield_estimate = (total_cells - combined_defective_cells) / total_cells if total_cells > 0 else 0
 
                     # For the displayed metric, only count true defects on the selected side
                     selected_side_yield_df = display_df[display_df['QUADRANT'] == quadrant_selection]
-                    true_defects_selected_side = selected_side_yield_df[selected_side_yield_df['Verification'] == 'T']
+                    true_defects_selected_side = selected_side_yield_df[~selected_side_yield_df['Verification'].str.upper().isin(safe_values_upper)]
                     defective_cells_selected_side = len(true_defects_selected_side[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
 
                     st.markdown("### Key Performance Indicators (KPIs)")
@@ -375,12 +380,13 @@ def main() -> None:
 
                     # For yield calculations, we need the full layer data (all sides)
                     full_layer_df = pd.concat(layer_info.values(), ignore_index=True)
-                    true_yield_defects = full_layer_df[full_layer_df['Verification'] == 'T']
+                    # Logic: True defect if NOT in safe list
+                    true_yield_defects = full_layer_df[~full_layer_df['Verification'].str.upper().isin(safe_values_upper)]
                     combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
                     yield_estimate = (total_cells - combined_defective_cells) / total_cells if total_cells > 0 else 0
 
                     # For the displayed metric, only count true defects on the selected side
-                    true_defects_selected_side = display_df[display_df['Verification'] == 'T']
+                    true_defects_selected_side = display_df[~display_df['Verification'].str.upper().isin(safe_values_upper)]
                     defective_cells_selected_side = len(true_defects_selected_side[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
 
                     col1, col2, col3, col4 = st.columns(4)
@@ -400,19 +406,30 @@ def main() -> None:
                         # For yield calculations, we need the full layer data (all sides)
                         full_layer_df = pd.concat(layer_info.values(), ignore_index=True)
                         yield_df = full_layer_df[full_layer_df['QUADRANT'] == quad]
-                        true_yield_defects = yield_df[yield_df['Verification'] == 'T']
+                        # Logic: True defect if NOT in safe list
+                        true_yield_defects = yield_df[~yield_df['Verification'].str.upper().isin(safe_values_upper)]
                         combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
                         yield_estimate = (total_cells_per_quad - combined_defective_cells) / total_cells_per_quad if total_cells_per_quad > 0 else 0
 
                         # For the displayed metric, only count true defects on the selected side
-                        selected_side_yield_df = quad_view_df[quad_view_df['Verification'] == 'T']
+                        selected_side_yield_df = quad_view_df[~quad_view_df['Verification'].str.upper().isin(safe_values_upper)]
                         defective_cells_selected_side = len(selected_side_yield_df[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
 
-                        verification_counts = quad_view_df['Verification'].value_counts()
-                        kpi_data.append({"Quadrant": quad, "Total Defects": total_quad_defects, "True (T)": int(verification_counts.get('T', 0)), "False (F)": int(verification_counts.get('F', 0)), "Acceptable (TA)": int(verification_counts.get('TA', 0)), "True Defective Cells": defective_cells_selected_side, "Yield": f"{yield_estimate:.2%}"})
+                        # Count "Safe" (Non-Defects) and "True" (Defects) for the breakdown
+                        # Since labels can be anything, we aggregate into two main buckets: "True Defect" and "Non-Defect (Safe)"
+                        safe_count = len(quad_view_df[quad_view_df['Verification'].str.upper().isin(safe_values_upper)])
+                        true_count = total_quad_defects - safe_count
+
+                        kpi_data.append({
+                            "Quadrant": quad,
+                            "Total Points": total_quad_defects,
+                            "True Defects": true_count,
+                            "Non-Defects (Safe)": safe_count,
+                            "True Defective Cells": defective_cells_selected_side,
+                            "Yield": f"{yield_estimate:.2%}"
+                        })
                     if kpi_data:
                         kpi_df = pd.DataFrame(kpi_data)
-                        kpi_df = kpi_df[['Quadrant', 'Total Defects', 'True (T)', 'False (F)', 'Acceptable (TA)', 'True Defective Cells', 'Yield']]
                         st.dataframe(kpi_df, use_container_width=True)
                     else:
                         st.info("No data to display for the quarterly breakdown based on current filters.")
