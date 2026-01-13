@@ -186,19 +186,16 @@ def test_create_multi_layer_defect_map():
     # Trace 0: Layer 1, Side B
     trace0 = fig.data[0]
     assert "Back" in trace0.name
-    # assert trace0.legendgroup == "Layer 1" # REMOVED: Legend grouping was removed for independent toggling
     assert trace0.marker.symbol == 'diamond' # Back = Diamond
 
     # Trace 1: Layer 1, Side F
     trace1 = fig.data[1]
     assert "Front" in trace1.name
-    # assert trace2.legendgroup == "Layer 2"
     assert trace1.marker.symbol == 'circle' # Front = Circle
 
     # Trace 2: Layer 2, Side F
     trace2 = fig.data[2]
     assert "Front" in trace2.name
-    # assert trace2.legendgroup == "Layer 2"
 
     # Check colors: Layer 1 traces should match
     assert trace0.marker.color == trace1.marker.color

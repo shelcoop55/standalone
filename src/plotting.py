@@ -244,12 +244,15 @@ def create_multi_layer_defect_map(df: pd.DataFrame, panel_rows: int, panel_cols:
     x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
     y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
     y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+    x_tick_text = list(range(panel_cols * 2))
+    y_tick_text = list(range(panel_rows * 2))
 
     fig.update_layout(
         title=dict(text="Multi-Layer Combined Defect Map (True Defects Only)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
         xaxis=dict(
             title="Unit Column Index",
             tickvals=x_tick_vals_q1 + x_tick_vals_q2,
+            ticktext=x_tick_text,
             range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], constrain='domain',
             showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True,
             title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
@@ -257,6 +260,7 @@ def create_multi_layer_defect_map(df: pd.DataFrame, panel_rows: int, panel_cols:
         yaxis=dict(
             title="Unit Row Index",
             tickvals=y_tick_vals_q1 + y_tick_vals_q3,
+            ticktext=y_tick_text,
             range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
             scaleanchor="x", scaleratio=1,
             showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True,
