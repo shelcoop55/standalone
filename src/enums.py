@@ -15,6 +15,7 @@ class ViewMode(Enum):
     PARETO = "Pareto View"
     SUMMARY = "Summary View"
     INSIGHTS = "Insights View"
+    ROOT_CAUSE = "Root Cause Analysis"
 
     @classmethod
     def values(cls) -> list[str]:

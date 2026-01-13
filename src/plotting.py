@@ -975,3 +975,58 @@ def create_dominant_layer_map(data: StressMapData, panel_rows: int, panel_cols: 
 
     _configure_stress_map_layout(fig, panel_rows, panel_cols, "Dominant Layer Analysis (Layer with Max Defects)")
     return fig
+
+def create_cross_section_heatmap(
+    matrix: np.ndarray,
+    layer_labels: List[str],
+    axis_labels: List[str],
+    slice_desc: str
+) -> go.Figure:
+    """
+    Creates the Z-Axis Cross Section Heatmap (Virtual Slice).
+    """
+    # Inverse Y-axis so Layer 1 is at top (if not already handled by input order)
+    # Actually, Heatmap Y-axis 0 is usually bottom. We need to flip visual range or data order.
+    # We'll just set 'autorange="reversed"' in layout for Y axis so top of list is top of chart.
+
+    if matrix.size == 0:
+         return go.Figure(layout=dict(title=dict(text="No Data for Cross-Section", font=dict(color=TEXT_COLOR))))
+
+    # Mask zeros
+    z_data = matrix.astype(float)
+    z_data[z_data == 0] = np.nan
+
+    text_data = matrix.astype(str)
+    text_data[matrix == 0] = ""
+
+    fig = go.Figure(data=go.Heatmap(
+        z=z_data,
+        x=axis_labels,
+        y=layer_labels,
+        text=text_data,
+        texttemplate="%{text}",
+        textfont={"color": "white"},
+        colorscale='Magma',
+        xgap=2, ygap=2,
+        colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+    ))
+
+    fig.update_layout(
+        title=dict(text=f"Virtual Cross-Section: {slice_desc}", font=dict(color=TEXT_COLOR, size=18), x=0.5, xanchor='center'),
+        xaxis=dict(
+            title="Unit Index (Slice Position)",
+            showgrid=False, zeroline=False,
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        yaxis=dict(
+            title="Layer Stack",
+            autorange="reversed", # Ensure Layer 1 is at top
+            showgrid=False, zeroline=False,
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        plot_bgcolor=PLOT_AREA_COLOR,
+        paper_bgcolor=BACKGROUND_COLOR,
+        height=600
+    )
+
+    return fig
