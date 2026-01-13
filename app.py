@@ -20,9 +20,12 @@ from src.data_handler import (
 from src.plotting import (
     create_grid_shapes, create_defect_traces,
     create_pareto_trace, create_grouped_pareto_trace,
-    create_verification_status_chart, create_still_alive_map
+    create_verification_status_chart, create_still_alive_map,
+    create_defect_sankey, create_defect_sunburst,
+    create_still_alive_figure, create_defect_map_figure, create_pareto_figure,
+    create_unit_grid_heatmap, create_density_contour_map, create_hexbin_density_map
 )
-from src.reporting import generate_excel_report, generate_coordinate_list_report
+from src.reporting import generate_excel_report, generate_coordinate_list_report, generate_zip_package
 from src.enums import ViewMode, Quadrant
 from src.utils import get_bu_name_from_filename
 from src.documentation import TECHNICAL_DOCUMENTATION
@@ -74,6 +77,11 @@ def main() -> None:
 
         if st.session_state.get('layer_data'):
 
+            # IMPROVEMENT: Add a Reset Button to clear the analysis
+            if st.button("🔄 Reset Analysis", type="secondary", help="Clears all loaded data and resets the tool."):
+                st.session_state.clear()
+                st.rerun()
+
             # --- Get the active dataframe based on selected layer and side ---
             active_df = pd.DataFrame()
             selected_layer_num = st.session_state.get('selected_layer')
@@ -91,13 +99,28 @@ def main() -> None:
             st.divider()
 
             with st.expander("📥 Reporting", expanded=True):
-                if st.button("Generate Report for Download", disabled=is_still_alive_view, help="Reporting is disabled for the Still Alive view."):
-                    with st.spinner("Generating Excel report..."):
-                        # For reporting, we want to combine both Front and Back data if available
+                st.subheader("Generate Report")
+                col_rep1, col_rep2 = st.columns(2)
+                with col_rep1:
+                    include_excel = st.checkbox("Excel Report", value=True)
+                    include_coords = st.checkbox("Coordinate List", value=True)
+                with col_rep2:
+                    include_map = st.checkbox("Defect Map (HTML)", value=True)
+                    include_insights = st.checkbox("Insights Charts", value=True)
+
+                # New Export Options
+                st.markdown("**Export Images (All Layers):**")
+                col_img1, col_img2 = st.columns(2)
+                with col_img1:
+                    include_png_all = st.checkbox("Defect Maps (PNG)", value=False, help="Export PNG images of the defect map for ALL layers (Front & Back).")
+                with col_img2:
+                    include_pareto_png = st.checkbox("Pareto Charts (PNG)", value=False, help="Export PNG images of the Pareto chart for ALL layers (Front & Back).")
+
+                if st.button("Generate Download Package", disabled=is_still_alive_view, help="Generate a ZIP file with all selected items."):
+                    with st.spinner("Generating Package..."):
                         layer_info = st.session_state.layer_data.get(st.session_state.selected_layer, {})
                         if layer_info:
                             all_sides_df = pd.concat(layer_info.values(), ignore_index=True)
-
                             report_df = all_sides_df
                             if verification_selection != 'All': report_df = report_df[report_df['Verification'] == verification_selection]
                             if quadrant_selection != Quadrant.ALL.value: report_df = report_df[report_df['QUADRANT'] == quadrant_selection]
@@ -105,18 +128,34 @@ def main() -> None:
                             params = st.session_state.analysis_params
                             source_filenames = report_df['SOURCE_FILE'].unique().tolist()
 
-                            excel_bytes = generate_excel_report(
+                            true_defect_coords = get_true_defect_coordinates(st.session_state.layer_data)
+
+                            zip_bytes = generate_zip_package(
                                 full_df=report_df,
                                 panel_rows=params.get("panel_rows", 7),
                                 panel_cols=params.get("panel_cols", 7),
-                                source_filename=", ".join(source_filenames),
                                 quadrant_selection=quadrant_selection,
-                                verification_selection=verification_selection
+                                verification_selection=verification_selection,
+                                source_filename=", ".join(source_filenames),
+                                true_defect_coords=true_defect_coords,
+                                include_excel=include_excel,
+                                include_coords=include_coords,
+                                include_map=include_map,
+                                include_insights=include_insights,
+                                include_png_all_layers=include_png_all,
+                                include_pareto_png=include_pareto_png,
+                                layer_data=st.session_state.layer_data # Pass all data for bulk export
                             )
-                            st.session_state.report_bytes = excel_bytes
+                            st.session_state.report_bytes = zip_bytes
                             st.rerun()
 
-                st.download_button("Download Full Report", data=st.session_state.report_bytes or b"", file_name=f"defect_report_layer_{st.session_state.selected_layer}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=st.session_state.report_bytes is None)
+                # IMPROVEMENT: Add Lot Number to filename if available
+                # Use session_state directly as 'params' is local to the block above
+                params_local = st.session_state.get('analysis_params', {})
+                lot_num_str = f"_{params_local.get('lot_number', '')}" if params_local.get('lot_number') else ""
+                zip_filename = f"defect_package_layer_{st.session_state.selected_layer}{lot_num_str}.zip"
+
+                st.download_button("Download Package (ZIP)", data=st.session_state.report_bytes or b"", file_name=zip_filename, mime="application/zip", disabled=st.session_state.report_bytes is None)
 
                 st.markdown("---")
                 if st.button("Defect Documentation", use_container_width=True):
@@ -236,34 +275,11 @@ def main() -> None:
             map_col, summary_col = st.columns([2.5, 1])
             with map_col:
                 true_defect_coords = get_true_defect_coordinates(st.session_state.layer_data)
-                fig = go.Figure()
-                map_shapes = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
-                # Define axis ticks and labels for clarity
-                cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
-                x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-                x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-                y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-                y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-                x_tick_text = list(range(panel_cols * 2))
-                y_tick_text = list(range(panel_rows * 2))
 
-                fig.update_layout(
-                    title=dict(text=f"Still Alive Map ({len(true_defect_coords)} Defective Cells)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
-                    xaxis=dict(
-                        title="Unit Column Index", range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)],
-                        tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text,
-                        showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
-                        title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
-                    ),
-                    yaxis=dict(
-                        title="Unit Row Index", range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
-                        tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text,
-                        scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
-                        title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
-                    ),
-                    plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, shapes=map_shapes, height=800, margin=dict(l=20, r=20, t=80, b=20)
-                )
+                # REFACTORED: Use the new helper function
+                fig = create_still_alive_figure(panel_rows, panel_cols, true_defect_coords)
                 st.plotly_chart(fig, use_container_width=True)
+
             with summary_col:
                 total_cells = (panel_rows * 2) * (panel_cols * 2)
                 defective_cell_count = len(true_defect_coords)
@@ -285,6 +301,20 @@ def main() -> None:
                     file_name="still_alive_coordinate_list.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+
+                # NEW: Button for Still Alive Map Image
+                # Generate on the fly for direct download
+                try:
+                    # Scale=2 for higher resolution
+                    img_bytes = fig.to_image(format="png", engine="kaleido", scale=2)
+                    st.download_button(
+                        label="Download Map Image (PNG)",
+                        data=img_bytes,
+                        file_name="Still_Alive_Map.png",
+                        mime="image/png"
+                    )
+                except Exception as e:
+                    st.warning("Image generation not available.")
 
                 st.divider()
                 st.subheader("Legend")
@@ -321,39 +351,65 @@ def main() -> None:
             display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
 
             if view_mode == ViewMode.DEFECT.value:
-                fig = go.Figure(data=create_defect_traces(display_df))
-                fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant_selection))
-                cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
-                x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-                x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
-                y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-                y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
-                x_tick_text, y_tick_text = list(range(panel_cols * 2)), list(range(panel_rows * 2))
-                x_axis_range, y_axis_range, show_ticks = [-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], [-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)], True
-                if quadrant_selection != Quadrant.ALL.value:
-                    show_ticks = False
-                    ranges = {'Q1': ([0, QUADRANT_WIDTH], [0, QUADRANT_HEIGHT]), 'Q2': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [0, QUADRANT_HEIGHT]), 'Q3': ([0, QUADRANT_WIDTH], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]), 'Q4': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE])}
-                    x_axis_range, y_axis_range = ranges[quadrant_selection]
-                fig.update_layout(
-                    title=dict(text=f"Panel Defect Map - Layer {st.session_state.selected_layer} - Quadrant: {quadrant_selection} ({len(display_df)} Defects)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
-                    xaxis=dict(title="Unit Column Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=x_tick_vals_q1 + x_tick_vals_q2 if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
-                    yaxis=dict(title="Unit Row Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=y_tick_vals_q1 + y_tick_vals_q3 if show_ticks else [], ticktext=y_tick_text if show_ticks else [], range=y_axis_range, scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
-                    plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, legend=dict(title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR), x=1.02, y=1, xanchor='left', yanchor='top'),
-                    hoverlabel=dict(bgcolor="#4A4A4A", font_size=14, font_family="sans-serif"), height=800
-                )
-                if lot_number and quadrant_selection == Quadrant.ALL.value:
-                    fig.add_annotation(x=PANEL_WIDTH + GAP_SIZE, y=PANEL_HEIGHT + GAP_SIZE, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=TEXT_COLOR), align="right", xanchor="right", yanchor="bottom")
+                # REFACTORED: Use new helper
+                fig = create_defect_map_figure(display_df, panel_rows, panel_cols, quadrant_selection, lot_number)
                 st.plotly_chart(fig, use_container_width=True)
+
             elif view_mode == ViewMode.PARETO.value:
+                # REFACTORED: Use new helper
                 st.subheader(f"Defect Pareto - Layer {st.session_state.selected_layer} - Quadrant: {quadrant_selection}")
-                fig = go.Figure()
-                if quadrant_selection == Quadrant.ALL.value:
-                    for trace in create_grouped_pareto_trace(display_df): fig.add_trace(trace)
-                    fig.update_layout(barmode='stack')
-                else:
-                    fig.add_trace(create_pareto_trace(display_df))
-                fig.update_layout(xaxis=dict(title="Defect Type", categoryorder='total descending'), plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, height=600)
+                fig = create_pareto_figure(display_df, quadrant_selection)
                 st.plotly_chart(fig, use_container_width=True)
+
+            elif view_mode == ViewMode.HEATMAP.value:
+                st.header(f"True Defect Heatmap Analysis - Layer {st.session_state.selected_layer}")
+                st.info("These heatmaps visualize the density of 'True Defects' across the ENTIRE panel, ignoring quadrant filters.")
+
+                # Always use the full side dataframe for heatmaps, ignoring quadrant selection
+                full_side_df = side_df
+
+                # 1. Grid Density Map
+                st.subheader("1. Unit Grid Density (Yield Loss)")
+                st.markdown("Visualizes defect counts per logical unit cell. Darker cells indicate higher yield loss.")
+                fig_grid = create_unit_grid_heatmap(full_side_df, panel_rows, panel_cols)
+                st.plotly_chart(fig_grid, use_container_width=True)
+
+                st.divider()
+
+                # 2. Contour / Hotspot Map
+                st.subheader("2. Smoothed Defect Density (Hotspots)")
+                st.markdown("Identifies high-density clusters using physical coordinates. Good for seeing 'clouds' of defects.")
+                fig_hex = create_density_contour_map(full_side_df, panel_rows, panel_cols)
+                st.plotly_chart(fig_hex, use_container_width=True)
+
+                st.divider()
+
+                # 3. High-Res Coordinate Density
+                st.subheader("3. Coordinate Density Raster")
+                st.markdown("A pixelated view of defect accumulation based on precise X/Y coordinates.")
+                fig_raster = create_hexbin_density_map(full_side_df, panel_rows, panel_cols)
+                st.plotly_chart(fig_raster, use_container_width=True)
+
+            elif view_mode == ViewMode.INSIGHTS.value:
+                st.header(f"Insights & Flow Analysis - Layer {st.session_state.selected_layer} - Quadrant: {quadrant_selection}")
+
+                # 1. Sunburst Chart
+                st.subheader("1. Defect Composition Hierarchy")
+                st.markdown("Breakdown: Defect Type → Verification Status")
+                sunburst_fig = create_defect_sunburst(display_df)
+                st.plotly_chart(sunburst_fig, use_container_width=True)
+
+                st.divider()
+
+                # 2. Sankey Diagram (Only if verification data exists)
+                st.subheader("2. Defect Verification Flow")
+                st.markdown("Flow from **Defect Type** to **Verification Status**. Helps tune AOI sensitivity.")
+                sankey_fig = create_defect_sankey(display_df)
+                if sankey_fig:
+                    st.plotly_chart(sankey_fig, use_container_width=True)
+                else:
+                    st.info("Sankey diagram requires Verification data. Please upload data with a 'Verification' column.")
+
             elif view_mode == ViewMode.SUMMARY.value:
                 st.header(f"Statistical Summary for Layer {st.session_state.selected_layer}, Quadrant: {quadrant_selection}")
                 if display_df.empty:

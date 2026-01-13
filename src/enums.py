@@ -10,6 +10,7 @@ from enum import Enum
 class ViewMode(Enum):
     """Enumeration for the different analysis views in the UI."""
     DEFECT = "Defect View"
+    HEATMAP = "Heatmap Analysis"
     PARETO = "Pareto View"
     SUMMARY = "Summary View"
     INSIGHTS = "Insights View"

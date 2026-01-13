@@ -1,19 +1,22 @@
 """
 Plotting and Visualization Module.
 This version draws a true-to-scale simulation of a 510x510mm physical panel.
-UPDATED: Now includes an outer border frame and has been refactored for clarity.
+UPDATED: Sankey charts with Neon Palette, 3 types of Heatmaps, and polished styling.
 """
 import plotly.graph_objects as go
 import pandas as pd
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any, Set, Tuple, Optional
+import numpy as np
 
 from src.config import (
-    PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR,
+    PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR,
     PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE,
-    ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS
+    ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS, SAFE_VERIFICATION_VALUES,
+    VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT, NEON_PALETTE
 )
 from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT
 from src.documentation import VERIFICATION_DESCRIPTIONS
+from src.enums import Quadrant
 
 # ==============================================================================
 # --- Private Helper Functions for Grid Creation ---
@@ -84,10 +87,6 @@ def create_grid_shapes(panel_rows: int, panel_cols: int, quadrant: str = 'All', 
 def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
     """
     Generates scatter plot traces.
-
-    SWITCHING LOGIC:
-    - If real verification data exists (HAS_VERIFICATION_DATA=True), group by 'Verification'.
-    - If NO verification data, group by 'DEFECT_TYPE'.
     """
     traces = []
     if df.empty: return traces
@@ -101,7 +100,6 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
     unique_groups = df[group_col].unique()
 
     # --- COLOR MAPPING ---
-    # We need a dynamic color map for whatever column we are grouping by.
     local_style_map = {}
 
     if group_col == 'DEFECT_TYPE':
@@ -115,12 +113,8 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
                 fallback_index += 1
     else:
         # For Verification codes (CU22, N, etc.), generate a map on the fly
-        # We can reuse the FALLBACK_COLORS or define specific ones if needed.
-        # Simple approach: Assign distinct colors from the fallback list.
         fallback_index = 0
         for code in unique_groups:
-            # If we want specific colors for 'N' (Green) or 'False Alarm', we could add logic here.
-            # For now, purely dynamic to handle ANY code.
             color = FALLBACK_COLORS[fallback_index % len(FALLBACK_COLORS)]
             local_style_map[code] = color
             fallback_index += 1
@@ -129,22 +123,16 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
     for group_val, color in local_style_map.items():
         dff = df[df[group_col] == group_val]
         if not dff.empty:
-            # Map descriptions if available
-            # If group_col is Verification, use that code. Else use Verification col if it exists.
-
-            # We want to create a Description column for customdata
-            # Assuming 'Verification' column holds the code (e.g., 'CU22')
             if 'Verification' in dff.columns:
-                 dff = dff.copy() # Avoid SettingWithCopyWarning
+                 dff = dff.copy()
                  dff['Description'] = dff['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
             else:
                  dff['Description'] = "N/A"
 
             custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
 
-            # Hover Template: Verification Status -> Description -> Defect Type -> Unit Index -> Defect ID
             hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
-                             "<i>%{customdata[5]}</i><br>"
+                             "Description : %{customdata[5]}<br>"
                              "Type: %{customdata[2]}<br>"
                              "Unit Index (X, Y): (%{customdata[0]}, %{customdata[1]})<br>"
                              "Defect ID: %{customdata[3]}"
@@ -155,13 +143,54 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
                 y=dff['plot_y'],
                 mode='markers',
                 marker=dict(color=color, size=8, line=dict(width=1, color='black')),
-                name=group_val, # Legend shows 'CU22' or 'Nick' depending on mode
+                name=group_val,
                 customdata=dff[custom_data_cols],
                 hovertemplate=hovertemplate
             ))
 
     return traces
     
+def create_defect_map_figure(df: pd.DataFrame, panel_rows: int, panel_cols: int, quadrant_selection: str = Quadrant.ALL.value, lot_number: Optional[str] = None, title: Optional[str] = None) -> go.Figure:
+    """
+    Creates the full Defect Map Figure (Traces + Grid + Layout).
+    """
+    fig = go.Figure(data=create_defect_traces(df))
+    fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant_selection))
+
+    # Calculate ticks and ranges
+    cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
+    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+    x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+    y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+    x_tick_text, y_tick_text = list(range(panel_cols * 2)), list(range(panel_rows * 2))
+    x_axis_range, y_axis_range, show_ticks = [-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], [-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)], True
+
+    if quadrant_selection != Quadrant.ALL.value:
+        show_ticks = False
+        ranges = {
+            'Q1': ([0, QUADRANT_WIDTH], [0, QUADRANT_HEIGHT]),
+            'Q2': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [0, QUADRANT_HEIGHT]),
+            'Q3': ([0, QUADRANT_WIDTH], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]),
+            'Q4': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE])
+        }
+        x_axis_range, y_axis_range = ranges[quadrant_selection]
+
+    final_title = title if title else f"Panel Defect Map - Quadrant: {quadrant_selection}"
+
+    fig.update_layout(
+        title=dict(text=final_title, font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
+        xaxis=dict(title="Unit Column Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=x_tick_vals_q1 + x_tick_vals_q2 if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, constrain='domain', showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
+        yaxis=dict(title="Unit Row Index", title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR), tickvals=y_tick_vals_q1 + y_tick_vals_q3 if show_ticks else [], ticktext=y_tick_text if show_ticks else [], range=y_axis_range, scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=3, linecolor=GRID_COLOR, mirror=True),
+        plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, legend=dict(title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR), x=1.02, y=1, xanchor='left', yanchor='top'),
+        hoverlabel=dict(bgcolor="#4A4A4A", font_size=14, font_family="sans-serif"), height=800
+    )
+
+    if lot_number and quadrant_selection == Quadrant.ALL.value:
+        fig.add_annotation(x=PANEL_WIDTH + GAP_SIZE, y=PANEL_HEIGHT + GAP_SIZE, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=TEXT_COLOR), align="right", xanchor="right", yanchor="bottom")
+
+    return fig
+
 def create_pareto_trace(df: pd.DataFrame) -> go.Bar:
     if df.empty: return go.Bar(name='Pareto')
 
@@ -171,8 +200,6 @@ def create_pareto_trace(df: pd.DataFrame) -> go.Bar:
     pareto_data = df[group_col].value_counts().reset_index()
     pareto_data.columns = ['Label', 'Count']
 
-    # Simple color logic (grey) since we don't have a persistent map for dynamic verification codes in this scope easily,
-    # or we can reuse the logic. For simplicity, we use a default color.
     return go.Bar(x=pareto_data['Label'], y=pareto_data['Count'], name='Pareto', marker_color='#4682B4')
 
 def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
@@ -192,6 +219,26 @@ def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
         if not pivot.empty:
             traces.append(go.Bar(name=quadrant, x=pivot.index, y=pivot[quadrant]))
     return traces
+
+def create_pareto_figure(df: pd.DataFrame, quadrant_selection: str = Quadrant.ALL.value) -> go.Figure:
+    """
+    Creates the Pareto Figure (Traces + Layout).
+    """
+    fig = go.Figure()
+    if quadrant_selection == Quadrant.ALL.value:
+        for trace in create_grouped_pareto_trace(df): fig.add_trace(trace)
+        fig.update_layout(barmode='stack')
+    else:
+        fig.add_trace(create_pareto_trace(df))
+
+    fig.update_layout(
+        title=dict(text=f"Defect Pareto - Quadrant: {quadrant_selection}", font=dict(color=TEXT_COLOR)),
+        xaxis=dict(title="Defect Type", categoryorder='total descending', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)),
+        yaxis=dict(title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)),
+        plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, height=600,
+        legend=dict(font=dict(color=TEXT_COLOR))
+    )
+    return fig
 
 def create_verification_status_chart(df: pd.DataFrame) -> List[go.Bar]:
     # ... (omitted for brevity, same as before)
@@ -235,3 +282,418 @@ def create_still_alive_map(panel_rows: int, panel_cols: int, true_defect_coords:
     shapes.extend(create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
 
     return shapes
+
+def create_still_alive_figure(panel_rows: int, panel_cols: int, true_defect_coords: Set[Tuple[int, int]]) -> go.Figure:
+    """
+    Creates the Still Alive Map Figure (Shapes + Layout).
+    """
+    fig = go.Figure()
+    map_shapes = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
+
+    cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
+    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+    x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
+    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+    y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
+    x_tick_text = list(range(panel_cols * 2))
+    y_tick_text = list(range(panel_rows * 2))
+
+    fig.update_layout(
+        title=dict(text=f"Still Alive Map ({len(true_defect_coords)} Defective Cells)", font=dict(color=TEXT_COLOR), x=0.5, xanchor='center'),
+        xaxis=dict(
+            title="Unit Column Index", range=[-GAP_SIZE, PANEL_WIDTH + (GAP_SIZE * 2)], constrain='domain',
+            tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text,
+            showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        yaxis=dict(
+            title="Unit Row Index", range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
+            tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text,
+            scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False, showline=True, linewidth=2, linecolor=GRID_COLOR, mirror=True,
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        plot_bgcolor=PLOT_AREA_COLOR, paper_bgcolor=BACKGROUND_COLOR, shapes=map_shapes, height=800, margin=dict(l=20, r=20, t=80, b=20)
+    )
+    return fig
+
+def hex_to_rgba(hex_color: str, opacity: float = 0.5) -> str:
+    """Helper to convert hex color to rgba string for Plotly without matplotlib dependency."""
+    try:
+        hex_color = hex_color.lstrip('#')
+        if len(hex_color) == 6:
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            return f'rgba({r}, {g}, {b}, {opacity})'
+        return f'rgba(128, 128, 128, {opacity})'
+    except ValueError:
+        return f'rgba(128, 128, 128, {opacity})' # Fallback grey
+
+def create_defect_sankey(df: pd.DataFrame) -> go.Sankey:
+    """
+    Creates a Sankey diagram mapping Defect Types (Left) to Verification Status (Right).
+    IMPROVEMENTS:
+    - Smart Labels with Counts/Percentages
+    - Neon Color Palette
+    - Sorted Nodes
+    - Thicker Nodes & Solid Links
+    - Narrative Tooltips
+    """
+    if df.empty:
+        return None
+
+    has_verification = df['HAS_VERIFICATION_DATA'].iloc[0] if 'HAS_VERIFICATION_DATA' in df.columns else False
+    if not has_verification:
+        return None
+
+    # Data Prep: Group by [DEFECT_TYPE, Verification]
+    sankey_df = df.groupby(['DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+
+    # Calculate Totals for Labels and Sorting
+    total_defects = sankey_df['Count'].sum()
+    defect_counts = sankey_df.groupby('DEFECT_TYPE')['Count'].sum().sort_values(ascending=False)
+    verification_counts = sankey_df.groupby('Verification')['Count'].sum().sort_values(ascending=False)
+
+    # Unique Sorted Labels
+    defect_types = defect_counts.index.tolist()
+    verification_statuses = verification_counts.index.tolist()
+
+    all_labels_raw = defect_types + verification_statuses
+
+    # Generate Smart Labels: "Scratch (42 - 15%)"
+    smart_labels = []
+
+    # Source Labels (Defects)
+    for dtype in defect_types:
+        count = defect_counts[dtype]
+        pct = (count / total_defects) * 100
+        smart_labels.append(f"{dtype} ({count} - {pct:.1f}%)")
+
+    # Target Labels (Verification)
+    for ver in verification_statuses:
+        count = verification_counts[ver]
+        pct = (count / total_defects) * 100
+        smart_labels.append(f"{ver} ({count} - {pct:.1f}%)")
+
+    # Mapping
+    source_map = {label: i for i, label in enumerate(defect_types)}
+    offset = len(defect_types)
+    target_map = {label: i + offset for i, label in enumerate(verification_statuses)}
+
+    sources = []
+    targets = []
+    values = []
+    link_colors = []
+    custom_hovers = []
+
+    # Assign Neon Colors to Source Nodes
+    source_colors_hex = []
+    for i, dtype in enumerate(defect_types):
+        color = NEON_PALETTE[i % len(NEON_PALETTE)]
+        source_colors_hex.append(color)
+
+    # Assign Status Colors to Target Nodes
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+    target_colors_hex = []
+    for status in verification_statuses:
+        if status.upper() in safe_values_upper:
+            target_colors_hex.append(VERIFICATION_COLOR_SAFE)
+        else:
+            target_colors_hex.append(VERIFICATION_COLOR_DEFECT)
+
+    node_colors = source_colors_hex + target_colors_hex
+
+    # Build Links
+    # We iterate through the SORTED defect types to ensure visual flow order
+    for dtype in defect_types:
+        dtype_df = sankey_df[sankey_df['DEFECT_TYPE'] == dtype]
+        for _, row in dtype_df.iterrows():
+            ver = row['Verification']
+            count = row['Count']
+
+            s_idx = source_map[dtype]
+            t_idx = target_map[ver]
+
+            sources.append(s_idx)
+            targets.append(t_idx)
+            values.append(count)
+
+            # Link Color: Match Source with High Opacity (0.8) for "Pipe" look
+            source_hex = source_colors_hex[s_idx]
+            link_colors.append(hex_to_rgba(source_hex, opacity=0.8))
+
+            # Narrative Tooltip
+            pct_flow = (count / total_defects) * 100
+            hover_text = (
+                f"<b>{count} {dtype}s</b> accounted for <b>{pct_flow:.1f}%</b> of total flow<br>"
+                f"Resulting in <b>{ver}</b> status."
+            )
+            custom_hovers.append(hover_text)
+
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=25,
+            thickness=30,    # Much Thicker Nodes
+            line=dict(color="black", width=1), # Sharp border
+            label=smart_labels,
+            color=node_colors,
+            hovertemplate='%{label}<extra></extra>'
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values,
+            color=link_colors,
+            customdata=custom_hovers,
+            hovertemplate='%{customdata}<extra></extra>' # Use the narrative text
+        ),
+        textfont=dict(size=14, color=TEXT_COLOR, family="Roboto")
+    )])
+
+    fig.update_layout(
+        title=dict(
+            text="Defect Type → Verification Flow Analysis",
+            font=dict(size=22, color=TEXT_COLOR, family="Roboto")
+        ),
+        font=dict(size=12, color=TEXT_COLOR),
+        height=700,
+        paper_bgcolor=BACKGROUND_COLOR,
+        plot_bgcolor=PLOT_AREA_COLOR,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
+    return fig
+
+def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> go.Figure:
+    """
+    1. Grid Density Heatmap (Chessboard).
+    Filters for TRUE DEFECTS only.
+    """
+    if df.empty:
+        return go.Figure()
+
+    # Filter for True Defects
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+    if 'Verification' in df.columns:
+        df_true = df[~df['Verification'].str.upper().isin(safe_values_upper)].copy()
+    else:
+        df_true = df.copy()
+
+    if df_true.empty:
+        return go.Figure(layout=dict(
+            title=dict(text="No True Defects Found for Heatmap", font=dict(color=TEXT_COLOR)),
+            paper_bgcolor=BACKGROUND_COLOR, plot_bgcolor=PLOT_AREA_COLOR
+        ))
+
+    # Map to Global Indices
+    global_indices = []
+    for _, row in df_true.iterrows():
+        q = row['QUADRANT']
+        u_x = int(row['UNIT_INDEX_X'])
+        u_y = int(row['UNIT_INDEX_Y'])
+
+        g_x = u_x + (panel_cols if q in ['Q2', 'Q4'] else 0)
+        g_y = u_y + (panel_rows if q in ['Q3', 'Q4'] else 0)
+        global_indices.append((g_x, g_y))
+
+    heatmap_df = pd.DataFrame(global_indices, columns=['Global_X', 'Global_Y'])
+    heatmap_data = heatmap_df.groupby(['Global_X', 'Global_Y']).size().reset_index(name='Count')
+
+    # Create Heatmap
+    # Use 'Reds' or 'Magma' for high impact
+    fig = go.Figure(data=go.Heatmap(
+        x=heatmap_data['Global_X'],
+        y=heatmap_data['Global_Y'],
+        z=heatmap_data['Count'],
+        colorscale='Magma', # Darker theme
+        xgap=2, ygap=2,     # Clear separation
+        colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)),
+        hovertemplate='Global Unit: (%{x}, %{y})<br>Defects: %{z}<extra></extra>'
+    ))
+
+    # Fix Axis Ranges
+    total_global_cols = panel_cols * 2
+    total_global_rows = panel_rows * 2
+
+    fig.update_layout(
+        title=dict(text="1. Unit Grid Density (Yield Loss Map)", font=dict(color=TEXT_COLOR, size=18)),
+        xaxis=dict(
+            title="Global Unit Column",
+            tickmode='linear', dtick=1,
+            showgrid=False, zeroline=False,
+            range=[-0.5, total_global_cols - 0.5],
+            constrain='domain',
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        yaxis=dict(
+            title="Global Unit Row",
+            tickmode='linear', dtick=1,
+            showgrid=False, zeroline=False,
+            range=[-0.5, total_global_rows - 0.5],
+            scaleanchor="x", scaleratio=1,
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        plot_bgcolor=PLOT_AREA_COLOR,
+        paper_bgcolor=BACKGROUND_COLOR,
+        height=700
+    )
+
+    return fig
+
+def create_density_contour_map(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> go.Figure:
+    """
+    2. Smoothed Density Contour Map (Weather Map).
+    Renamed from 'create_hexbin_heatmap'.
+    """
+    if df.empty:
+        return go.Figure()
+
+    # Filter for True Defects
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+    if 'Verification' in df.columns:
+        df_true = df[~df['Verification'].str.upper().isin(safe_values_upper)].copy()
+    else:
+        df_true = df.copy()
+
+    if df_true.empty:
+        return go.Figure(layout=dict(title="No True Defects Found"))
+
+    # Use Histogram2dContour for smooth density
+    fig = go.Figure(go.Histogram2dContour(
+        x=df_true['plot_x'],
+        y=df_true['plot_y'],
+        colorscale='Turbo', # Vibrant, engineering style
+        reversescale=False,
+        ncontours=30,
+        contours=dict(coloring='heatmap', showlabels=True, labelfont=dict(color='white')),
+        hoverinfo='x+y+z'
+    ))
+
+    # Overlay Grid
+    shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False)
+
+    fig.update_layout(
+        title=dict(text="2. Smoothed Defect Density (Hotspots)", font=dict(color=TEXT_COLOR, size=18)),
+        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], constrain='domain', tickfont=dict(color=TEXT_COLOR)),
+        yaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2], scaleanchor="x", scaleratio=1, tickfont=dict(color=TEXT_COLOR)),
+        shapes=shapes,
+        plot_bgcolor=PLOT_AREA_COLOR,
+        paper_bgcolor=BACKGROUND_COLOR,
+        height=700
+    )
+    return fig
+
+def create_hexbin_density_map(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> go.Figure:
+    """
+    3. True Hexagonal Binning Density Map.
+    Simulates hexbin using a high-res Histogram2d or Scatter if needed,
+    but since Plotly JS has specific hexbin limitations, we'll use a styled Histogram2d
+    that looks techy, or rely on aggregation.
+
+    Actually, to get a TRUE Hexbin look without Scipy, we can use a scatter plot
+    where we round coordinates to a hex grid manually.
+
+    Simplified approach for robustness: Use a pixelated 'Density Heatmap' (Histogram2d)
+    with a distinct look from the Contour map.
+    """
+    if df.empty:
+        return go.Figure()
+
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+    if 'Verification' in df.columns:
+        df_true = df[~df['Verification'].str.upper().isin(safe_values_upper)].copy()
+    else:
+        df_true = df.copy()
+
+    if df_true.empty:
+        return go.Figure()
+
+    # We will use Histogram2d (Rectangular bins) but styled to look like a "Tech Raster"
+    # This differentiates it from the Grid (Unit based) and Contour (Smooth).
+    # This is a "Physical Coordinate Raster".
+
+    fig = go.Figure(go.Histogram2d(
+        x=df_true['plot_x'],
+        y=df_true['plot_y'],
+        colorscale='Viridis',
+        zsmooth=False, # Pixelated look
+        nbinsx=50,     # High resolution
+        nbinsy=50,
+        colorbar=dict(title='Density', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+    ))
+
+    shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False)
+
+    fig.update_layout(
+        title=dict(text="3. High-Res Coordinate Density (Raster)", font=dict(color=TEXT_COLOR, size=18)),
+        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], constrain='domain', tickfont=dict(color=TEXT_COLOR)),
+        yaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2], scaleanchor="x", scaleratio=1, tickfont=dict(color=TEXT_COLOR)),
+        shapes=shapes,
+        plot_bgcolor=PLOT_AREA_COLOR,
+        paper_bgcolor=BACKGROUND_COLOR,
+        height=700
+    )
+    return fig
+
+def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
+    """
+    Creates a Sunburst chart: Defect Type -> Verification (if avail).
+    Hierarchy: Total -> Defect Type -> Verification Status
+    """
+    if df.empty:
+        return go.Figure()
+
+    has_verification = df['HAS_VERIFICATION_DATA'].iloc[0] if 'HAS_VERIFICATION_DATA' in df.columns else False
+
+    # 1. Aggregate
+    if has_verification:
+        grouped = df.groupby(['DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+    else:
+        grouped = df.groupby(['DEFECT_TYPE']).size().reset_index(name='Count')
+
+    # Build lists
+    ids = []
+    labels = []
+    parents = []
+    values = []
+
+    # Root
+    total_count = grouped['Count'].sum()
+    ids.append("Total")
+    labels.append(f"Total<br>{total_count}")
+    parents.append("")
+    values.append(total_count)
+
+    # Level 1: Defect Type
+    for dtype in grouped['DEFECT_TYPE'].unique():
+        dtype_count = grouped[grouped['DEFECT_TYPE'] == dtype]['Count'].sum()
+        ids.append(f"{dtype}")
+        labels.append(dtype)
+        parents.append("Total")
+        values.append(dtype_count)
+
+        # Level 2: Verification (if exists)
+        if has_verification:
+            dtype_df = grouped[grouped['DEFECT_TYPE'] == dtype]
+            for ver in dtype_df['Verification'].unique():
+                ver_count = dtype_df[dtype_df['Verification'] == ver]['Count'].sum()
+                ids.append(f"{dtype}-{ver}")
+                labels.append(ver)
+                parents.append(f"{dtype}")
+                values.append(ver_count)
+
+    fig = go.Figure(go.Sunburst(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues="total"
+    ))
+    # IMPROVEMENT: Fix "Black and White" export by setting dark theme colors
+    fig.update_layout(
+        margin=dict(t=0, l=0, r=0, b=0),
+        height=500,
+        paper_bgcolor=BACKGROUND_COLOR,
+        font=dict(color=TEXT_COLOR)
+    )
+
+    return fig

@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 from io import BytesIO
-from src.data_handler import load_data, get_true_defect_coordinates, QUADRANT_WIDTH, QUADRANT_HEIGHT
+from src.data_handler import load_data, get_true_defect_coordinates, QUADRANT_WIDTH, QUADRANT_HEIGHT, SIMPLE_DEFECT_TYPES
 from src.config import GAP_SIZE
 import streamlit as st
 import importlib
@@ -79,13 +79,23 @@ def test_load_data_sample_generation(monkeypatch):
     for i in range(1, 4):
         assert set(layer_data[i].keys()) == {'F', 'B'}
 
-    # Check counts for a few examples
-    assert len(layer_data[1]['F']) == 75
-    assert len(layer_data[1]['B']) == 30
-    assert len(layer_data[2]['F']) == 120
-    assert len(layer_data[2]['B']) == 40
-    assert len(layer_data[3]['F']) == 50
-    assert len(layer_data[3]['B']) == 25
+    # Check counts for a few examples (now random between 100-150)
+    for layer_num in layer_data:
+        for side in layer_data[layer_num]:
+            df = layer_data[layer_num][side]
+            assert 100 <= len(df) <= 150
+
+            # Verify Defect Types are from the simple list
+            assert df['DEFECT_TYPE'].isin(SIMPLE_DEFECT_TYPES).all()
+
+            # Verify 'Verification' contains either valid Codes (start with CU, BM, GE, HO) or False Alarms (N, FALSE)
+            # We just sample a few to ensure they look right
+            sample_ver = df['Verification'].unique()
+            for v in sample_ver:
+                is_false_alarm = v in ["N", "FALSE"]
+                is_code = v[:2] in ["CU", "BM", "GE", "HO"]
+                assert is_false_alarm or is_code, f"Unexpected Verification Value: {v}"
+
     assert 'plot_x' in layer_data[1]['F'].columns
     assert 'SIDE' in layer_data[2]['B'].columns
 

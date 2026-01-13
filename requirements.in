@@ -5,3 +5,4 @@ numpy
 openpyxl # Required by pandas to read .xlsx files
 matplotlib # Required for styling the summary table
 xlsxwriter # NEW: Required for creating multi-sheet Excel reports
+kaleido==0.2.1 # Required for static image export (PNG)

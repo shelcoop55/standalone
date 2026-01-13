@@ -8,8 +8,18 @@ and analytical value.
 """
 import pandas as pd
 import io
+import plotly.graph_objects as go
 from datetime import datetime
-from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES
+from typing import Dict, Any, Optional, List
+import zipfile
+import json
+from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES, PLOT_AREA_COLOR, BACKGROUND_COLOR
+from src.plotting import (
+    create_defect_traces, create_defect_sankey, create_defect_sunburst,
+    create_grid_shapes, create_still_alive_figure, create_defect_map_figure,
+    create_pareto_figure
+)
+from src.enums import Quadrant
 
 # ==============================================================================
 # --- Private Helper Functions for Report Generation ---
@@ -254,3 +264,138 @@ def generate_excel_report(
 
     excel_bytes = output_buffer.getvalue()
     return excel_bytes
+
+def generate_zip_package(
+    full_df: pd.DataFrame,
+    panel_rows: int,
+    panel_cols: int,
+    quadrant_selection: str,
+    verification_selection: str,
+    source_filename: str,
+    true_defect_coords: set,
+    include_excel: bool = True,
+    include_coords: bool = True,
+    include_map: bool = True,
+    include_insights: bool = True,
+    include_png_all_layers: bool = False,
+    include_pareto_png: bool = False,
+    layer_data: Optional[Dict] = None
+) -> bytes:
+    """
+    Generates a ZIP file containing selected report components.
+    Includes Excel reports, coordinate lists, and interactive HTML charts.
+    Also optionally includes PNG images for all layers/sides.
+    """
+    zip_buffer = io.BytesIO()
+
+    # --- Debug Logging Setup ---
+    debug_logs: List[str] = ["DEBUG LOG FOR IMAGE GENERATION\n" + "="*30]
+    def log(msg):
+        debug_logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+    log("Starting generate_zip_package")
+    log(f"Options: PNG_Maps={include_png_all_layers}, PNG_Pareto={include_pareto_png}")
+    log(f"Verification Selection: {verification_selection}")
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+
+        # 1. Excel Report
+        if include_excel:
+            excel_bytes = generate_excel_report(
+                full_df, panel_rows, panel_cols, source_filename, quadrant_selection, verification_selection
+            )
+            zip_file.writestr("Defect_Analysis_Report.xlsx", excel_bytes)
+
+        # 2. Coordinate List (CSV/Excel)
+        if include_coords:
+            coord_bytes = generate_coordinate_list_report(true_defect_coords)
+            zip_file.writestr("Defective_Cell_Coordinates.xlsx", coord_bytes)
+
+        # 3. Defect Map (Interactive HTML) - CURRENT VIEW
+        if include_map:
+            fig = create_defect_map_figure(
+                full_df, panel_rows, panel_cols, quadrant_selection,
+                title=f"Panel Defect Map - {quadrant_selection}"
+            )
+            html_content = fig.to_html(full_html=True, include_plotlyjs='cdn')
+            zip_file.writestr("Defect_Map.html", html_content)
+
+        # 4. Insights Charts (Interactive HTML) - CURRENT VIEW
+        if include_insights:
+            sunburst_fig = create_defect_sunburst(full_df)
+            zip_file.writestr("Insights_Sunburst.html", sunburst_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+
+            sankey_fig = create_defect_sankey(full_df)
+            if sankey_fig:
+                zip_file.writestr("Insights_Sankey.html", sankey_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+
+        # 5. PNG Images (All Layers/Sides) - OPTIONAL
+        if (include_png_all_layers or include_pareto_png):
+            if layer_data:
+                log(f"Layer data found. Processing {len(layer_data)} layers.")
+                # Iterate through all layers in layer_data
+                for layer_num, layer_sides in layer_data.items():
+                    for side, df in layer_sides.items():
+                        side_name = "Front" if side == 'F' else "Back"
+                        log(f"Processing Layer {layer_num} - {side_name}")
+
+                        filtered_df = df
+                        if verification_selection != 'All':
+                            filtered_df = filtered_df[filtered_df['Verification'] == verification_selection]
+
+                        if filtered_df.empty:
+                            log(f"  Skipped: DataFrame empty after filtering (Filter: {verification_selection})")
+                            continue
+
+                        # Generate Defect Map PNG
+                        if include_png_all_layers:
+                            log("  Generating Defect Map PNG...")
+                            fig_map = create_defect_map_figure(
+                                filtered_df, panel_rows, panel_cols, Quadrant.ALL.value,
+                                title=f"Layer {layer_num} - {side_name} - Defect Map"
+                            )
+                            try:
+                                img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=2)
+                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_DefectMap.png", img_bytes)
+                                log("  Success.")
+                            except Exception as e:
+                                msg = f"Failed to generate map PNG for Layer {layer_num} {side}: {e}"
+                                print(msg)
+                                log(f"  ERROR: {msg}")
+
+                        # Generate Pareto PNG
+                        if include_pareto_png:
+                            log("  Generating Pareto PNG...")
+                            fig_pareto = create_pareto_figure(filtered_df, Quadrant.ALL.value)
+                            fig_pareto.update_layout(title=f"Layer {layer_num} - {side_name} - Pareto")
+                            try:
+                                img_bytes = fig_pareto.to_image(format="png", engine="kaleido", scale=2)
+                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_Pareto.png", img_bytes)
+                                log("  Success.")
+                            except Exception as e:
+                                msg = f"Failed to generate pareto PNG for Layer {layer_num} {side}: {e}"
+                                print(msg)
+                                log(f"  ERROR: {msg}")
+            else:
+                log("WARNING: No layer_data provided!")
+
+        # 6. Still Alive Map PNG
+        if include_png_all_layers:
+            if true_defect_coords:
+                log("Generating Still Alive Map PNG...")
+                fig_alive = create_still_alive_figure(panel_rows, panel_cols, true_defect_coords)
+                try:
+                    img_bytes = fig_alive.to_image(format="png", engine="kaleido", scale=2)
+                    zip_file.writestr("Images/Still_Alive_Map.png", img_bytes)
+                    log("Success.")
+                except Exception as e:
+                    msg = f"Failed to generate Still Alive Map PNG: {e}"
+                    print(msg)
+                    log(f"ERROR: {msg}")
+            else:
+                log("Skipping Still Alive Map: No true defect coordinates found.")
+
+        # Write Debug Log to ZIP
+        zip_file.writestr("Debug_Log.txt", "\n".join(debug_logs))
+
+    return zip_buffer.getvalue()
