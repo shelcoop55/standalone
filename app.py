@@ -395,6 +395,10 @@ def main() -> None:
             display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
 
             if view_mode == ViewMode.DEFECT.value:
+                # Inform user if viewing Back side (Raw Coordinates)
+                if st.session_state.selected_side == 'B':
+                    st.info("ℹ️ Displaying raw coordinates (unflipped) as per machine output. For physical alignment, see 'Still Alive' or 'Multi-Layer' views.")
+
                 # REFACTORED: Use new helper
                 fig = create_defect_map_figure(display_df, panel_rows, panel_cols, quadrant_selection, lot_number)
                 st.plotly_chart(fig, use_container_width=True)

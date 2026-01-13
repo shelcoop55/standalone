@@ -117,13 +117,16 @@ def load_data(
                 for col in ['UNIT_INDEX_X', 'UNIT_INDEX_Y']: df[col] = df[col].astype(int)
                 df['DEFECT_TYPE'] = df['DEFECT_TYPE'].str.strip()
 
-                # --- BACK SIDE COORDINATE FLIP ---
-                # Back side data is physically mirrored horizontally relative to the front.
-                # Transform coordinates to align with the Front-side view (0,0 is top-left).
-                # New_X = (Total_Panel_Width - 1) - Original_X
+                # --- COORDINATE HANDLING (RAW vs PHYSICAL) ---
+                # RAW: UNIT_INDEX_X from the file (used for Individual Layer View).
+                # PHYSICAL: Flipped for Back side to align with Front side (used for Yield/Heatmaps).
+
+                df['PHYSICAL_X'] = df['UNIT_INDEX_X'] # Default to Raw
+
                 if side == 'B':
+                    # Back side is mirrored. Calculate Physical X.
                     total_width_units = 2 * panel_cols
-                    df['UNIT_INDEX_X'] = (total_width_units - 1) - df['UNIT_INDEX_X']
+                    df['PHYSICAL_X'] = (total_width_units - 1) - df['UNIT_INDEX_X']
 
                 if layer_num not in layer_data: layer_data[layer_num] = {}
                 if side not in layer_data[layer_num]: layer_data[layer_num][side] = []
@@ -201,44 +204,81 @@ def load_data(
                 }
 
                 df = pd.DataFrame(defect_data)
+                # Ensure PHYSICAL_X is present in sample data
+                df['PHYSICAL_X'] = df['UNIT_INDEX_X']
+                if side == 'B':
+                    total_width_units = 2 * panel_cols
+                    df['PHYSICAL_X'] = (total_width_units - 1) - df['UNIT_INDEX_X']
+
                 layer_data[layer_num][side] = _add_plotting_coordinates(df, panel_rows, panel_cols)
 
     return layer_data
 
 
 def _add_plotting_coordinates(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> pd.DataFrame:
-    """Adds QUADRANT and plot_x, plot_y coordinates to a DataFrame."""
+    """
+    Adds plotting coordinates to a DataFrame.
+    Calculates both Raw coordinates (for Individual View) and Physical coordinates (for Heatmaps/Yield).
+    """
     if df.empty:
         return df
 
-    # Calculate quadrant
-    conditions = [
+    cell_width = QUADRANT_WIDTH / panel_cols
+    cell_height = QUADRANT_HEIGHT / panel_rows
+
+    # --- 1. RAW COORDINATES (Based on UNIT_INDEX_X) ---
+    # Used for Individual Layer Map (Back side unflipped)
+
+    # Calculate Raw Quadrant
+    conditions_raw = [
         (df['UNIT_INDEX_X'] < panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
         (df['UNIT_INDEX_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
         (df['UNIT_INDEX_X'] < panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows),
         (df['UNIT_INDEX_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows)
     ]
     choices = ['Q1', 'Q2', 'Q3', 'Q4']
-    df['QUADRANT'] = np.select(conditions, choices, default='Other')
+    df['QUADRANT'] = np.select(conditions_raw, choices, default='Other')
 
-    # Calculate plotting coordinates
-    cell_width = QUADRANT_WIDTH / panel_cols
-    cell_height = QUADRANT_HEIGHT / panel_rows
+    # Calculate Raw Plotting Coordinates
+    local_index_x_raw = df['UNIT_INDEX_X'] % panel_cols
+    local_index_y = df['UNIT_INDEX_Y'] % panel_rows # Y is always consistent
 
-    local_index_x = df['UNIT_INDEX_X'] % panel_cols
-    local_index_y = df['UNIT_INDEX_Y'] % panel_rows
-
-    plot_x_base = local_index_x * cell_width
+    plot_x_base_raw = local_index_x_raw * cell_width
     plot_y_base = local_index_y * cell_height
 
-    x_offset = np.where(df['UNIT_INDEX_X'] >= panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
+    x_offset_raw = np.where(df['UNIT_INDEX_X'] >= panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
     y_offset = np.where(df['UNIT_INDEX_Y'] >= panel_rows, QUADRANT_HEIGHT + GAP_SIZE, 0)
 
+    # Common Jitter
     jitter_x = np.random.rand(len(df)) * cell_width * 0.8 + (cell_width * 0.1)
     jitter_y = np.random.rand(len(df)) * cell_height * 0.8 + (cell_height * 0.1)
 
-    df['plot_x'] = plot_x_base + x_offset + jitter_x
+    df['plot_x'] = plot_x_base_raw + x_offset_raw + jitter_x
     df['plot_y'] = plot_y_base + y_offset + jitter_y
+
+
+    # --- 2. PHYSICAL COORDINATES (Based on PHYSICAL_X) ---
+    # Used for Multi-Layer Map, Still Alive Map, Heatmaps (Back side flipped)
+
+    if 'PHYSICAL_X' not in df.columns:
+         df['PHYSICAL_X'] = df['UNIT_INDEX_X']
+
+    # Calculate Physical Quadrant
+    conditions_phys = [
+        (df['PHYSICAL_X'] < panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
+        (df['PHYSICAL_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] < panel_rows),
+        (df['PHYSICAL_X'] < panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows),
+        (df['PHYSICAL_X'] >= panel_cols) & (df['UNIT_INDEX_Y'] >= panel_rows)
+    ]
+    df['PHYSICAL_QUADRANT'] = np.select(conditions_phys, choices, default='Other')
+
+    # Calculate Physical Plotting Coordinates
+    local_index_x_phys = df['PHYSICAL_X'] % panel_cols
+    plot_x_base_phys = local_index_x_phys * cell_width
+    x_offset_phys = np.where(df['PHYSICAL_X'] >= panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
+
+    # We re-use jitter_x so that the same defect doesn't jump around randomly between views
+    df['physical_plot_x'] = plot_x_base_phys + x_offset_phys + jitter_x
     
     return df
 
@@ -277,8 +317,14 @@ def get_true_defect_coordinates(layer_data: Dict[int, Dict[str, pd.DataFrame]]) 
     if true_defects_df.empty:
         return set()
 
-    defect_coords_df = true_defects_df[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates()
+    # Ensure PHYSICAL_X exists (fallback for tests or partial data)
+    if 'PHYSICAL_X' not in true_defects_df.columns:
+        true_defects_df['PHYSICAL_X'] = true_defects_df['UNIT_INDEX_X']
 
+    # USE PHYSICAL COORDINATES for unique defect location
+    defect_coords_df = true_defects_df[['PHYSICAL_X', 'UNIT_INDEX_Y']].drop_duplicates()
+
+    # Rename for consistency in output if needed, but set expects tuples
     return set(map(tuple, defect_coords_df.to_numpy()))
 
 def prepare_multi_layer_data(layer_data: Dict[int, Dict[str, pd.DataFrame]]) -> pd.DataFrame:

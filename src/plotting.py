@@ -215,8 +215,11 @@ def create_multi_layer_defect_map(df: pd.DataFrame, panel_rows: int, panel_cols:
                                  "File: %{customdata[6]}"
                                  "<extra></extra>")
 
+                # USE PHYSICAL PLOTTING COORDINATES (Aligned)
+                x_coords = dff['physical_plot_x'] if 'physical_plot_x' in dff.columns else dff['plot_x']
+
                 fig.add_trace(go.Scatter(
-                    x=dff['plot_x'],
+                    x=x_coords,
                     y=dff['plot_y'],
                     mode='markers',
                     marker=dict(
@@ -602,8 +605,10 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int)
     # Map to Global Indices
     global_indices = []
     for _, row in df_true.iterrows():
-        q = row['QUADRANT']
-        u_x = int(row['UNIT_INDEX_X'])
+        # USE PHYSICAL COORDINATES AND QUADRANT
+        # Fallback to Raw if Physical not present (safety)
+        u_x = int(row['PHYSICAL_X']) if 'PHYSICAL_X' in row else int(row['UNIT_INDEX_X'])
+        q = row['PHYSICAL_QUADRANT'] if 'PHYSICAL_QUADRANT' in row else row['QUADRANT']
         u_y = int(row['UNIT_INDEX_Y'])
 
         g_x = u_x + (panel_cols if q in ['Q2', 'Q4'] else 0)
@@ -673,8 +678,11 @@ def create_density_contour_map(df: pd.DataFrame, panel_rows: int, panel_cols: in
         return go.Figure(layout=dict(title="No True Defects Found"))
 
     # Use Histogram2dContour for smooth density
+    # USE PHYSICAL PLOTTING COORDINATES
+    x_coords = df_true['physical_plot_x'] if 'physical_plot_x' in df_true.columns else df_true['plot_x']
+
     fig = go.Figure(go.Histogram2dContour(
-        x=df_true['plot_x'],
+        x=x_coords,
         y=df_true['plot_y'],
         colorscale='Turbo', # Vibrant, engineering style
         reversescale=False,
@@ -726,8 +734,11 @@ def create_hexbin_density_map(df: pd.DataFrame, panel_rows: int, panel_cols: int
     # This differentiates it from the Grid (Unit based) and Contour (Smooth).
     # This is a "Physical Coordinate Raster".
 
+    # USE PHYSICAL PLOTTING COORDINATES
+    x_coords = df_true['physical_plot_x'] if 'physical_plot_x' in df_true.columns else df_true['plot_x']
+
     fig = go.Figure(go.Histogram2d(
-        x=df_true['plot_x'],
+        x=x_coords,
         y=df_true['plot_y'],
         colorscale='Viridis',
         zsmooth=False, # Pixelated look
