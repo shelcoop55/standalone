@@ -7,8 +7,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple, Any
 from io import BytesIO
+from dataclasses import dataclass
 
 # Import constants from the configuration file
 from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, SAFE_VERIFICATION_VALUES
@@ -60,6 +61,15 @@ SIMPLE_DEFECT_TYPES = [
 
 FALSE_ALARMS = ["N", "FALSE"]
 
+@dataclass
+class StressMapData:
+    """Container for stress map aggregation results."""
+    grid_counts: np.ndarray          # 2D array of total defect counts
+    hover_text: np.ndarray           # 2D array of hover text strings
+    dominant_layer: np.ndarray       # 2D array of layer IDs with max defects
+    dominant_count: np.ndarray       # 2D array of count for dominant layer
+    total_defects: int               # Total defects in selection
+    max_count: int                   # Max count in any single cell
 
 @st.cache_data
 def load_data(
@@ -368,3 +378,123 @@ def prepare_multi_layer_data(layer_data: Dict[int, Dict[str, pd.DataFrame]]) -> 
     if combined_data:
         return pd.concat(combined_data, ignore_index=True)
     return pd.DataFrame()
+
+def aggregate_stress_data(
+    layer_data: Dict[int, Dict[str, pd.DataFrame]],
+    selected_layers: List[int],
+    panel_rows: int,
+    panel_cols: int
+) -> StressMapData:
+    """
+    Aggregates data for the Cumulative Stress Map.
+
+    Returns a StressMapData object containing:
+    - grid_counts: (Rows x Cols) grid of defect counts.
+    - hover_text: (Rows x Cols) grid of formatted strings for tooltips.
+    - dominant_layer: (Rows x Cols) grid of Layer ID with most defects.
+    - dominant_count: (Rows x Cols) grid of count for that dominant layer.
+    """
+    total_cols = panel_cols * 2
+    total_rows = panel_rows * 2
+
+    # Initialize Grids
+    grid_counts = np.zeros((total_rows, total_cols), dtype=int)
+    # Using 'object' dtype for string arrays to hold arbitrary length strings
+    hover_text = np.empty((total_rows, total_cols), dtype=object)
+    hover_text[:] = ""
+    dominant_layer = np.zeros((total_rows, total_cols), dtype=int)
+    dominant_count = np.zeros((total_rows, total_cols), dtype=int)
+
+    # Helper structures for drill-down
+    # cell_defects[(y, x)] = { 'Short': 10, 'Open': 5 }
+    cell_defects: Dict[Tuple[int, int], Dict[str, int]] = {}
+    # cell_layers[(y, x)] = { 1: 20, 2: 5 }
+    cell_layers: Dict[Tuple[int, int], Dict[int, int]] = {}
+
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+
+    total_defects_acc = 0
+    max_count_acc = 0
+
+    # Iterate selected layers
+    for layer_num in selected_layers:
+        if layer_num not in layer_data: continue
+
+        for side, df in layer_data[layer_num].items():
+            if df.empty: continue
+
+            # Filter True Defects
+            df_true = df.copy()
+            if 'Verification' in df_true.columns:
+                is_true = ~df_true['Verification'].str.upper().isin(safe_values_upper)
+                df_true = df_true[is_true]
+
+            if df_true.empty: continue
+
+            # Use PHYSICAL COORDINATES for global grid mapping
+            # Ensure PHYSICAL_X exists
+            if 'PHYSICAL_X' not in df_true.columns:
+                # Should not happen if loaded correctly, but safety
+                df_true['PHYSICAL_X'] = df_true['UNIT_INDEX_X']
+                if side == 'B':
+                    width = panel_cols * 2
+                    df_true['PHYSICAL_X'] = (width - 1) - df_true['UNIT_INDEX_X']
+
+            # Iterate rows
+            for _, row in df_true.iterrows():
+                gx = int(row['PHYSICAL_X'])
+                gy = int(row['UNIT_INDEX_Y'])
+                dtype = str(row['DEFECT_TYPE'])
+
+                # Boundary check (safety)
+                if 0 <= gx < total_cols and 0 <= gy < total_rows:
+                    grid_counts[gy, gx] += 1
+                    total_defects_acc += 1
+
+                    # Track Defect Types
+                    if (gy, gx) not in cell_defects: cell_defects[(gy, gx)] = {}
+                    cell_defects[(gy, gx)][dtype] = cell_defects[(gy, gx)].get(dtype, 0) + 1
+
+                    # Track Layers
+                    if (gy, gx) not in cell_layers: cell_layers[(gy, gx)] = {}
+                    cell_layers[(gy, gx)][layer_num] = cell_layers[(gy, gx)].get(layer_num, 0) + 1
+
+    # Post-process for Hover Text and Dominant Layer
+    for y in range(total_rows):
+        for x in range(total_cols):
+            count = grid_counts[y, x]
+            if count > max_count_acc: max_count_acc = count
+
+            if count > 0:
+                # 1. Drill Down Tooltip
+                defects_map = cell_defects.get((y, x), {})
+                # Sort by count desc
+                sorted_defects = sorted(defects_map.items(), key=lambda item: item[1], reverse=True)
+                top_3 = sorted_defects[:3]
+
+                tooltip = f"<b>Total: {count}</b><br>"
+                tooltip += "<br>".join([f"{d[0]}: {d[1]}" for d in top_3])
+                if len(sorted_defects) > 3:
+                    tooltip += f"<br>... (+{len(sorted_defects)-3} types)"
+
+                hover_text[y, x] = tooltip
+
+                # 2. Dominant Layer
+                layers_map = cell_layers.get((y, x), {})
+                if layers_map:
+                    # Sort by count desc, then by layer num asc (tie breaker)
+                    sorted_layers = sorted(layers_map.items(), key=lambda item: (-item[1], item[0]))
+                    best_layer, best_count = sorted_layers[0]
+                    dominant_layer[y, x] = best_layer
+                    dominant_count[y, x] = best_count
+            else:
+                hover_text[y, x] = "No Defects"
+
+    return StressMapData(
+        grid_counts=grid_counts,
+        hover_text=hover_text,
+        dominant_layer=dominant_layer,
+        dominant_count=dominant_count,
+        total_defects=total_defects_acc,
+        max_count=max_count_acc
+    )

@@ -14,7 +14,7 @@ from src.config import (
     ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS, SAFE_VERIFICATION_VALUES,
     VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT, NEON_PALETTE
 )
-from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT
+from src.data_handler import QUADRANT_WIDTH, QUADRANT_HEIGHT, StressMapData
 from src.documentation import VERIFICATION_DESCRIPTIONS
 from src.enums import Quadrant
 
@@ -827,4 +827,151 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
         font=dict(color=TEXT_COLOR)
     )
 
+    return fig
+
+# ==============================================================================
+# --- NEW: Stress Map Functions ---
+# ==============================================================================
+
+def _configure_stress_map_layout(fig: go.Figure, panel_rows: int, panel_cols: int, title: str):
+    """Shared layout configuration for stress maps."""
+    total_cols = panel_cols * 2
+    total_rows = panel_rows * 2
+
+    fig.update_layout(
+        title=dict(text=title, font=dict(color=TEXT_COLOR, size=18), x=0.5, xanchor='center'),
+        xaxis=dict(
+            title="Unit Index X",
+            tickmode='linear', dtick=1,
+            showgrid=False, zeroline=False,
+            range=[-0.5, total_cols - 0.5],
+            constrain='domain',
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        yaxis=dict(
+            title="Unit Index Y",
+            tickmode='linear', dtick=1,
+            showgrid=False, zeroline=False,
+            range=[-0.5, total_rows - 0.5],
+            scaleanchor="x", scaleratio=1,
+            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+        ),
+        plot_bgcolor=PLOT_AREA_COLOR,
+        paper_bgcolor=BACKGROUND_COLOR,
+        height=700
+    )
+
+def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int) -> go.Figure:
+    """
+    Creates the Cumulative Stress Heatmap with defect counts in cells.
+    """
+    if data.total_defects == 0:
+        return go.Figure(layout=dict(
+            title=dict(text="No True Defects Found in Selection", font=dict(color=TEXT_COLOR)),
+            paper_bgcolor=BACKGROUND_COLOR, plot_bgcolor=PLOT_AREA_COLOR
+        ))
+
+    # Mask zero values so they appear empty/background color
+    z_data = data.grid_counts.astype(float)
+    z_data[z_data == 0] = np.nan
+
+    text_data = data.grid_counts.astype(str)
+    text_data[data.grid_counts == 0] = ""
+
+    fig = go.Figure(data=go.Heatmap(
+        z=z_data,
+        text=text_data,
+        texttemplate="%{text}",
+        textfont={"color": "white"}, # Or smart contrast if needed
+        colorscale='Magma',
+        xgap=2, ygap=2,
+        hovertext=data.hover_text,
+        hoverinfo="text",
+        colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+    ))
+
+    _configure_stress_map_layout(fig, panel_rows, panel_cols, "Cumulative Stress Map (Total Defects per Unit)")
+    return fig
+
+def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_rows: int, panel_cols: int) -> go.Figure:
+    """
+    Creates a Delta Heatmap (Group A - Group B).
+    """
+    diff_grid = data_a.grid_counts.astype(float) - data_b.grid_counts.astype(float)
+
+    # Text: Show signed difference
+    text_data = np.array([f"{int(x):+d}" if x != 0 else "" for x in diff_grid.flatten()]).reshape(diff_grid.shape)
+
+    # Mask zeros for visual clarity
+    diff_grid[diff_grid == 0] = np.nan
+
+    fig = go.Figure(data=go.Heatmap(
+        z=diff_grid,
+        text=text_data,
+        texttemplate="%{text}",
+        colorscale='RdBu_r', # Red for positive (more in A), Blue for negative (more in B)
+        zmid=0,
+        xgap=2, ygap=2,
+        colorbar=dict(title='Delta (A - B)', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+    ))
+
+    _configure_stress_map_layout(fig, panel_rows, panel_cols, "Delta Stress Map (Group A - Group B)")
+    return fig
+
+def create_dominant_layer_map(data: StressMapData, panel_rows: int, panel_cols: int) -> go.Figure:
+    """
+    Creates a Categorical Heatmap showing which Layer contributed the most defects.
+    """
+    if data.total_defects == 0:
+        return go.Figure(layout=dict(
+            title=dict(text="No True Defects Found in Selection", font=dict(color=TEXT_COLOR)),
+            paper_bgcolor=BACKGROUND_COLOR, plot_bgcolor=PLOT_AREA_COLOR
+        ))
+
+    # We use a Scatter plot with square markers to handle categorical colors more easily than heatmap
+    rows, cols = data.grid_counts.shape
+
+    x_vals = []
+    y_vals = []
+    colors = []
+    texts = []
+    hovers = []
+
+    for y in range(rows):
+        for x in range(cols):
+            layer_id = data.dominant_layer[y, x]
+            if layer_id > 0:
+                x_vals.append(x)
+                y_vals.append(y)
+
+                # Color mapping
+                color_idx = layer_id % len(NEON_PALETTE)
+                colors.append(NEON_PALETTE[color_idx])
+
+                # Text: Layer ID
+                texts.append(f"L{layer_id}")
+
+                # Hover
+                count = data.dominant_count[y, x]
+                total = data.grid_counts[y, x]
+                hovers.append(f"Unit: ({x}, {y})<br>Dominant: Layer {layer_id} ({count}/{total})")
+
+    fig = go.Figure(data=go.Scatter(
+        x=x_vals,
+        y=y_vals,
+        mode='markers+text',
+        marker=dict(
+            symbol='square',
+            size=30, # Large squares to fill grid (approx) - ideally Heatmap is better for sizing but this works for categories
+            color=colors,
+            line=dict(width=1, color='black')
+        ),
+        text=texts,
+        textfont=dict(color='black', size=12), # Black text on Neon colors usually readable
+        textposition="middle center",
+        hovertext=hovers,
+        hoverinfo="text"
+    ))
+
+    _configure_stress_map_layout(fig, panel_rows, panel_cols, "Dominant Layer Analysis (Layer with Max Defects)")
     return fig

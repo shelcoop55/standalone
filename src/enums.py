@@ -11,6 +11,7 @@ class ViewMode(Enum):
     """Enumeration for the different analysis views in the UI."""
     DEFECT = "Defect View"
     HEATMAP = "Heatmap Analysis"
+    STRESS = "Stress Map Analysis"
     PARETO = "Pareto View"
     SUMMARY = "Summary View"
     INSIGHTS = "Insights View"
