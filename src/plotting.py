@@ -153,56 +153,83 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
 def create_multi_layer_defect_map(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> go.Figure:
     """
     Creates a defect map visualizing defects from ALL layers simultaneously.
-    Groups and colors defects by their source Layer/Side (e.g., "Layer 1 (F)").
+
+    Logic:
+    - Group by Layer Number (Same Color)
+    - Distinguish by Side (Different Symbol: Front=Circle, Back=Diamond)
     """
     fig = go.Figure()
 
     if not df.empty:
-        # We assume the dataframe has a 'Layer_Label' column created in the app logic
-        # If not, we might need to create it here, but better to handle data prep in app.py
+        # Ensure LAYER_NUM exists
+        if 'LAYER_NUM' not in df.columns:
+            # Fallback if column missing (should not happen with new prepare_multi_layer_data)
+            df['LAYER_NUM'] = 0
 
-        # Get unique layers
-        if 'Layer_Label' not in df.columns:
-            # Fallback if column missing
-            df['Layer_Label'] = "Unknown Layer"
-
-        unique_layers = sorted(df['Layer_Label'].unique())
+        unique_layer_nums = sorted(df['LAYER_NUM'].unique())
 
         # Generate colors for layers
-        # Reuse NEON_PALETTE + FALLBACK_COLORS to ensure enough distinct colors
+        # Reuse NEON_PALETTE + FALLBACK_COLORS
         layer_colors = {}
-        for i, layer_name in enumerate(unique_layers):
-            layer_colors[layer_name] = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
+        for i, num in enumerate(unique_layer_nums):
+            layer_colors[num] = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
 
-        # Create traces per layer
-        for layer_name in unique_layers:
-            dff = df[df['Layer_Label'] == layer_name]
+        # Symbol Mapping
+        # Front = Circle (Standard)
+        # Back = Diamond (Distinct, implies flip side)
+        symbol_map = {'F': 'circle', 'B': 'diamond'}
 
-            # Prepare hover data
-            if 'Verification' in dff.columns:
-                 dff = dff.copy()
-                 dff['Description'] = dff['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
-            else:
-                 dff['Description'] = "N/A"
+        # Group by (Layer, Side) to create traces
+        # We iterate through layers first to keep legend organized
+        for layer_num in unique_layer_nums:
+            layer_color = layer_colors[layer_num]
 
-            custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE']
+            # Filter for this layer
+            layer_df = df[df['LAYER_NUM'] == layer_num]
 
-            hovertemplate = ("<b>Layer: %{data.name}</b><br>"
-                             "Status: %{customdata[4]}<br>"
-                             "Type: %{customdata[2]}<br>"
-                             "Coords: (%{customdata[0]}, %{customdata[1]})<br>"
-                             "File: %{customdata[6]}"
-                             "<extra></extra>")
+            # Iterate through sides present in this layer
+            # Sort sides to keep Front before Back usually, or alphabetical
+            for side in sorted(layer_df['SIDE'].unique()):
+                dff = layer_df[layer_df['SIDE'] == side]
 
-            fig.add_trace(go.Scatter(
-                x=dff['plot_x'],
-                y=dff['plot_y'],
-                mode='markers',
-                marker=dict(color=layer_colors[layer_name], size=8, line=dict(width=1, color='black')),
-                name=layer_name,
-                customdata=dff[custom_data_cols],
-                hovertemplate=hovertemplate
-            ))
+                # Determine Symbol
+                symbol = symbol_map.get(side, 'circle') # Default to circle if unknown
+
+                side_name = "Front" if side == 'F' else "Back"
+                trace_name = f"Layer {layer_num} ({side_name})"
+
+                # Prepare hover data
+                if 'Verification' in dff.columns:
+                     dff = dff.copy()
+                     dff['Description'] = dff['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
+                else:
+                     dff['Description'] = "N/A"
+
+                custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE']
+
+                hovertemplate = ("<b>Layer: %{data.legendgroup}</b><br>"
+                                 "Side: " + side_name + "<br>"
+                                 "Status: %{customdata[4]}<br>"
+                                 "Type: %{customdata[2]}<br>"
+                                 "Coords: (%{customdata[0]}, %{customdata[1]})<br>"
+                                 "File: %{customdata[6]}"
+                                 "<extra></extra>")
+
+                fig.add_trace(go.Scatter(
+                    x=dff['plot_x'],
+                    y=dff['plot_y'],
+                    mode='markers',
+                    marker=dict(
+                        color=layer_color,
+                        symbol=symbol,
+                        size=9, # Slightly larger for visibility
+                        line=dict(width=1, color='black')
+                    ),
+                    name=trace_name,
+                    legendgroup=f"Layer {layer_num}", # Group traces by Layer in legend
+                    customdata=dff[custom_data_cols],
+                    hovertemplate=hovertemplate
+                ))
 
     # Add Grid and Layout
     fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All'))

@@ -9,6 +9,7 @@ def test_prepare_multi_layer_data():
     1. Aggregates data from multiple layers/sides.
     2. Filters out 'Safe' verification values.
     3. Adds the correct 'Layer_Label'.
+    4. Adds the correct 'LAYER_NUM'.
     """
 
     # Mock Data Setup
@@ -70,6 +71,10 @@ def test_prepare_multi_layer_data():
     assert 1 in result_df['DEFECT_ID'].values
     assert 3 in result_df['DEFECT_ID'].values
 
+    # 5. Check LAYER_NUM
+    assert 'LAYER_NUM' in result_df.columns
+    assert sorted(result_df['LAYER_NUM'].unique().tolist()) == [1]
+
 def test_prepare_multi_layer_data_empty():
     """Test with empty input."""
     result = prepare_multi_layer_data({})
@@ -77,11 +82,6 @@ def test_prepare_multi_layer_data_empty():
 
 def test_prepare_multi_layer_data_no_verification_col():
     """Test robustness when Verification column is missing (should default to keep if logic allows, or handle gracefully)."""
-    # Current logic: "if 'Verification' in df_copy.columns: is_true_defect = ..."
-    # If no 'Verification', it skips filtering and keeps all rows (assuming potential defects until verified safe?)
-    # Or, looking at implementation:
-    # if 'Verification' in df_copy.columns: ...
-    # if no verification col, the filtering block is skipped, so rows are kept.
 
     df = pd.DataFrame({'DEFECT_ID': [1], 'Layer_Label': ['Test']})
     layer_data = {1: {'F': df}}
@@ -89,3 +89,4 @@ def test_prepare_multi_layer_data_no_verification_col():
     result = prepare_multi_layer_data(layer_data)
     assert len(result) == 1
     assert result.iloc[0]['Layer_Label'] == 'Layer 1 (Front)'
+    assert result.iloc[0]['LAYER_NUM'] == 1

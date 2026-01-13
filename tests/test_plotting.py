@@ -165,7 +165,9 @@ def test_create_multi_layer_defect_map():
     df = pd.DataFrame({
         'plot_x': [10, 20, 30],
         'plot_y': [10, 20, 30],
-        'Layer_Label': ['Layer 1', 'Layer 1', 'Layer 2'],
+        'Layer_Label': ['Layer 1 (Front)', 'Layer 1 (Back)', 'Layer 2 (Front)'],
+        'LAYER_NUM': [1, 1, 2],
+        'SIDE': ['F', 'B', 'F'], # Required for symbol logic
         'DEFECT_TYPE': ['Type A', 'Type B', 'Type A'],
         'DEFECT_ID': [1, 2, 3],
         'UNIT_INDEX_X': [1, 2, 3],
@@ -178,10 +180,27 @@ def test_create_multi_layer_defect_map():
 
     assert isinstance(fig, go.Figure)
 
-    # Should have 2 traces (one for each layer)
-    assert len(fig.data) == 2
-    assert fig.data[0].name == 'Layer 1'
-    assert fig.data[1].name == 'Layer 2'
+    # Should have 3 traces: L1-B, L1-F, L2-F (Sorted order of sides: B, F)
+    assert len(fig.data) == 3
 
-    # Check coloring - should be different or at least assigned
-    assert fig.data[0].marker.color is not None
+    # Trace 0: Layer 1, Side B
+    trace0 = fig.data[0]
+    assert "Back" in trace0.name
+    assert trace0.legendgroup == "Layer 1"
+    assert trace0.marker.symbol == 'diamond' # Back = Diamond
+
+    # Trace 1: Layer 1, Side F
+    trace1 = fig.data[1]
+    assert "Front" in trace1.name
+    assert trace1.legendgroup == "Layer 1"
+    assert trace1.marker.symbol == 'circle' # Front = Circle
+
+    # Trace 2: Layer 2, Side F
+    trace2 = fig.data[2]
+    assert "Front" in trace2.name
+    assert trace2.legendgroup == "Layer 2"
+
+    # Check colors: Layer 1 traces should match
+    assert trace0.marker.color == trace1.marker.color
+    # Layer 2 trace should differ from Layer 1
+    assert trace2.marker.color != trace0.marker.color
