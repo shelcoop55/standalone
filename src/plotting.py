@@ -446,13 +446,10 @@ def create_still_alive_map(
                 metadata = true_defect_data[(col, row)]
                 first_killer = metadata['first_killer_layer']
 
-                # Color logic: Map Layer Num to Color from Fallback/Neon
-                # We reuse FALLBACK_COLORS.
-                # Note: This is simplistic. Layer 1 = Index 0, etc.
-                color_idx = (first_killer - 1) % len(FALLBACK_COLORS)
-                fill_color = FALLBACK_COLORS[color_idx]
+                # Color logic: Revert to binary RED for all defects
+                fill_color = DEFECTIVE_CELL_COLOR
 
-                # Add to hover data
+                # Add to hover data (Keep Autopsy Tooltip)
                 center_x = x0 + cell_width/2
                 center_y = y0 + cell_height/2
                 hover_x.append(center_x)
@@ -464,6 +461,7 @@ def create_still_alive_map(
                     f"Details: {metadata['defect_summary']}"
                 )
                 hover_text.append(tooltip)
+                # Hover dots should also match the cell color (Red) to be invisible
                 hover_colors.append(fill_color)
 
             else:

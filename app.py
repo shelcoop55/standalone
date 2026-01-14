@@ -163,7 +163,7 @@ def main() -> None:
             if store.active_view == 'layer':
                 with st.expander("📊 Layer Inspection", expanded=True):
                     # Simplified View Options (Removed Heatmap/Insights from here as they moved to Analysis)
-                    layer_view_options = [ViewMode.DEFECT.value, ViewMode.PARETO.value]
+                    layer_view_options = [ViewMode.DEFECT.value, ViewMode.PARETO.value, ViewMode.SUMMARY.value]
                     view_mode = st.radio("Select View", layer_view_options)
 
                     quadrant_selection = st.selectbox("Select Quadrant", Quadrant.values())
@@ -197,8 +197,28 @@ def main() -> None:
 
                 if st.button("Generate Download Package", disabled=disable_layer_controls):
                     with st.spinner("Generating Package..."):
-                        # ... (existing report logic)
-                        pass # Kept brief for diff clarity; full logic exists in file.
+                        # Prepare data
+                        full_df = store.layer_data.get_combined_dataframe()
+                        true_defect_coords = get_true_defect_coordinates(store.layer_data)
+
+                        # Generate ZIP
+                        store.report_bytes = generate_zip_package(
+                            full_df=full_df,
+                            panel_rows=panel_rows,
+                            panel_cols=panel_cols,
+                            quadrant_selection=quadrant_selection,
+                            verification_selection=verification_selection,
+                            source_filename="Multiple Files",
+                            true_defect_coords=true_defect_coords,
+                            include_excel=include_excel,
+                            include_coords=include_coords,
+                            include_map=include_map,
+                            include_insights=include_insights,
+                            include_png_all_layers=include_png_all,
+                            include_pareto_png=include_pareto_png,
+                            layer_data=store.layer_data
+                        )
+                        st.success("Package generated successfully!")
 
                 params_local = store.analysis_params
                 lot_num_str = f"_{params_local.get('lot_number', '')}" if params_local.get('lot_number') else ""

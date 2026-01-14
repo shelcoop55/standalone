@@ -335,7 +335,13 @@ def generate_zip_package(
                 log(f"Layer data found. Processing {len(layer_data)} layers.")
                 # Iterate through all layers in layer_data
                 for layer_num, layer_sides in layer_data.items():
-                    for side, df in layer_sides.items():
+                    for side, layer_obj in layer_sides.items():
+                        # Handle PanelData BuildUpLayer objects vs legacy Dict[str, DF]
+                        if hasattr(layer_obj, 'data'):
+                            df = layer_obj.data
+                        else:
+                            df = layer_obj # Legacy support
+
                         side_name = "Front" if side == 'F' else "Back"
                         log(f"Processing Layer {layer_num} - {side_name}")
 
