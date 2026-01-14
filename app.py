@@ -283,15 +283,15 @@ def main() -> None:
     # --- Main Content Area ---
     st.title("📊 Panel Defect Analysis Tool")
 
-    @st.fragment
-    def render_body():
-        # Render Navigation (Layer Selector, View Toggles)
-        view_manager.render_navigation()
+    # Render Navigation (Triggers full rerun to update Sidebar context)
+    view_manager.render_navigation()
 
-        # Render Main View (Chart Area)
+    @st.fragment
+    def render_chart_area():
+        # Render Main View (Chart Area) - Isolated updates
         view_manager.render_main_view()
 
-    render_body()
+    render_chart_area()
 
 if __name__ == '__main__':
     main()
