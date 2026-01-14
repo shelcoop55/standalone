@@ -35,7 +35,7 @@ from src.utils import get_bu_name_from_filename
 from src.documentation import TECHNICAL_DOCUMENTATION
 from src.state import SessionStore
 from src.analysis import get_analysis_tool
-from src.views.still_alive import render_still_alive_view
+from src.views.still_alive import render_still_alive_main, render_still_alive_sidebar
 from src.views.multi_layer import render_multi_layer_view
 from src.views.layer_view import render_layer_view
 
@@ -90,10 +90,9 @@ def main() -> None:
             # Define controls state for downstream widgets (Reporting)
             disable_layer_controls = is_analysis_dashboard or is_still_alive_view or is_multi_layer_view
 
-            # --- Analysis Dashboard Controls (Moved to Main Page) ---
-            # if is_analysis_dashboard:
-            #     # Moved to Main Page Layout
-            #     pass
+            # --- Still Alive Controls ---
+            if is_still_alive_view:
+                render_still_alive_sidebar(store)
 
             # --- Multi-Layer Filters ---
             selected_layers_multi = []
@@ -311,7 +310,7 @@ def main() -> None:
 
         # --- View Logic ---
         if store.active_view == 'still_alive':
-            render_still_alive_view(store)
+            render_still_alive_main(store)
 
         elif store.active_view == 'multi_layer_defects':
             render_multi_layer_view(store, selected_layers_multi, selected_sides_multi)

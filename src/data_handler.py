@@ -229,7 +229,8 @@ def load_data(
 
 def get_true_defect_coordinates(
     panel_data: PanelData,
-    excluded_layers: Optional[List[int]] = None
+    excluded_layers: Optional[List[int]] = None,
+    excluded_defect_types: Optional[List[str]] = None
 ) -> Dict[Tuple[int, int], Dict[str, Any]]:
     """
     Aggregates all "True" defects from all layers and sides to find unique
@@ -252,6 +253,13 @@ def get_true_defect_coordinates(
     # Filter Excluded Layers ("What-If" Logic)
     if excluded_layers:
         all_layers_df = all_layers_df[~all_layers_df['LAYER_NUM'].isin(excluded_layers)]
+
+    if all_layers_df.empty:
+        return {}
+
+    # Filter Excluded Defect Types ("What-If" Logic)
+    if excluded_defect_types:
+        all_layers_df = all_layers_df[~all_layers_df['DEFECT_TYPE'].isin(excluded_defect_types)]
 
     if all_layers_df.empty:
         return {}
