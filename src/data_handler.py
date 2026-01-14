@@ -227,46 +227,76 @@ def load_data(
 
     return panel_data
 
-def get_true_defect_coordinates(panel_data: PanelData) -> Set[Tuple[int, int]]:
+def get_true_defect_coordinates(
+    panel_data: PanelData,
+    excluded_layers: Optional[List[int]] = None
+) -> Dict[Tuple[int, int], Dict[str, Any]]:
     """
     Aggregates all "True" defects from all layers and sides to find unique
     defective cell coordinates for the Still Alive map.
+
+    Returns:
+        Dict mapping (physical_x, physical_y) -> {
+            'first_killer_layer': int,
+            'defects': List[str] # List of "L{num}: {count}"
+        }
     """
     if not panel_data:
-        return set()
+        return {}
 
     all_layers_df = panel_data.get_combined_dataframe()
 
     if all_layers_df.empty or 'Verification' not in all_layers_df.columns:
-        return set()
+        return {}
 
-    # Filter for True Defects: Value NOT in SAFE_VERIFICATION_VALUES (case-insensitive)
-    # We use upper() for comparison
+    # Filter Excluded Layers ("What-If" Logic)
+    if excluded_layers:
+        all_layers_df = all_layers_df[~all_layers_df['LAYER_NUM'].isin(excluded_layers)]
+
+    if all_layers_df.empty:
+        return {}
+
+    # Filter for True Defects
     safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-
-    # Identify true defects
     is_true_defect = ~all_layers_df['Verification'].str.upper().isin(safe_values_upper)
-    true_defects_df = all_layers_df[is_true_defect]
+    true_defects_df = all_layers_df[is_true_defect].copy()
 
     if true_defects_df.empty:
-        return set()
+        return {}
 
-    # Ensure PHYSICAL_X exists (fallback for tests or partial data)
     if 'PHYSICAL_X' not in true_defects_df.columns:
         true_defects_df['PHYSICAL_X'] = true_defects_df['UNIT_INDEX_X']
 
-    # USE PHYSICAL COORDINATES for unique defect location
-    defect_coords_df = true_defects_df[['PHYSICAL_X', 'UNIT_INDEX_Y']].drop_duplicates()
+    # Aggregate Metadata per Unit
+    # We want: First Killer Layer, and a Summary string
 
-    # Rename for consistency in output if needed, but set expects tuples
-    return set(map(tuple, defect_coords_df.to_numpy()))
+    # Group by Unit
+    grouped = true_defects_df.groupby(['PHYSICAL_X', 'UNIT_INDEX_Y'])
+
+    result = {}
+
+    for (px, py), group in grouped:
+        # Sort by Layer Num to find first killer
+        sorted_group = group.sort_values('LAYER_NUM')
+        first_killer = sorted_group.iloc[0]['LAYER_NUM']
+
+        # Summarize defects: "L1: 5, L2: 3"
+        layer_counts = sorted_group['LAYER_NUM'].value_counts().sort_index()
+        summary_parts = [f"L{l}: {c}" for l, c in layer_counts.items()]
+
+        result[(px, py)] = {
+            'first_killer_layer': first_killer,
+            'defect_summary': ", ".join(summary_parts)
+        }
+
+    return result
 
 @st.cache_data
-def prepare_multi_layer_data(panel_data: PanelData) -> pd.DataFrame:
+def prepare_multi_layer_data(_panel_data: PanelData) -> pd.DataFrame:
     """
     Aggregates and filters defect data from all layers for the Multi-Layer Defect View.
     """
-    if not panel_data:
+    if not _panel_data:
         return pd.DataFrame()
 
     safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
@@ -276,11 +306,11 @@ def prepare_multi_layer_data(panel_data: PanelData) -> pd.DataFrame:
             return df[~df['Verification'].str.upper().isin(safe_values_upper)]
         return df
 
-    return panel_data.get_combined_dataframe(filter_func=true_defect_filter)
+    return _panel_data.get_combined_dataframe(filter_func=true_defect_filter)
 
 @st.cache_data
 def aggregate_stress_data(
-    panel_data: PanelData,
+    _panel_data: PanelData,
     selected_keys: List[Tuple[int, str]],
     panel_rows: int,
     panel_cols: int
@@ -302,7 +332,7 @@ def aggregate_stress_data(
     max_count_acc = 0
 
     for layer_num, side in selected_keys:
-        layer = panel_data.get_layer(layer_num, side)
+        layer = _panel_data.get_layer(layer_num, side)
         if not layer: continue
 
         df = layer.data
@@ -364,11 +394,11 @@ def aggregate_stress_data(
     )
 
 @st.cache_data
-def calculate_yield_killers(panel_data: PanelData, panel_rows: int, panel_cols: int) -> Optional[YieldKillerMetrics]:
+def calculate_yield_killers(_panel_data: PanelData, panel_rows: int, panel_cols: int) -> Optional[YieldKillerMetrics]:
     """
     Calculates the 'Yield Killer' KPIs: Worst Layer, Worst Unit, Side Bias.
     """
-    if not panel_data: return None
+    if not _panel_data: return None
 
     safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
 
@@ -377,7 +407,7 @@ def calculate_yield_killers(panel_data: PanelData, panel_rows: int, panel_cols: 
             return df[~df['Verification'].str.upper().isin(safe_values_upper)]
         return df
 
-    combined_df = panel_data.get_combined_dataframe(filter_func=true_defect_filter)
+    combined_df = _panel_data.get_combined_dataframe(filter_func=true_defect_filter)
 
     if combined_df.empty: return None
 
@@ -417,7 +447,7 @@ def calculate_yield_killers(panel_data: PanelData, panel_rows: int, panel_cols: 
 
 @st.cache_data
 def get_cross_section_matrix(
-    panel_data: PanelData,
+    _panel_data: PanelData,
     slice_axis: str,
     x_range: Tuple[int, int],
     y_range: Tuple[int, int],
@@ -427,7 +457,7 @@ def get_cross_section_matrix(
     """
     Constructs the 2D cross-section matrix for Root Cause Analysis based on a Region of Interest.
     """
-    sorted_layers = panel_data.get_all_layer_nums()
+    sorted_layers = _panel_data.get_all_layer_nums()
     num_layers = len(sorted_layers)
     if num_layers == 0:
         return np.zeros((0,0)), [], []
@@ -449,7 +479,7 @@ def get_cross_section_matrix(
     safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
 
     for i, layer_num in enumerate(sorted_layers):
-        sides = panel_data._layers[layer_num] # Direct access to dict for now
+        sides = _panel_data._layers[layer_num] # Direct access to dict for now
         for side, layer_obj in sides.items():
             df = layer_obj.data
             if df.empty: continue

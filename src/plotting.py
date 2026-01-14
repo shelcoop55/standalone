@@ -406,14 +406,29 @@ def create_verification_status_chart(df: pd.DataFrame) -> List[go.Bar]:
         traces.append(go.Bar(name=details['name'], x=x_axis_data, y=grouped[status_code], marker_color=details['color']))
     return traces
 
-def create_still_alive_map(panel_rows: int, panel_cols: int, true_defect_coords: Set[Tuple[int, int]]) -> List[Dict[str, Any]]:
+def create_still_alive_map(
+    panel_rows: int,
+    panel_cols: int,
+    true_defect_data: Dict[Tuple[int, int], Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[go.Scatter]]:
     """
-    Creates the shapes for the 'Still Alive' map by drawing colored cells and an overlay grid.
+    Creates the shapes for the 'Still Alive' map AND invisible scatter points for tooltips.
+
+    Returns:
+        (shapes, traces)
     """
     shapes = []
+    traces = []
+
     total_cols, total_rows = panel_cols * 2, panel_rows * 2
     all_origins = {'Q1': (0, 0), 'Q2': (QUADRANT_WIDTH + GAP_SIZE, 0), 'Q3': (0, QUADRANT_HEIGHT + GAP_SIZE), 'Q4': (QUADRANT_WIDTH + GAP_SIZE, QUADRANT_HEIGHT + GAP_SIZE)}
     cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
+
+    # Prepare lists for scatter trace (Tooltips)
+    hover_x = []
+    hover_y = []
+    hover_text = []
+    hover_colors = []
 
     # 1. Draw the colored cells first (without borders)
     for row in range(total_rows):
@@ -423,20 +438,66 @@ def create_still_alive_map(panel_rows: int, panel_cols: int, true_defect_coords:
             quad_key = f"Q{quadrant_row * 2 + quadrant_col + 1}"
             x_origin, y_origin = all_origins[quad_key]
             x0, y0 = x_origin + local_col * cell_width, y_origin + local_row * cell_height
-            fill_color = DEFECTIVE_CELL_COLOR if (col, row) in true_defect_coords else ALIVE_CELL_COLOR
+
+            # Determine status
+            is_dead = (col, row) in true_defect_data
+
+            if is_dead:
+                metadata = true_defect_data[(col, row)]
+                first_killer = metadata['first_killer_layer']
+
+                # Color logic: Map Layer Num to Color from Fallback/Neon
+                # We reuse FALLBACK_COLORS.
+                # Note: This is simplistic. Layer 1 = Index 0, etc.
+                color_idx = (first_killer - 1) % len(FALLBACK_COLORS)
+                fill_color = FALLBACK_COLORS[color_idx]
+
+                # Add to hover data
+                center_x = x0 + cell_width/2
+                center_y = y0 + cell_height/2
+                hover_x.append(center_x)
+                hover_y.append(center_y)
+
+                tooltip = (
+                    f"<b>Unit: ({col}, {row})</b><br>"
+                    f"First Killer: Layer {first_killer}<br>"
+                    f"Details: {metadata['defect_summary']}"
+                )
+                hover_text.append(tooltip)
+                hover_colors.append(fill_color)
+
+            else:
+                fill_color = ALIVE_CELL_COLOR
+
             shapes.append({'type': 'rect', 'x0': x0, 'y0': y0, 'x1': x0 + cell_width, 'y1': y0 + cell_height, 'fillcolor': fill_color, 'line': {'width': 0}, 'layer': 'below'})
 
-    # 2. Draw grid lines over the colored cells by calling create_grid_shapes with fill=False
+    # 2. Draw grid lines over the colored cells
     shapes.extend(create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
 
-    return shapes
+    # 3. Create Scatter Trace for Hover
+    if hover_x:
+        traces.append(go.Scatter(
+            x=hover_x,
+            y=hover_y,
+            mode='markers',
+            marker=dict(size=0, color=hover_colors, opacity=0), # Invisible markers
+            text=hover_text,
+            hoverinfo='text'
+        ))
 
-def create_still_alive_figure(panel_rows: int, panel_cols: int, true_defect_coords: Set[Tuple[int, int]]) -> go.Figure:
+    return shapes, traces
+
+def create_still_alive_figure(
+    panel_rows: int,
+    panel_cols: int,
+    true_defect_data: Dict[Tuple[int, int], Dict[str, Any]]
+) -> go.Figure:
     """
-    Creates the Still Alive Map Figure (Shapes + Layout).
+    Creates the Still Alive Map Figure (Shapes + Layout + Tooltips).
     """
-    fig = go.Figure()
-    map_shapes = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
+    map_shapes, hover_traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data)
+
+    fig = go.Figure(data=hover_traces) # Add hover traces
 
     cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
     x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
@@ -446,7 +507,7 @@ def create_still_alive_figure(panel_rows: int, panel_cols: int, true_defect_coor
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
 
-    apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_coords)} Defective Cells)")
+    apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)")
 
     fig.update_layout(
         xaxis=dict(
@@ -457,7 +518,8 @@ def create_still_alive_figure(panel_rows: int, panel_cols: int, true_defect_coor
             title="Unit Row Index", range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
             tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text
         ),
-        shapes=map_shapes, margin=dict(l=20, r=20, t=80, b=20)
+        shapes=map_shapes, margin=dict(l=20, r=20, t=80, b=20),
+        showlegend=False
     )
     return fig
 
