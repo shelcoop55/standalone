@@ -6,7 +6,7 @@ from src.enums import ViewMode, Quadrant
 from src.plotting import create_defect_map_figure, create_pareto_figure
 from src.config import SAFE_VERIFICATION_VALUES, PLOT_AREA_COLOR, PANEL_COLOR
 
-def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: str, verification_selection: str):
+def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: str, verification_selection: any):
     params = store.analysis_params
     panel_rows, panel_cols = params.get("panel_rows", 7), params.get("panel_cols", 7)
     lot_number = params.get("lot_number")
@@ -17,7 +17,24 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
         side_df = layer_info.get(store.selected_side)
 
         if side_df is not None and not side_df.empty:
-            filtered_df = side_df[side_df['Verification'] == verification_selection] if verification_selection != 'All' else side_df
+            # Handle list-based verification (from multiselect) or single string
+            if isinstance(verification_selection, list):
+                if not verification_selection:
+                    # Case: Empty Selection -> Standard UX is show nothing, but in this app context,
+                    # previously 'All' was default. If user deselects everything, it's safer to show nothing (filtering everything out)
+                    # OR we can assume it means "Show All" if that's preferred.
+                    # Given the manager.py sets default to ALL options, an empty list means explicit Deselect All.
+                    # Thus, we should return empty DF (or filter out everything).
+                    # But wait, manager.py says "default to all if empty or first load".
+                    # If I explicitly click 'x' on all tags, list becomes [].
+                    # Let's stick to strict filtering: [] -> matches nothing.
+                    filtered_df = side_df[side_df['Verification'].isin([])]
+                else:
+                    filtered_df = side_df[side_df['Verification'].isin(verification_selection)]
+            else:
+                 # Legacy single select support
+                 filtered_df = side_df[side_df['Verification'] == verification_selection] if verification_selection != 'All' else side_df
+
             display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
 
             if view_mode == ViewMode.DEFECT.value:

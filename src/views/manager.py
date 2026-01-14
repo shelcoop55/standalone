@@ -75,12 +75,46 @@ class ViewManager:
             layer_info = self.store.layer_data.get(self.store.selected_layer, {})
             active_df = layer_info.get(self.store.selected_side, pd.DataFrame())
 
-        ver_options = ['All'] + sorted(active_df['Verification'].unique().tolist()) if not active_df.empty and 'Verification' in active_df.columns else ['All']
-        current_ver = self.store.verification_selection
-        current_ver_idx = ver_options.index(current_ver) if current_ver in ver_options else 0
+        # Calculate available verification options
+        ver_options = []
+        if not active_df.empty and 'Verification' in active_df.columns:
+            ver_options = sorted(active_df['Verification'].dropna().astype(str).unique().tolist())
 
-        # --- Layout: 4 Columns ---
-        col1, col2, col3, col4 = st.columns(4)
+        # Move Verification Filter to Sidebar (Unified)
+        with st.sidebar:
+             st.divider()
+             st.markdown("### Analysis Filters")
+             # Reuse 'multi_verification_selection' to keep state between views
+             # Default to all if empty or first load
+
+             # CRITICAL: Intersection logic to prevent crash when switching views with incompatible options.
+             # Streamlit ignores 'default' if 'key' is in session_state, so we must sanitize session_state directly.
+             if 'multi_verification_selection' in st.session_state:
+                 current_selection = st.session_state['multi_verification_selection']
+                 valid_selection = [x for x in current_selection if x in ver_options]
+                 st.session_state['multi_verification_selection'] = valid_selection
+
+             # Determine default if no state exists yet
+             default_ver = ver_options # Default to all
+
+             st.multiselect(
+                 "Filter Verification Status",
+                 options=ver_options,
+                 default=default_ver,
+                 key="multi_verification_selection"
+             )
+
+        # Update Store with Multi-Select for Layer View as well
+        # Note: Layer view logic needs to handle list instead of string now
+        # We don't need to manually set it here, 'multi_verification_selection' key updates session state
+        # But we should ensure consistency if the underlying logic uses a different store variable
+        # For Layer View, we previously used 'verification_selection' (single).
+        # Now we will use 'multi_verification_selection'.
+        self.store.verification_selection = st.session_state.get('multi_verification_selection', ver_options)
+
+
+        # --- Layout: 3 Columns (Verification moved to Sidebar) ---
+        col1, col2, col3 = st.columns(3)
 
         # 1. Layer Selection
         with col1:
@@ -148,18 +182,7 @@ class ViewManager:
                 on_change=lambda: setattr(self.store, 'quadrant_selection', st.session_state.quadrant_selection)
             )
 
-        # 4. Verification Filter
-        with col4:
-            st.selectbox(
-                "Verification",
-                options=ver_options,
-                index=current_ver_idx,
-                key="verification_selection",
-                label_visibility="collapsed",
-                on_change=lambda: setattr(self.store, 'verification_selection', st.session_state.verification_selection)
-            )
-
-        # --- Tabs for View Mode ---
+        # --- Tabs for View Mode (Full Width Buttons) ---
         st.markdown("") # Spacer
         tab_labels = ["Defect View", "Summary View", "Pareto View"]
         tab_map = {
@@ -168,36 +191,28 @@ class ViewManager:
             "Pareto View": ViewMode.PARETO.value
         }
 
+        # Determine active view
         current_view = self.store.view_mode
-        current_tab = "Defect View"
-        for label, val in tab_map.items():
-            if val == current_view:
-                current_tab = label
-                break
 
-        def on_tab_change():
-             label = st.session_state.view_mode_selector
-             self.store.view_mode = tab_map[label]
+        # Create columns for full-width buttons
+        cols = st.columns(len(tab_labels), gap="small")
 
-        if hasattr(st, "pills"):
-            st.pills(
-                "",
-                tab_labels,
-                selection_mode="single",
-                default=current_tab,
-                key="view_mode_selector",
-                on_change=on_tab_change,
-                label_visibility="collapsed"
-            )
-        else:
-             st.radio(
-                "",
-                tab_labels,
-                horizontal=True,
-                key="view_mode_selector",
-                index=tab_labels.index(current_tab),
-                on_change=on_tab_change,
-                label_visibility="collapsed"
+        for i, label in enumerate(tab_labels):
+            mapped_val = tab_map[label]
+            is_active = (mapped_val == current_view)
+
+            # Using callback to update state
+            def make_callback(v):
+                def cb():
+                    self.store.view_mode = v
+                return cb
+
+            cols[i].button(
+                label,
+                key=f"view_mode_btn_{i}",
+                type="primary" if is_active else "secondary",
+                use_container_width=True,
+                on_click=make_callback(mapped_val)
             )
 
     def _render_analysis_page_controls(self):
@@ -222,45 +237,55 @@ class ViewManager:
              }
              current_tab = sub_map_rev.get(self.store.analysis_subview, "Heatmap")
 
-        def on_analysis_tab_change():
-             sel = st.session_state.analysis_tab_selector
-             if not sel:
-                 return
-             if sel == "Still Alive":
-                 self.store.active_view = 'still_alive'
-             elif sel == "Multi-Layer":
-                 self.store.active_view = 'multi_layer_defects'
-             else:
-                 self.store.active_view = 'analysis_dashboard'
-                 sub_map = {
-                     "Heatmap": ViewMode.HEATMAP.value,
-                     "Stress Map": ViewMode.STRESS.value,
-                     "Root Cause": ViewMode.ROOT_CAUSE.value,
-                     "Insights": ViewMode.INSIGHTS.value
-                 }
-                 self.store.analysis_subview = sub_map[sel]
-
         st.subheader("Analysis View")
-        if hasattr(st, "pills"):
-             st.pills(
-                 "Analysis Modules",
-                 tabs,
-                 selection_mode="single",
-                 default=current_tab,
-                 key="analysis_tab_selector",
-                 on_change=on_analysis_tab_change,
-                 label_visibility="collapsed"
-             )
-        else:
-             st.radio(
-                 "Analysis Modules",
-                 tabs,
-                 horizontal=True,
-                 key="analysis_tab_selector",
-                 index=tabs.index(current_tab),
-                 on_change=on_analysis_tab_change,
-                 label_visibility="collapsed"
-             )
+
+        # Determine current active tab text
+        current_tab_text = "Heatmap" # Default
+        if self.store.active_view == 'still_alive':
+            current_tab_text = "Still Alive"
+        elif self.store.active_view == 'multi_layer_defects':
+            current_tab_text = "Multi-Layer"
+        elif self.store.active_view == 'analysis_dashboard':
+             sub_map_rev = {
+                 ViewMode.HEATMAP.value: "Heatmap",
+                 ViewMode.STRESS.value: "Stress Map",
+                 ViewMode.ROOT_CAUSE.value: "Root Cause",
+                 ViewMode.INSIGHTS.value: "Insights"
+             }
+             current_tab_text = sub_map_rev.get(self.store.analysis_subview, "Heatmap")
+
+        # Create columns for full-width buttons
+        # Split into two rows if too many, but here we have 6 items
+        # Let's try one row of 6
+        cols = st.columns(len(tabs), gap="small")
+
+        for i, label in enumerate(tabs):
+            is_active = (label == current_tab_text)
+
+            def make_callback(sel):
+                def cb():
+                    if sel == "Still Alive":
+                         self.store.active_view = 'still_alive'
+                    elif sel == "Multi-Layer":
+                         self.store.active_view = 'multi_layer_defects'
+                    else:
+                         self.store.active_view = 'analysis_dashboard'
+                         sub_map = {
+                             "Heatmap": ViewMode.HEATMAP.value,
+                             "Stress Map": ViewMode.STRESS.value,
+                             "Root Cause": ViewMode.ROOT_CAUSE.value,
+                             "Insights": ViewMode.INSIGHTS.value
+                         }
+                         self.store.analysis_subview = sub_map[sel]
+                return cb
+
+            cols[i].button(
+                label,
+                key=f"analysis_tab_btn_{i}",
+                type="primary" if is_active else "secondary",
+                use_container_width=True,
+                on_click=make_callback(label)
+            )
 
         st.divider()
 
@@ -278,7 +303,16 @@ class ViewManager:
         with st.sidebar:
              st.divider()
              st.markdown("### Analysis Filters")
-             default_ver = st.session_state.get('multi_verification_selection', all_verifications)
+
+             # CRITICAL: Intersection logic here too.
+             # Sanitize session state directly.
+             if 'multi_verification_selection' in st.session_state:
+                 current_selection = st.session_state['multi_verification_selection']
+                 valid_selection = [x for x in current_selection if x in all_verifications]
+                 st.session_state['multi_verification_selection'] = valid_selection
+
+             default_ver = all_verifications # Default to all
+
              st.multiselect(
                  "Filter Verification Status",
                  options=all_verifications,
