@@ -52,7 +52,8 @@ class ViewManager:
                 bu_name = get_bu_name_from_filename(str(source_file))
             except (IndexError, AttributeError, StopIteration):
                 pass
-            label = f"Layer {num}: {bu_name}" if bu_name else f"Layer {num}"
+            # Use BU name if available (cleaner look), else fallback to Layer Num
+            label = bu_name if bu_name else f"Layer {num}"
             layer_options.append(label)
             layer_option_map[label] = num
 
@@ -113,74 +114,79 @@ class ViewManager:
         self.store.verification_selection = st.session_state.get('multi_verification_selection', ver_options)
 
 
-        # --- Layout: 3 Columns (Verification moved to Sidebar) ---
-        col1, col2, col3 = st.columns(3)
+        # --- Layout: Rows of Buttons ---
 
-        # 1. Layer Selection
-        with col1:
-            def on_layer_change():
-                label = st.session_state.layer_selector_top
-                layer_num = layer_option_map[label]
-                self.store.set_layer_view(layer_num)
-                # Auto-select side logic
-                layer_info = self.store.layer_data.get(layer_num, {})
-                if 'F' in layer_info:
-                    self.store.selected_side = 'F'
-                elif 'B' in layer_info:
-                    self.store.selected_side = 'B'
-                elif layer_info:
-                     self.store.selected_side = next(iter(layer_info.keys()))
+        st.markdown("**Layer**")
+        if layer_options:
+            l_cols = st.columns(len(layer_options), gap="small")
+            for i, (label, col) in enumerate(zip(layer_options, l_cols)):
+                 layer_num = layer_option_map[label]
+                 is_active = (layer_num == self.store.selected_layer)
 
-            st.selectbox(
-                "Select Layer",
-                options=layer_options,
-                index=current_layer_idx,
-                key="layer_selector_top",
-                on_change=on_layer_change,
-                label_visibility="collapsed"
-            )
+                 def on_layer_click(n):
+                     def cb():
+                         self.store.set_layer_view(n)
+                         # Auto-select side logic
+                         info = self.store.layer_data.get(n, {})
+                         if 'F' in info:
+                             self.store.selected_side = 'F'
+                         elif 'B' in info:
+                             self.store.selected_side = 'B'
+                         elif info:
+                             self.store.selected_side = next(iter(info.keys()))
+                     return cb
 
-        # 2. Side Selection (Front/Back)
-        with col2:
-            def on_side_change():
-                label = st.session_state.side_selector_top
-                self.store.selected_side = 'F' if label == "Front" else 'B'
-
-            if hasattr(st, "pills"):
-                 st.pills(
-                     "Side",
-                     side_options,
-                     selection_mode="single",
-                     default=current_side_label,
-                     key="side_selector_top",
-                     on_change=on_side_change,
-                     label_visibility="collapsed"
-                 )
-            else:
-                 st.radio(
-                     "Side",
-                     side_options,
-                     horizontal=True,
-                     key="side_selector_top",
-                     on_change=on_side_change,
-                     index=side_options.index(current_side_label),
-                     label_visibility="collapsed"
+                 col.button(
+                     label,
+                     key=f"layer_btn_{i}",
+                     type="primary" if is_active else "secondary",
+                     use_container_width=True,
+                     on_click=on_layer_click(layer_num)
                  )
 
-        # 3. Quadrant Selection
-        with col3:
+        c1, c2 = st.columns([1, 2], gap="medium")
+
+        # Side Selection
+        with c1:
+            st.markdown("**Side**")
+            s_cols = st.columns(len(side_options), gap="small")
+            for i, (label, col) in enumerate(zip(side_options, s_cols)):
+                code = 'F' if label == "Front" else 'B'
+                is_active = (code == self.store.selected_side)
+
+                def on_side_click(c):
+                    def cb():
+                        self.store.selected_side = c
+                    return cb
+
+                col.button(
+                    label,
+                    key=f"side_btn_{i}",
+                    type="primary" if is_active else "secondary",
+                    use_container_width=True,
+                    on_click=on_side_click(code)
+                )
+
+        # Quadrant Selection
+        with c2:
+            st.markdown("**Quadrant**")
             quad_options = Quadrant.values()
-            curr_quad = self.store.quadrant_selection
-            curr_quad_idx = quad_options.index(curr_quad) if curr_quad in quad_options else 0
+            q_cols = st.columns(len(quad_options), gap="small")
+            for i, (label, col) in enumerate(zip(quad_options, q_cols)):
+                is_active = (label == self.store.quadrant_selection)
 
-            st.selectbox(
-                "Quadrant",
-                options=quad_options,
-                index=curr_quad_idx,
-                key="quadrant_selection",
-                label_visibility="collapsed",
-                on_change=lambda: setattr(self.store, 'quadrant_selection', st.session_state.quadrant_selection)
-            )
+                def on_quad_click(l):
+                    def cb():
+                        self.store.quadrant_selection = l
+                    return cb
+
+                col.button(
+                    label,
+                    key=f"quad_btn_{i}",
+                    type="primary" if is_active else "secondary",
+                    use_container_width=True,
+                    on_click=on_quad_click(label)
+                )
 
         # --- Tabs for View Mode (Full Width Buttons) ---
         st.markdown("") # Spacer
