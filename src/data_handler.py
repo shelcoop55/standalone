@@ -257,9 +257,10 @@ def get_true_defect_coordinates(
     if all_layers_df.empty:
         return {}
 
-    # Filter Excluded Defect Types ("What-If" Logic)
+    # Filter Excluded Defect Types ("What-If" Logic) - Uses Verification Codes
     if excluded_defect_types:
-        all_layers_df = all_layers_df[~all_layers_df['DEFECT_TYPE'].isin(excluded_defect_types)]
+        if 'Verification' in all_layers_df.columns:
+            all_layers_df = all_layers_df[~all_layers_df['Verification'].isin(excluded_defect_types)]
 
     if all_layers_df.empty:
         return {}

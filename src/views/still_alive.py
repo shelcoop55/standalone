@@ -28,30 +28,26 @@ def render_still_alive_sidebar(store: SessionStore):
 
         st.divider()
 
-        # 2. Defect Type Filters
-        st.markdown("**Exclude Defect Types**")
-
-        # Get all unique defect types from the *entire* panel data
-        # We need a helper to get all unique types efficiently or just iterate once.
-        # Since we have store.layer_data (PanelData), let's get a combined df
-        # This might be heavy if done every rerun, but Streamlit caches the load_data result.
-        # Ideally, we should cache the list of defect types too.
+        # 2. Defect Type Filters (Verification Codes)
+        st.markdown("**Exclude Verification Codes**")
 
         # Quick aggregation for filters
         full_df = store.layer_data.get_combined_dataframe()
-        if not full_df.empty:
-            all_defects = sorted(full_df['DEFECT_TYPE'].unique().tolist())
+        if not full_df.empty and 'Verification' in full_df.columns:
+            # Drop NaN/None and safe values? User wants to exclude SPECIFIC codes.
+            # We show all codes found in the file.
+            all_verification_codes = sorted(full_df['Verification'].dropna().unique().tolist())
         else:
-            all_defects = []
+            all_verification_codes = []
 
         if 'excluded_defects' not in st.session_state:
             st.session_state.excluded_defects = []
 
         selected_exclusions = st.multiselect(
-            "Select Defects to Exclude",
-            options=all_defects,
+            "Select Verification Codes to Exclude",
+            options=all_verification_codes,
             default=st.session_state.excluded_defects,
-            help="Defects selected here will be ignored in the yield calculation."
+            help="Units with these Verification codes will be treated as 'Good' (Yield Improvement)."
         )
         st.session_state.excluded_defects = selected_exclusions
 
