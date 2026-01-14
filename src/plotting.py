@@ -709,59 +709,6 @@ def create_density_contour_map(df: pd.DataFrame, panel_rows: int, panel_cols: in
     )
     return fig
 
-def create_hexbin_density_map(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> go.Figure:
-    """
-    3. True Hexagonal Binning Density Map.
-    Simulates hexbin using a high-res Histogram2d or Scatter if needed,
-    but since Plotly JS has specific hexbin limitations, we'll use a styled Histogram2d
-    that looks techy, or rely on aggregation.
-
-    Actually, to get a TRUE Hexbin look without Scipy, we can use a scatter plot
-    where we round coordinates to a hex grid manually.
-
-    Simplified approach for robustness: Use a pixelated 'Density Heatmap' (Histogram2d)
-    with a distinct look from the Contour map.
-    """
-    if df.empty:
-        return go.Figure()
-
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-    if 'Verification' in df.columns:
-        df_true = df[~df['Verification'].str.upper().isin(safe_values_upper)].copy()
-    else:
-        df_true = df.copy()
-
-    if df_true.empty:
-        return go.Figure()
-
-    # We will use Histogram2d (Rectangular bins) but styled to look like a "Tech Raster"
-    # This differentiates it from the Grid (Unit based) and Contour (Smooth).
-    # This is a "Physical Coordinate Raster".
-
-    # USE RAW PLOTTING COORDINATES (No Flip)
-
-    fig = go.Figure(go.Histogram2d(
-        x=df_true['plot_x'],
-        y=df_true['plot_y'],
-        colorscale='Viridis',
-        zsmooth=False, # Pixelated look
-        nbinsx=50,     # High resolution
-        nbinsy=50,
-        colorbar=dict(title='Density', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
-    ))
-
-    shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False)
-
-    fig.update_layout(
-        title=dict(text="3. High-Res Coordinate Density (Raster)", font=dict(color=TEXT_COLOR, size=18)),
-        xaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], constrain='domain', tickfont=dict(color=TEXT_COLOR)),
-        yaxis=dict(showgrid=False, zeroline=False, showline=True, mirror=True, range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2], scaleanchor="x", scaleratio=1, tickfont=dict(color=TEXT_COLOR)),
-        shapes=shapes,
-        plot_bgcolor=PLOT_AREA_COLOR,
-        paper_bgcolor=BACKGROUND_COLOR,
-        height=700
-    )
-    return fig
 
 def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
     """

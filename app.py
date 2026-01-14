@@ -25,7 +25,7 @@ from src.plotting import (
     create_verification_status_chart, create_still_alive_map,
     create_defect_sankey, create_defect_sunburst,
     create_still_alive_figure, create_defect_map_figure, create_pareto_figure,
-    create_unit_grid_heatmap, create_density_contour_map, create_hexbin_density_map,
+    create_unit_grid_heatmap, create_density_contour_map,
     create_multi_layer_defect_map, create_stress_heatmap, create_delta_heatmap,
     create_cross_section_heatmap
 )
@@ -406,7 +406,6 @@ def main() -> None:
                          full_side_df = side_df
                          st.plotly_chart(create_unit_grid_heatmap(full_side_df, panel_rows, panel_cols), use_container_width=True)
                          st.plotly_chart(create_density_contour_map(full_side_df, panel_rows, panel_cols), use_container_width=True)
-                         st.plotly_chart(create_hexbin_density_map(full_side_df, panel_rows, panel_cols), use_container_width=True)
                     elif view_mode == ViewMode.INSIGHTS.value:
                          st.plotly_chart(create_defect_sunburst(display_df), use_container_width=True)
                          sankey = create_defect_sankey(display_df)
