@@ -224,6 +224,8 @@ class ViewManager:
 
         def on_analysis_tab_change():
              sel = st.session_state.analysis_tab_selector
+             if not sel:
+                 return
              if sel == "Still Alive":
                  self.store.active_view = 'still_alive'
              elif sel == "Multi-Layer":
@@ -272,7 +274,19 @@ class ViewManager:
         if not full_df.empty and 'Verification' in full_df.columns:
             all_verifications = sorted(full_df['Verification'].dropna().astype(str).unique().tolist())
 
-        col_f1, col_f2, col_f3 = st.columns([2, 1, 2])
+        # Move Verification Filter to Sidebar
+        with st.sidebar:
+             st.divider()
+             st.markdown("### Analysis Filters")
+             default_ver = st.session_state.get('multi_verification_selection', all_verifications)
+             st.multiselect(
+                 "Filter Verification Status",
+                 options=all_verifications,
+                 default=default_ver,
+                 key="multi_verification_selection"
+             )
+
+        col_f1, col_f2 = st.columns([2, 1])
 
         # Filter 1: Multi-Select Layer
         with col_f1:
@@ -292,16 +306,6 @@ class ViewManager:
                  index=2, # Default Both
                  horizontal=True,
                  key="analysis_side_select"
-             )
-
-        # Filter 3: Multi-Select Verification - MOVED to End as requested
-        with col_f3:
-             default_ver = st.session_state.get('multi_verification_selection', all_verifications)
-             st.multiselect(
-                 "Filter Verification Status",
-                 options=all_verifications,
-                 default=default_ver,
-                 key="multi_verification_selection"
              )
 
         # 3. Context Specific Row

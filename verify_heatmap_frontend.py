@@ -20,15 +20,29 @@ def run_verification():
 
             # Wait for data to load
             print("Waiting for data load...")
-            time.sleep(3) # Give it a moment for rerun
+            time.sleep(5)
 
-            # 2. Select "Heatmap" view
-            print("Selecting Heatmap Analysis view...")
-            page.get_by_text("Heatmap Analysis").click()
-            time.sleep(3) # Wait for re-render
+            # 2. Switch to Analysis Page
+            print("Switching to Analysis Page...")
+            # Using get_by_role for button is safer
+            page.get_by_role("button", name="Analysis Page").click()
+            time.sleep(3)
 
-            # 3. Verify the "Unit Grid Density" chart
-            # Use specific header locator
+            # 3. Select "Heatmap" tab (if not already selected)
+            print("Selecting Heatmap tab...")
+            # Note: streamlit tabs might be radios or pills. The code uses pills/radio.
+            # We look for the text "Heatmap" which should be clickable.
+            page.get_by_text("Heatmap", exact=True).click()
+            time.sleep(3)
+
+            # 4. Verify the filters
+            # Check if "Filter Verification Status" is present
+            print("Checking for Verification Filter...")
+            # It should be in the sidebar now.
+            # We can check for the label text.
+            page.get_by_text("Filter Verification Status").wait_for()
+
+            # 5. Verify the "Unit Grid Density" chart header to ensure main view renders
             header = page.get_by_role("heading", name="1. Unit Grid Density (Yield Loss)")
             header.wait_for()
             print("Heatmap visible.")
@@ -44,6 +58,7 @@ def run_verification():
         except Exception as e:
             print(f"Error during verification: {e}")
             page.screenshot(path="error.png")
+            raise e
         finally:
             browser.close()
 
