@@ -88,6 +88,9 @@ def main() -> None:
                 st.session_state.clear()
                 st.rerun()
 
+            # Define controls state for downstream widgets (Reporting)
+            disable_layer_controls = is_analysis_dashboard or is_still_alive_view or is_multi_layer_view
+
             # --- Analysis Dashboard Controls ---
             if is_analysis_dashboard:
                 with st.expander("📈 Analysis Dashboard", expanded=True):
