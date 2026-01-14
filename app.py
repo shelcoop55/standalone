@@ -115,23 +115,6 @@ def main() -> None:
                     selected_sides_labels = st.multiselect("Select Sides", options=available_side_labels, default=available_side_labels)
                     selected_sides_multi = [side_map_rev.get(label, label) for label in selected_sides_labels]
 
-            # --- Analysis Specific Filters (Context Aware) ---
-            # DEFAULTS (Will be updated in Main Page Layout if dashboard is active)
-            stress_mode = "Cumulative"
-            selected_keys_stress = []
-            delta_group_a_keys = []
-            delta_group_b_keys = []
-            x_range = (0, 0) # Placeholder
-            y_range = (0, 0) # Placeholder
-            slice_axis = 'Y'
-
-            # Heatmap Settings
-            smoothing_factor = 30
-            saturation_cap = 0
-            show_points = False
-            show_grid = True # Default True, overriden if heatmap selected
-            selected_keys_heatmap = []
-
             # Common Layer-Side Logic for Analysis Views
             available_options = []
             option_map = {}
@@ -144,8 +127,80 @@ def main() -> None:
                     available_options.append(label)
                     option_map[label] = (num, side)
 
-            # Default selection for filters (used later)
+            # Default selection for filters
             default_selection_keys = [option_map[k] for k in available_options]
+
+            # --- Analysis Tools (New Sidebar Section) ---
+            # Initialize defaults to avoid UnboundLocalError
+            stress_mode = "Cumulative"
+            selected_keys_stress = []
+            delta_group_a_keys = []
+            delta_group_b_keys = []
+            x_range = (0, 0)
+            y_range = (0, 0)
+            slice_axis = 'Y'
+            smoothing_factor = 30
+            saturation_cap = 0
+            show_points = False
+            show_grid = True
+            selected_keys_heatmap = []
+
+            with st.expander("🔍 Analysis Tools", expanded=True):
+                st.caption("Advanced Defect Analysis")
+
+                # Subview Selection
+                analysis_options = [ViewMode.HEATMAP.value, ViewMode.STRESS.value, ViewMode.ROOT_CAUSE.value, ViewMode.INSIGHTS.value]
+                # Sync with session state
+                if 'analysis_subview' not in st.session_state:
+                    st.session_state.analysis_subview = ViewMode.HEATMAP.value
+
+                subview = st.radio("Select Module", analysis_options, index=analysis_options.index(st.session_state.analysis_subview))
+                st.session_state.analysis_subview = subview
+
+                if st.button("🚀 Show Analysis Dashboard", use_container_width=True):
+                    st.session_state.active_view = 'analysis_dashboard'
+                    st.rerun()
+
+                st.divider()
+
+                # --- Specific Controls ---
+                if subview == ViewMode.STRESS.value:
+                    st.markdown("**Stress Map Settings**")
+                    stress_mode = st.radio("Analysis Mode", ["Cumulative", "Delta (Difference)"])
+
+                    if stress_mode == "Delta (Difference)":
+                        st.markdown("**Group A - Group B**")
+                        sel_a = st.multiselect("Group A (Ref)", options=available_options, default=available_options)
+                        sel_b = st.multiselect("Group B (Comp)", options=available_options, default=[])
+
+                        delta_group_a_keys = [option_map[k] for k in sel_a]
+                        delta_group_b_keys = [option_map[k] for k in sel_b]
+                    else:
+                        sel_cumulative = st.multiselect("Select Data", options=available_options, default=available_options)
+                        selected_keys_stress = [option_map[k] for k in sel_cumulative]
+
+                elif subview == ViewMode.ROOT_CAUSE.value:
+                    st.markdown("**Cross-Section Settings**")
+
+                    max_x = (panel_cols * 2) - 1
+                    max_y = (panel_rows * 2) - 1
+
+                    st.caption("Region of Interest (ROI)")
+                    x_range = st.slider("X Range (Cols)", min_value=0, max_value=max_x, value=(0, max_x))
+                    y_range = st.slider("Y Range (Rows)", min_value=0, max_value=max_y, value=(0, max_y))
+
+                    st.caption("Projection Axis")
+                    slice_axis_label = st.radio("View Projection", ["By Row (onto X)", "By Col (onto Y)"], index=0)
+                    slice_axis = 'Y' if "Row" in slice_axis_label else 'X'
+
+                elif subview == ViewMode.HEATMAP.value:
+                    st.markdown("**Heatmap Settings**")
+                    sel_heatmap = st.multiselect("Select Data", options=available_options, default=available_options)
+                    selected_keys_heatmap = [option_map[k] for k in sel_heatmap]
+
+                    smoothing_factor = st.slider("Smoothing", min_value=10, max_value=100, value=30)
+                    saturation_cap = st.slider("Sat. Cap", min_value=0, max_value=100, value=0)
+                    show_grid = False
 
             # --- Layer Inspection Controls (Legacy) ---
             active_df = pd.DataFrame()
@@ -234,8 +289,8 @@ def main() -> None:
                 first_side_key = next(iter(st.session_state.layer_data[num]))
                 bu_names[num] = get_bu_name_from_filename(st.session_state.layer_data[num][first_side_key]['SOURCE_FILE'].iloc[0])
 
-            # Total buttons = layers + 4 (Still Alive, Multi-Layer, Stress Map, Root Cause)
-            num_buttons = len(layer_keys) + 4
+            # Total buttons = layers + 2 (Still Alive, Multi-Layer) - Analysis moved to Sidebar
+            num_buttons = len(layer_keys) + 2
             cols = st.columns(num_buttons)
 
             # Layer Buttons
@@ -256,24 +311,17 @@ def main() -> None:
                         st.rerun()
 
             # Still Alive
-            with cols[num_buttons - 4]:
+            with cols[num_buttons - 2]:
                 is_active = st.session_state.active_view == 'still_alive'
                 if st.button("Still Alive", key="still_alive_btn", use_container_width=True, type="primary" if is_active else "secondary"):
                     st.session_state.active_view = 'still_alive'
                     st.rerun()
 
             # Multi-Layer
-            with cols[num_buttons - 3]:
+            with cols[num_buttons - 1]:
                 is_active = st.session_state.active_view == 'multi_layer_defects'
                 if st.button("Multi-Layer Defects", key="multi_layer_defects_btn", use_container_width=True, type="primary" if is_active else "secondary"):
                     st.session_state.active_view = 'multi_layer_defects'
-                    st.rerun()
-
-            # Analysis Dashboard (Consolidated)
-            with cols[num_buttons - 2]: # Merging slots, layout logic simplified
-                is_active = st.session_state.active_view == 'analysis_dashboard'
-                if st.button("Analysis", key="analysis_dashboard_btn", use_container_width=True, type="primary" if is_active else "secondary"):
-                    st.session_state.active_view = 'analysis_dashboard'
                     st.rerun()
 
             # Side Selection (Only for Layer View)
@@ -334,144 +382,93 @@ def main() -> None:
 
         elif st.session_state.active_view == 'analysis_dashboard':
 
-            # --- Analysis Layout: 2 Columns (Controls | Charts) ---
-            col_controls, col_charts = st.columns([1, 3])
+            subview = st.session_state.analysis_subview
 
-            with col_controls:
-                st.subheader("⚙️ Analysis Controls")
-                analysis_options = [ViewMode.HEATMAP.value, ViewMode.STRESS.value, ViewMode.ROOT_CAUSE.value, ViewMode.INSIGHTS.value]
-                st.session_state.analysis_subview = st.radio("Select Analysis Module", analysis_options)
+            # --- Chart Rendering (Full Width) ---
+            if subview == ViewMode.STRESS.value:
+                st.header("Cumulative Stress Map Analysis")
+                st.info("Aggregates defects into a master grid. Includes Back-Side alignment.")
 
-                subview = st.session_state.analysis_subview
+                if stress_mode == "Cumulative":
+                    stress_data = aggregate_stress_data(st.session_state.layer_data, selected_keys_stress, panel_rows, panel_cols)
+                    fig = create_stress_heatmap(stress_data, panel_rows, panel_cols)
+                else: # Delta
+                    stress_data_a = aggregate_stress_data(st.session_state.layer_data, delta_group_a_keys, panel_rows, panel_cols)
+                    stress_data_b = aggregate_stress_data(st.session_state.layer_data, delta_group_b_keys, panel_rows, panel_cols)
+                    fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols)
 
-                # --- Specific Controls in Left Column ---
-                if subview == ViewMode.STRESS.value:
-                    st.markdown("---")
-                    st.markdown("**Stress Map Settings**")
-                    stress_mode = st.radio("Analysis Mode", ["Cumulative", "Delta (Difference)"])
+                st.plotly_chart(fig, use_container_width=True)
 
-                    if stress_mode == "Delta (Difference)":
-                        st.markdown("**Group A - Group B**")
-                        sel_a = st.multiselect("Group A (Ref)", options=available_options, default=available_options)
-                        sel_b = st.multiselect("Group B (Comp)", options=available_options, default=[])
+            elif subview == ViewMode.ROOT_CAUSE.value:
+                st.header("Root Cause & Diagnostics Dashboard")
 
-                        delta_group_a_keys = [option_map[k] for k in sel_a]
-                        delta_group_b_keys = [option_map[k] for k in sel_b]
-                    else:
-                        sel_cumulative = st.multiselect("Select Data", options=available_options, default=available_options)
-                        selected_keys_stress = [option_map[k] for k in sel_cumulative]
+                metrics = calculate_yield_killers(st.session_state.layer_data, panel_rows, panel_cols)
+                if metrics:
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("🔥 Top Killer", metrics.top_killer_layer, f"{metrics.top_killer_count} Defects", delta_color="inverse")
+                    c2.metric("📍 Worst Unit", metrics.worst_unit, f"{metrics.worst_unit_count} Defects", delta_color="inverse")
+                    c3.metric("⚖️ Side Bias", metrics.side_bias, f"{metrics.side_bias_diff} Diff")
+                else:
+                    st.info("No defect data available to calculate KPIs.")
 
-                elif subview == ViewMode.ROOT_CAUSE.value:
-                    st.markdown("---")
-                    st.markdown("**Cross-Section Settings**")
+                st.divider()
 
-                    max_x = (panel_cols * 2) - 1
-                    max_y = (panel_rows * 2) - 1
+                proj_desc = "X-Axis" if slice_axis == 'Y' else "Y-Axis"
+                st.info(f"Visualizing vertical defect propagation within ROI (X: {x_range}, Y: {y_range}). Projecting onto {proj_desc}.")
 
-                    st.caption("Region of Interest (ROI)")
-                    x_range = st.slider("X Range (Cols)", min_value=0, max_value=max_x, value=(0, max_x))
-                    y_range = st.slider("Y Range (Rows)", min_value=0, max_value=max_y, value=(0, max_y))
+                matrix, layer_labels, axis_labels = get_cross_section_matrix(
+                    st.session_state.layer_data, slice_axis, x_range, y_range, panel_rows, panel_cols
+                )
 
-                    st.caption("Projection Axis")
-                    slice_axis_label = st.radio("View Projection", ["By Row (onto X)", "By Col (onto Y)"], index=0)
-                    slice_axis = 'Y' if "Row" in slice_axis_label else 'X'
+                fig = create_cross_section_heatmap(
+                    matrix, layer_labels, axis_labels,
+                    f"ROI Slice: X{x_range} / Y{y_range} (View: {slice_axis})"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-                elif subview == ViewMode.HEATMAP.value:
-                    st.markdown("---")
-                    st.markdown("**Heatmap Settings**")
-                    sel_heatmap = st.multiselect("Select Data", options=available_options, default=available_options)
-                    selected_keys_heatmap = [option_map[k] for k in sel_heatmap]
+            elif subview == ViewMode.HEATMAP.value:
+                st.header("Heatmap Analysis")
+                st.info("Visualizing smoothed defect density across selected layers.")
 
-                    smoothing_factor = st.slider("Smoothing", min_value=10, max_value=100, value=30)
-                    saturation_cap = st.slider("Sat. Cap", min_value=0, max_value=100, value=0)
-                    show_grid = False
+                combined_heatmap_df = pd.DataFrame()
+                # Use default selection if heatmap specific list is empty (fallback, though UI defaults to all)
+                if not selected_keys_heatmap:
+                    selected_keys_heatmap = default_selection_keys
 
-            with col_charts:
-                # --- Chart Rendering in Right Column ---
-                if subview == ViewMode.STRESS.value:
-                    st.header("Cumulative Stress Map Analysis")
-                    st.info("Aggregates defects into a master grid. Includes Back-Side alignment.")
+                if selected_keys_heatmap:
+                    dfs_to_concat = []
+                    for layer_num, side in selected_keys_heatmap:
+                        df = st.session_state.layer_data.get(layer_num, {}).get(side)
+                        if df is not None and not df.empty:
+                            dfs_to_concat.append(df)
 
-                    if stress_mode == "Cumulative":
-                        stress_data = aggregate_stress_data(st.session_state.layer_data, selected_keys_stress, panel_rows, panel_cols)
-                        fig = create_stress_heatmap(stress_data, panel_rows, panel_cols)
-                    else: # Delta
-                        stress_data_a = aggregate_stress_data(st.session_state.layer_data, delta_group_a_keys, panel_rows, panel_cols)
-                        stress_data_b = aggregate_stress_data(st.session_state.layer_data, delta_group_b_keys, panel_rows, panel_cols)
-                        fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols)
+                    if dfs_to_concat:
+                        combined_heatmap_df = pd.concat(dfs_to_concat, ignore_index=True)
 
-                    st.plotly_chart(fig, use_container_width=True)
-
-                elif subview == ViewMode.ROOT_CAUSE.value:
-                    st.header("Root Cause & Diagnostics Dashboard")
-
-                    metrics = calculate_yield_killers(st.session_state.layer_data, panel_rows, panel_cols)
-                    if metrics:
-                        c1, c2, c3 = st.columns(3)
-                        c1.metric("🔥 Top Killer", metrics.top_killer_layer, f"{metrics.top_killer_count} Defects", delta_color="inverse")
-                        c2.metric("📍 Worst Unit", metrics.worst_unit, f"{metrics.worst_unit_count} Defects", delta_color="inverse")
-                        c3.metric("⚖️ Side Bias", metrics.side_bias, f"{metrics.side_bias_diff} Diff")
-                    else:
-                        st.info("No defect data available to calculate KPIs.")
-
-                    st.divider()
-
-                    proj_desc = "X-Axis" if slice_axis == 'Y' else "Y-Axis"
-                    st.info(f"Visualizing vertical defect propagation within ROI (X: {x_range}, Y: {y_range}). Projecting onto {proj_desc}.")
-
-                    matrix, layer_labels, axis_labels = get_cross_section_matrix(
-                        st.session_state.layer_data, slice_axis, x_range, y_range, panel_rows, panel_cols
+                if not combined_heatmap_df.empty:
+                    contour_fig = create_density_contour_map(
+                        combined_heatmap_df, panel_rows, panel_cols,
+                        show_points=show_points,
+                        smoothing_factor=smoothing_factor,
+                        saturation_cap=saturation_cap,
+                        show_grid=show_grid
                     )
+                    st.plotly_chart(contour_fig, use_container_width=True)
+                else:
+                    st.warning("No data available for the selected layers.")
 
-                    fig = create_cross_section_heatmap(
-                        matrix, layer_labels, axis_labels,
-                        f"ROI Slice: X{x_range} / Y{y_range} (View: {slice_axis})"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+            elif subview == ViewMode.INSIGHTS.value:
+                st.header("Insights & Sankey View")
+                layer_info = st.session_state.layer_data.get(st.session_state.selected_layer, {})
+                display_df = layer_info.get(st.session_state.selected_side)
 
-                elif subview == ViewMode.HEATMAP.value:
-                    st.header("Heatmap Analysis")
-                    st.info("Visualizing smoothed defect density across selected layers.")
-
-                    combined_heatmap_df = pd.DataFrame()
-                    # Use default selection if heatmap specific list is empty (fallback, though UI defaults to all)
-                    if not selected_keys_heatmap:
-                        selected_keys_heatmap = default_selection_keys
-
-                    if selected_keys_heatmap:
-                        dfs_to_concat = []
-                        for layer_num, side in selected_keys_heatmap:
-                            df = st.session_state.layer_data.get(layer_num, {}).get(side)
-                            if df is not None and not df.empty:
-                                dfs_to_concat.append(df)
-
-                        if dfs_to_concat:
-                            combined_heatmap_df = pd.concat(dfs_to_concat, ignore_index=True)
-
-                    if not combined_heatmap_df.empty:
-                        contour_fig = create_density_contour_map(
-                            combined_heatmap_df, panel_rows, panel_cols,
-                            show_points=show_points,
-                            smoothing_factor=smoothing_factor,
-                            saturation_cap=saturation_cap,
-                            show_grid=show_grid
-                        )
-                        st.plotly_chart(contour_fig, use_container_width=True)
-                    else:
-                        st.warning("No data available for the selected layers.")
-
-                elif subview == ViewMode.INSIGHTS.value:
-                    st.header("Insights & Sankey View")
-                    layer_info = st.session_state.layer_data.get(st.session_state.selected_layer, {})
-                    display_df = layer_info.get(st.session_state.selected_side)
-
-                    if display_df is not None and not display_df.empty:
-                        st.caption(f"Analyzing: Layer {st.session_state.selected_layer} - {st.session_state.selected_side}")
-                        st.plotly_chart(create_defect_sunburst(display_df), use_container_width=True)
-                        sankey = create_defect_sankey(display_df)
-                        if sankey: st.plotly_chart(sankey, use_container_width=True)
-                    else:
-                        st.warning("No data available.")
+                if display_df is not None and not display_df.empty:
+                    st.caption(f"Analyzing: Layer {st.session_state.selected_layer} - {st.session_state.selected_side}")
+                    st.plotly_chart(create_defect_sunburst(display_df), use_container_width=True)
+                    sankey = create_defect_sankey(display_df)
+                    if sankey: st.plotly_chart(sankey, use_container_width=True)
+                else:
+                    st.warning("No data available.")
 
         elif st.session_state.active_view == 'layer':
             # ... (Existing Layer View Logic)
