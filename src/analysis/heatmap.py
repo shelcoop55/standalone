@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
 from src.plotting import create_density_contour_map
+from src.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT
 
 class HeatmapTool(AnalysisTool):
     @property
@@ -84,8 +85,52 @@ class HeatmapTool(AnalysisTool):
                 saturation_cap=saturation,
                 show_grid=False,
                 view_mode=view_mode,
-                flip_back=flip_back
+                flip_back=flip_back,
+                quadrant_selection=selected_quadrant
             )
-            st.plotly_chart(contour_fig, use_container_width=True)
+
+            # --- INTERACTIVITY: CLICK TO ZOOM ---
+            # Enable selection events to capture clicks
+            selection = st.plotly_chart(contour_fig, use_container_width=True, on_select="rerun", selection_mode="points")
+
+            if selection and selection.selection and selection.selection["points"]:
+                # Only process if we are in "All" mode (Drill Down)
+                if selected_quadrant == "All":
+                    point = selection.selection["points"][0]
+                    # Get Physical Coordinates of the click
+                    click_x = point.get("x")
+                    click_y = point.get("y")
+
+                    if click_x is not None and click_y is not None:
+                        # Determine Quadrant
+                        clicked_quad = None
+
+                        # Logic matches create_grid_shapes / config.py
+                        # Q1: Left-Bottom (in Plotly Y is usually Up, need to check if 0 is bottom or top)
+                        # src/plotting.py origins:
+                        # Q1: (0, 0)
+                        # Q2: (QUAD_W + GAP, 0)
+                        # Q3: (0, QUAD_H + GAP)
+                        # Q4: (QUAD_W + GAP, QUAD_H + GAP)
+
+                        # Note: Y-Axis in Plotly usually points UP by default for Scatter/Contour unless reversed.
+                        # Our data_handler uses logic where Y=0 is one edge.
+                        # Let's assume standard Euclidean: 0,0 is bottom-left.
+
+                        is_left = click_x < QUADRANT_WIDTH
+                        is_right = click_x > (QUADRANT_WIDTH + GAP_SIZE)
+
+                        is_bottom = click_y < QUADRANT_HEIGHT
+                        is_top = click_y > (QUADRANT_HEIGHT + GAP_SIZE)
+
+                        if is_left and is_bottom: clicked_quad = "Q1"
+                        elif is_right and is_bottom: clicked_quad = "Q2"
+                        elif is_left and is_top: clicked_quad = "Q3"
+                        elif is_right and is_top: clicked_quad = "Q4"
+
+                        if clicked_quad:
+                            st.session_state["analysis_quadrant_selection"] = clicked_quad
+                            st.rerun()
+
         else:
             st.warning("No data available for the selected filters.")

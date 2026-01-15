@@ -760,7 +760,8 @@ def create_density_contour_map(
     saturation_cap: int = 0,
     show_grid: bool = True,
     view_mode: str = "Continuous",
-    flip_back: bool = True
+    flip_back: bool = True,
+    quadrant_selection: str = 'All'
 ) -> go.Figure:
     """
     2. Smoothed Density Contour Map.
@@ -894,6 +895,19 @@ def create_density_contour_map(
         y_tick_vals.append(center_mm)
         y_tick_text.append(str(i))
 
+    # --- AXIS RANGES (ZOOM LOGIC) ---
+    x_axis_range = [-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2]
+    y_axis_range = [-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2]
+
+    if quadrant_selection != 'All':
+        ranges = {
+            'Q1': ([0, QUADRANT_WIDTH], [0, QUADRANT_HEIGHT]),
+            'Q2': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [0, QUADRANT_HEIGHT]),
+            'Q3': ([0, QUADRANT_WIDTH], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE]),
+            'Q4': ([QUADRANT_WIDTH + GAP_SIZE, PANEL_WIDTH + GAP_SIZE], [QUADRANT_HEIGHT + GAP_SIZE, PANEL_HEIGHT + GAP_SIZE])
+        }
+        x_axis_range, y_axis_range = ranges[quadrant_selection]
+
     apply_panel_theme(fig, "2. Smoothed Defect Density (Hotspots)", height=700)
 
     fig.update_layout(
@@ -901,13 +915,13 @@ def create_density_contour_map(
             title="Unit Column Index (Approx)",
             tickvals=x_tick_vals,
             ticktext=x_tick_text,
-            range=[-GAP_SIZE, PANEL_WIDTH + GAP_SIZE*2], constrain='domain'
+            range=x_axis_range, constrain='domain'
         ),
         yaxis=dict(
             title="Unit Row Index (Approx)",
             tickvals=y_tick_vals,
             ticktext=y_tick_text,
-            range=[-GAP_SIZE, PANEL_HEIGHT + GAP_SIZE*2]
+            range=y_axis_range
         ),
         shapes=shapes
     )
