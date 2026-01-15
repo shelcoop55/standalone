@@ -134,10 +134,9 @@ def render_still_alive_main(store: SessionStore):
         e_yield = (edge_alive / edge_total * 100) if edge_total > 0 else 0
 
         # Displaying with counts for verification
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Center Yield", f"{c_yield:.1f}%", help=f"Inner Core (Ring 4+). Total Units: {center_total}")
-        col2.metric("Middle Yield", f"{m_yield:.1f}%", help=f"Rings 2 & 3. Total Units: {middle_total}")
-        col3.metric("Edge Yield", f"{e_yield:.1f}%", help=f"Outer Ring (Ring 1). Total Units: {edge_total}")
+        st.metric("Center Yield", f"{c_yield:.1f}%", help=f"Inner Core (Ring 4+). Total Units: {center_total}")
+        st.metric("Middle Yield", f"{m_yield:.1f}%", help=f"Rings 2 & 3. Total Units: {middle_total}")
+        st.metric("Edge Yield", f"{e_yield:.1f}%", help=f"Outer Ring (Ring 1). Total Units: {edge_total}")
 
         st.divider()
 

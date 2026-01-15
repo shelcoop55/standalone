@@ -908,7 +908,7 @@ def create_density_contour_map(
         }
         x_axis_range, y_axis_range = ranges[quadrant_selection]
 
-    apply_panel_theme(fig, "2. Smoothed Defect Density (Hotspots)", height=700)
+    apply_panel_theme(fig, "Smooth Density Hotspot", height=700)
 
     fig.update_layout(
         xaxis=dict(

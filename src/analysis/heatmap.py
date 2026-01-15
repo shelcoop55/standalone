@@ -4,6 +4,55 @@ from src.analysis.base import AnalysisTool
 from src.plotting import create_density_contour_map
 from src.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT
 
+@st.cache_data
+def get_filtered_heatmap_data(
+    _panel_data,
+    panel_data_id: str,
+    selected_layer_nums: list,
+    side_selection: list,
+    selected_verifs: list,
+    selected_quadrant: str
+) -> pd.DataFrame:
+    """
+    Cached helper to filter and aggregate heatmap data.
+    args:
+        _panel_data: The PanelData object (not hashed).
+        panel_data_id: Unique ID of the dataset (hashed).
+        selected_layer_nums: List of layer numbers to include.
+        side_selection: List of strings ["Front", "Back"].
+        selected_verifs: List of verification codes to include.
+        selected_quadrant: Quadrant filter ("All", "Q1", etc.).
+    """
+    dfs_to_concat = []
+
+    for layer_num in selected_layer_nums:
+        # PanelData.get() returns dict of {side: DataFrame}
+        layer_dict = _panel_data.get(layer_num, {})
+
+        sides_to_process = []
+        if "Front" in side_selection: sides_to_process.append('F')
+        if "Back" in side_selection: sides_to_process.append('B')
+
+        for side in sides_to_process:
+            if side in layer_dict:
+                df = layer_dict[side]
+                if not df.empty:
+                    # Apply Verification Filter
+                    if 'Verification' in df.columns and selected_verifs:
+                         df = df[df['Verification'].astype(str).isin(selected_verifs)]
+
+                    # Apply Quadrant Filter
+                    if selected_quadrant != "All" and 'QUADRANT' in df.columns:
+                         df = df[df['QUADRANT'] == selected_quadrant]
+
+                    if not df.empty:
+                         dfs_to_concat.append(df)
+
+    if dfs_to_concat:
+        return pd.concat(dfs_to_concat, ignore_index=True)
+    return pd.DataFrame()
+
+
 class HeatmapTool(AnalysisTool):
     @property
     def name(self) -> str:
@@ -46,35 +95,19 @@ class HeatmapTool(AnalysisTool):
         # 6. Quadrant Filter
         selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
 
-        # --- DATA PREPARATION ---
-        dfs_to_concat = []
+        # --- DATA PREPARATION (CACHED) ---
+        # We pass self.store.layer_data.id if available, else a dummy or we assume static.
+        # PanelData in models.py has .id attribute.
+        panel_id = getattr(self.store.layer_data, "id", "static")
 
-        for layer_num in selected_layer_nums:
-            layer_dict = self.store.layer_data.get(layer_num, {})
-
-            sides_to_process = []
-            if "Front" in side_selection: sides_to_process.append('F')
-            if "Back" in side_selection: sides_to_process.append('B')
-
-            for side in sides_to_process:
-                if side in layer_dict:
-                    df = layer_dict[side]
-                    if not df.empty:
-                        # Apply Verification Filter
-                        if 'Verification' in df.columns and selected_verifs:
-                             df = df[df['Verification'].astype(str).isin(selected_verifs)]
-
-                        # Apply Quadrant Filter
-                        # The dataframe should have 'QUADRANT' column.
-                        if selected_quadrant != "All" and 'QUADRANT' in df.columns:
-                             df = df[df['QUADRANT'] == selected_quadrant]
-
-                        if not df.empty:
-                             dfs_to_concat.append(df)
-
-        combined_heatmap_df = pd.DataFrame()
-        if dfs_to_concat:
-            combined_heatmap_df = pd.concat(dfs_to_concat, ignore_index=True)
+        combined_heatmap_df = get_filtered_heatmap_data(
+            self.store.layer_data,
+            panel_id,
+            selected_layer_nums,
+            side_selection,
+            selected_verifs,
+            selected_quadrant
+        )
 
         if not combined_heatmap_df.empty:
             flip_back = st.session_state.get("flip_back_side", True)
