@@ -969,41 +969,14 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{customdata[0]}</b><br>Count: %{customdata[1]}<br>% of Layer: %{customdata[2]}<br>% of Total: %{customdata[3]}<extra></extra>"
     ))
 
-    # IMPROVEMENT: Fix "Black and White" export by setting dark theme colors explicit in layout
-    # Also add a dummy legend for Verification status colors if possible
-
-    # Manually add legend traces for Verification statuses
-    if has_verification:
-        # Define standard colors for verification
-        # Assuming Sunburst assigns colors automatically, we can't easily sync them without explicit color mapping.
-        # But we can add a legend explaining the statuses generally.
-        safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-        unique_verifs = sorted(grouped['Verification'].unique())
-
-        for ver in unique_verifs:
-            # We don't control the sunburst segment color easily here (it inherits or cycles)
-            # unless we map every ID to a color.
-            # But we can add invisible scatter traces to generate a legend.
-
-            # Simple color logic for legend: Green for Safe, Red for Defect
-            leg_color = VERIFICATION_COLOR_SAFE if ver.upper() in safe_values_upper else VERIFICATION_COLOR_DEFECT
-
-            fig.add_trace(go.Scatter(
-                x=[None], y=[None],
-                mode='markers',
-                marker=dict(size=10, color=leg_color),
-                legendgroup='Verification',
-                showlegend=True,
-                name=ver
-            ))
+    # Apply standard theme with title and larger square-like layout
+    apply_panel_theme(fig, "Defect Distribution", height=700)
 
     fig.update_layout(
-        margin=dict(t=0, l=0, r=0, b=0),
-        height=500,
-        paper_bgcolor=BACKGROUND_COLOR,
-        plot_bgcolor=BACKGROUND_COLOR, # Ensure plot area is also dark/colored
-        font=dict(color=TEXT_COLOR),
-        legend=dict(title="Verification Status", x=1, y=1)
+        margin=dict(t=40, l=10, r=10, b=10), # Adjusted margins for title
+        xaxis=dict(visible=False), # Hide axes to remove any white lines
+        yaxis=dict(visible=False),
+        showlegend=False # Explicitly hide legend as requested
     )
 
     return fig
@@ -1253,7 +1226,7 @@ def create_cross_section_heatmap(
     apply_panel_theme(fig, f"Virtual Cross-Section: {slice_desc}", height=600)
 
     fig.update_layout(
-        xaxis=dict(title="Unit Index (Slice Position)"),
+        xaxis=dict(title="Unit Index (Slice Position)", dtick=1), # Force integer ticks (0, 1, 2...)
         yaxis=dict(title="Layer Stack", autorange="reversed") # Ensure Layer 1 is at top
     )
 

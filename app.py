@@ -37,6 +37,9 @@ def main() -> None:
     store = SessionStore()
     view_manager = ViewManager(store)
 
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
+
     # --- Sidebar Control Panel ---
     with st.sidebar:
         st.title("🎛️ Control Panel")
@@ -44,11 +47,13 @@ def main() -> None:
         # --- 1. Analysis Configuration Form ---
         with st.form(key="analysis_form"):
             with st.expander("📁 Data Source & Configuration", expanded=True):
+                # Use dynamic key to allow resetting the widget
+                uploader_key = f"uploaded_files_{st.session_state['uploader_key']}"
                 st.file_uploader(
                     "Upload Build-Up Layers (e.g., BU-01-...)",
                     type=["xlsx", "xls"],
                     accept_multiple_files=True,
-                    key="uploaded_files"
+                    key=uploader_key
                 )
                 st.number_input(
                     "Panel Rows", min_value=1, value=7,
@@ -73,7 +78,10 @@ def main() -> None:
 
             # Callback for Analysis
             def on_run_analysis():
-                files = st.session_state.uploaded_files
+                # Read from dynamic key
+                current_uploader_key = f"uploaded_files_{st.session_state['uploader_key']}"
+                files = st.session_state.get(current_uploader_key, [])
+
                 rows = st.session_state.panel_rows
                 cols = st.session_state.panel_cols
                 lot = st.session_state.lot_number
@@ -126,9 +134,8 @@ def main() -> None:
 
                 def on_reset():
                     store.clear_all()
-                    # Clear uploaded files in session state widget
-                    if "uploaded_files" in st.session_state:
-                         st.session_state["uploaded_files"] = []
+                    # Increment key to recreate file uploader widget (effectively clearing it)
+                    st.session_state["uploader_key"] += 1
                     # Rerun will happen automatically after callback
 
                 st.form_submit_button("🔄 Reset", on_click=on_reset, type="secondary")
