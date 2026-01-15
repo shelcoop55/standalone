@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
-from src.plotting import create_defect_sunburst, create_defect_sankey, create_trend_chart
+from src.plotting import create_defect_sunburst, create_defect_sankey
 
 class InsightsTool(AnalysisTool):
     @property
@@ -49,12 +49,6 @@ class InsightsTool(AnalysisTool):
 
             if not combined_df.empty:
                 st.caption(f"Analyzing {len(combined_df)} defects from selected context.")
-
-                # --- NEW TREND CHART ---
-                st.subheader("Layer-wise Defect Trend")
-                trend_chart = create_trend_chart(combined_df)
-                st.plotly_chart(trend_chart, use_container_width=True)
-                st.divider()
 
                 c1, c2 = st.columns([2, 1], gap="medium")
 
