@@ -30,7 +30,11 @@ class InsightsTool(AnalysisTool):
             for s in sides:
                 layer = self.store.layer_data.get_layer(layer_num, s)
                 if layer and not layer.data.empty:
-                    dfs.append(layer.data)
+                    # Create a copy to avoid modifying the cached object
+                    df_layer = layer.data.copy()
+                    df_layer['LAYER_NUM'] = layer_num
+                    df_layer['SIDE'] = s
+                    dfs.append(df_layer)
 
         if dfs:
             combined_df = pd.concat(dfs, ignore_index=True)
