@@ -74,17 +74,20 @@ def test_load_data_sample_generation(monkeypatch):
     layer_data = data_handler.load_data([], panel_rows=7, panel_cols=7)
 
     # assert isinstance(layer_data, dict)
-    assert set(layer_data.keys()) == {1, 2, 3}
+    # Updated to 5 layers random generation
+    assert set(layer_data.keys()) == {1, 2, 3, 4, 5}
     # All layers should now have Front and Back sides
-    for i in range(1, 4):
+    for i in range(1, 6):
         assert set(layer_data[i].keys()) == {'F', 'B'}
 
-    # Check counts for a few examples (now random between 100-150)
+        # Check counts for a few examples (now random depending on layer)
     for layer_num in layer_data:
         # accessing layer_data[layer_num] returns dict {side: df} via proxy
         sides_dict = layer_data[layer_num]
         for side, df in sides_dict.items():
-            assert 100 <= len(df) <= 150
+            # Updated test logic to accept wider range since layers have different counts
+            # Smallest is 40 (Layer 4), Largest is 300 (Layer 2)
+            assert 40 <= len(df) <= 301, f"Layer {layer_num} count {len(df)} out of expected range"
 
             # Verify Defect Types are from the simple list
             assert df['DEFECT_TYPE'].isin(SIMPLE_DEFECT_TYPES).all()

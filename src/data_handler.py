@@ -183,24 +183,46 @@ def load_data(
             st.sidebar.success(f"{len(temp_data)} layer(s) loaded successfully!")
 
     else:
-        st.sidebar.info("No file uploaded. Displaying sample data for 3 layers (all with Front/Back).")
+        st.sidebar.info("No file uploaded. Displaying sample data for 5 layers (all with Front/Back).")
         total_units_x = 2 * panel_cols
         total_units_y = 2 * panel_rows
 
-        # 3 Layers
-        layers_to_generate = [1, 2, 3]
+        # 4. Define a Seed (Set it once before generation)
+        np.random.seed(42)
+
+        # 1. Add two more layers (5 total)
+        layers_to_generate = [1, 2, 3, 4, 5]
+
+        # 2. Define custom ranges for data points per layer
+        # Ranges: 1 (80-100), 2 (200-300), 3 (50-60), 4 (40-80), 5 (100-200)
+        layer_counts = {
+            1: (80, 101),
+            2: (200, 301),
+            3: (50, 61),
+            4: (40, 81),
+            5: (100, 201)
+        }
 
         for layer_num in layers_to_generate:
             # Random False Alarm Rate for this layer (50% - 60%)
             false_alarm_rate = np.random.uniform(0.5, 0.6)
 
             for side in ['F', 'B']:
-                # Random number of points (100 - 150) for both sides
-                num_points = np.random.randint(100, 151)
+                # Random number of points based on layer
+                low, high = layer_counts.get(layer_num, (100, 151))
+                num_points = np.random.randint(low, high)
 
                 # Generate random indices
                 unit_x = np.random.randint(0, total_units_x, size=num_points)
                 unit_y = np.random.randint(0, total_units_y, size=num_points)
+
+                # 3. Define Random X and Y coordinates between 30 and 48
+                # Multiply by 1000 to simulate um (or keep as is, plotting usually expects um for raw coords)
+                # Assuming simple float values as requested: "30 and 48"
+                # If these are meant to be within a Unit, the plotting logic usually handles mapping.
+                # However, if these are meant to be 'raw coordinates' that plotting uses for tooltip, we add them.
+                rand_x_coords = np.random.uniform(30, 48, size=num_points)
+                rand_y_coords = np.random.uniform(30, 48, size=num_points)
 
                 # Generate Defect Types and Verification statuses
                 defect_types = []
@@ -229,7 +251,9 @@ def load_data(
                     'Verification': verifications,
                     'SOURCE_FILE': [f'Sample Data Layer {layer_num}{side}'] * num_points,
                     'SIDE': side,
-                    'HAS_VERIFICATION_DATA': [True] * num_points
+                    'HAS_VERIFICATION_DATA': [True] * num_points,
+                    'X_COORDINATES': rand_x_coords,
+                    'Y_COORDINATES': rand_y_coords
                 }
 
                 df = pd.DataFrame(defect_data)
