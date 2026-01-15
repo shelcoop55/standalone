@@ -122,7 +122,7 @@ class ViewManager:
 
         # --- Layout: Rows of Buttons ---
 
-        st.markdown("**Layer**")
+        # Header removed to save space
         if layer_options:
             l_cols = st.columns(len(layer_options), gap="small")
             for i, (label, col) in enumerate(zip(layer_options, l_cols)):
@@ -154,7 +154,7 @@ class ViewManager:
 
         # Side Selection
         with c1:
-            st.markdown("**Side**")
+            # Header removed
             s_cols = st.columns(len(side_options), gap="small")
             for i, (label, col) in enumerate(zip(side_options, s_cols)):
                 code = 'F' if label == "Front" else 'B'
@@ -175,7 +175,7 @@ class ViewManager:
 
         # Quadrant Selection
         with c2:
-            st.markdown("**Quadrant**")
+            # Header removed
             quad_options = Quadrant.values()
             q_cols = st.columns(len(quad_options), gap="small")
             for i, (label, col) in enumerate(zip(quad_options, q_cols)):
@@ -257,8 +257,7 @@ class ViewManager:
              )
 
         # --- ROW 1: GLOBAL FILTERS (Layer -> Side -> Quadrant) ---
-        st.subheader("Analysis View")
-        st.markdown("**Select Layers & Scope**")
+        # Headers removed as per request to save space
 
         # We will try to pack everything into one logical row using columns.
         # Since button widths vary, we can't easily predict the exact column split.
@@ -296,18 +295,11 @@ class ViewManager:
             # Or just use one very dense st.columns list.
             # Let's try putting all layer buttons in one st.columns call.
 
-            btns = ["ALL"] + [d['label'] for d in layer_buttons_data]
+            # "ALL" button removed as per request to save space
+            btns = [d['label'] for d in layer_buttons_data]
             l_cols = st.columns(len(btns), gap="small")
 
             current_selection = self.store.multi_layer_selection if self.store.multi_layer_selection else all_layers
-            is_all_selected = (set(current_selection) == set(all_layers))
-
-            # ALL Button
-            def on_click_all():
-                def cb(): self.store.multi_layer_selection = all_layers
-                return cb
-
-            l_cols[0].button("ALL", key="an_btn_all", type="primary" if is_all_selected else "secondary", use_container_width=True, on_click=on_click_all())
 
             # Layer Buttons
             for i, d in enumerate(layer_buttons_data):
@@ -322,7 +314,7 @@ class ViewManager:
                         self.store.multi_layer_selection = sorted(new_sel)
                     return cb
 
-                l_cols[i+1].button(d['label'], key=f"an_btn_l_{num}", type="primary" if is_sel else "secondary", use_container_width=True, on_click=on_click_layer(num))
+                l_cols[i].button(d['label'], key=f"an_btn_l_{num}", type="primary" if is_sel else "secondary", use_container_width=True, on_click=on_click_layer(num))
 
         # --- Sides Group ---
         with c_sides:

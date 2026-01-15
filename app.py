@@ -208,7 +208,8 @@ def main() -> None:
                 )
 
     # --- Main Content Area ---
-    st.title("📊 Panel Defect Analysis Tool")
+    # Header removed to save space
+    # st.title("📊 Panel Defect Analysis Tool")
 
     # Render Navigation (Triggers full rerun to update Sidebar context)
     view_manager.render_navigation()
