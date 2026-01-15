@@ -76,13 +76,15 @@ class HeatmapTool(AnalysisTool):
             combined_heatmap_df = pd.concat(dfs_to_concat, ignore_index=True)
 
         if not combined_heatmap_df.empty:
+            flip_back = st.session_state.get("flip_back_side", True)
             contour_fig = create_density_contour_map(
                 combined_heatmap_df, panel_rows, panel_cols,
                 show_points=False,
                 smoothing_factor=smoothing * 5, # Scale slider 1-20 to meaningful param
                 saturation_cap=saturation,
                 show_grid=False,
-                view_mode=view_mode
+                view_mode=view_mode,
+                flip_back=flip_back
             )
             st.plotly_chart(contour_fig, use_container_width=True)
         else:

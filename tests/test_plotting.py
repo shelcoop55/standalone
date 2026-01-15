@@ -183,7 +183,11 @@ def test_create_multi_layer_defect_map():
         'UNIT_INDEX_X': [1, 2, 3],
         'UNIT_INDEX_Y': [1, 2, 3],
         'Verification': ['T', 'T', 'T'],
-        'SOURCE_FILE': ['f1', 'f1', 'f2']
+        'SOURCE_FILE': ['f1', 'f1', 'f2'],
+        'physical_plot_x_flipped': [10, 20, 30],
+        'physical_plot_x_raw': [10, 20, 30],
+        'X_COORDINATES': [10.5, 20.5, 30.5],
+        'Y_COORDINATES': [10.5, 20.5, 30.5]
     })
 
     fig = create_multi_layer_defect_map(df, panel_rows=5, panel_cols=5)

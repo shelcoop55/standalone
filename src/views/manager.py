@@ -302,6 +302,10 @@ class ViewManager:
                  key="multi_verification_selection"
              )
 
+             # Toggle for Back Side Alignment
+             st.markdown("### Alignment")
+             st.checkbox("Align Back Side (Flip Units)", value=True, key="flip_back_side", help="If enabled, Back Side units are mirrored horizontally to match Front Side position (Through-Board View).")
+
         # Logic to determine active tab text (Needed early for conditional rendering)
         current_tab_text = "Heatmap"
         if self.store.active_view == 'still_alive': current_tab_text = "Still Alive"

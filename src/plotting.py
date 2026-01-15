@@ -161,13 +161,21 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
             else:
                  dff['Description'] = "N/A"
 
-            custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
+            # Add Raw Coords if available
+            coord_str = ""
+            if 'X_COORDINATES' in dff.columns and 'Y_COORDINATES' in dff.columns:
+                dff['RAW_COORD_STR'] = dff.apply(lambda row: f"({row['X_COORDINATES']:.2f}, {row['Y_COORDINATES']:.2f})", axis=1)
+                custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'RAW_COORD_STR']
+                coord_str = "<br>Raw Coords: %{customdata[6]}"
+            else:
+                custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
 
             hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
                              "Description : %{customdata[5]}<br>"
                              "Type: %{customdata[2]}<br>"
                              "Unit Index (X, Y): (%{customdata[0]}, %{customdata[1]})<br>"
                              "Defect ID: %{customdata[3]}"
+                             + coord_str +
                              "<extra></extra>")
 
             traces.append(go.Scatter(
@@ -182,73 +190,73 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
 
     return traces
 
-def create_multi_layer_defect_map(df: pd.DataFrame, panel_rows: int, panel_cols: int) -> go.Figure:
+def create_multi_layer_defect_map(
+    df: pd.DataFrame,
+    panel_rows: int,
+    panel_cols: int,
+    flip_back: bool = True
+) -> go.Figure:
     """
     Creates a defect map visualizing defects from ALL layers simultaneously.
-
-    Logic:
-    - Group by Layer Number (Same Color)
-    - Distinguish by Side (Different Symbol: Front=Circle, Back=Diamond)
+    Supports toggling Back Side alignment (Flip vs Raw).
     """
     fig = go.Figure()
 
     if not df.empty:
         # Ensure LAYER_NUM exists
         if 'LAYER_NUM' not in df.columns:
-            # Fallback if column missing (should not happen with new prepare_multi_layer_data)
             df['LAYER_NUM'] = 0
 
         unique_layer_nums = sorted(df['LAYER_NUM'].unique())
 
-        # Generate colors for layers
-        # Reuse NEON_PALETTE + FALLBACK_COLORS
+        # Generate colors
         layer_colors = {}
         for i, num in enumerate(unique_layer_nums):
             layer_colors[num] = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
 
-        # Symbol Mapping
-        # Front = Circle (Standard)
-        # Back = Diamond (Distinct, implies flip side)
         symbol_map = {'F': 'circle', 'B': 'diamond'}
 
-        # Group by (Layer, Side) to create traces
-        # We iterate through layers first to keep legend organized
         for layer_num in unique_layer_nums:
             layer_color = layer_colors[layer_num]
-
-            # Filter for this layer
             layer_df = df[df['LAYER_NUM'] == layer_num]
 
-            # Iterate through sides present in this layer
-            # Sort sides to keep Front before Back usually, or alphabetical
             for side in sorted(layer_df['SIDE'].unique()):
                 dff = layer_df[layer_df['SIDE'] == side]
-
-                # Determine Symbol
-                symbol = symbol_map.get(side, 'circle') # Default to circle if unknown
-
+                symbol = symbol_map.get(side, 'circle')
                 side_name = "Front" if side == 'F' else "Back"
                 trace_name = f"Layer {layer_num} ({side_name})"
 
-                # Prepare hover data
                 if 'Verification' in dff.columns:
                      dff = dff.copy()
                      dff['Description'] = dff['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
                 else:
                      dff['Description'] = "N/A"
 
-                custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE']
+                # Prepare Custom Data (Include Raw Coords)
+                coord_str = ""
+                if 'X_COORDINATES' in dff.columns and 'Y_COORDINATES' in dff.columns:
+                    dff['RAW_COORD_STR'] = dff.apply(lambda row: f"({row['X_COORDINATES']:.2f}, {row['Y_COORDINATES']:.2f})", axis=1)
+                    custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE', 'RAW_COORD_STR']
+                    coord_str = "<br>Raw Coords: %{customdata[7]}"
+                else:
+                    custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE']
 
-                hovertemplate = ("<b>Layer: %{data.legendgroup}</b><br>"
+                # Fix Hover Template
+                hovertemplate = (f"<b>Layer: {layer_num}</b><br>"
                                  "Side: " + side_name + "<br>"
                                  "Status: %{customdata[4]}<br>"
                                  "Type: %{customdata[2]}<br>"
-                                 "Coords: (%{customdata[0]}, %{customdata[1]})<br>"
+                                 "Unit Index: (%{customdata[0]}, %{customdata[1]})<br>"
                                  "File: %{customdata[6]}"
+                                 + coord_str +
                                  "<extra></extra>")
 
-                # USE RAW COORDINATES (No Flip) as per user request
-                x_coords = dff['plot_x']
+                # Determine X Coordinates based on Flip Toggle
+                # We use the pre-calculated columns from models.py
+                if flip_back:
+                    x_coords = dff['physical_plot_x_flipped']
+                else:
+                    x_coords = dff['physical_plot_x_raw']
 
                 fig.add_trace(go.Scatter(
                     x=x_coords,
@@ -257,12 +265,10 @@ def create_multi_layer_defect_map(df: pd.DataFrame, panel_rows: int, panel_cols:
                     marker=dict(
                         color=layer_color,
                         symbol=symbol,
-                        size=9, # Slightly larger for visibility
+                        size=9,
                         line=dict(width=1, color='black')
                     ),
                     name=trace_name,
-                    # REMOVED legendgroup to allow independent toggling of Front/Back layers
-                    # legendgroup=f"Layer {layer_num}",
                     customdata=dff[custom_data_cols],
                     hovertemplate=hovertemplate
                 ))
@@ -742,12 +748,12 @@ def create_density_contour_map(
     smoothing_factor: int = 30,
     saturation_cap: int = 0,
     show_grid: bool = True,
-    view_mode: str = "Continuous"
+    view_mode: str = "Continuous",
+    flip_back: bool = True
 ) -> go.Figure:
     """
-    2. Smoothed Density Contour Map (Weather Map).
-    Supports points overlay, variable smoothing, saturation cap, and grid toggle.
-    Supports 'Quarterly' view mode (separated quadrants) vs 'Continuous' (merged).
+    2. Smoothed Density Contour Map.
+    Supports toggling Back Side alignment (Flip vs Raw).
     """
     if df.empty:
         return go.Figure()
@@ -762,51 +768,52 @@ def create_density_contour_map(
     if df_true.empty:
         return go.Figure(layout=dict(title="No True Defects Found"))
 
+    # Determine X Coordinates based on Toggle
+    # Use physical columns if available (from Multi-Layer context)
+    # If not available (single layer view), use plot_x (which is raw)
+    if 'physical_plot_x_flipped' in df_true.columns:
+        x_col = 'physical_plot_x_flipped' if flip_back else 'physical_plot_x_raw'
+        x_data = df_true[x_col]
+    else:
+        # Fallback to standard plot_x (Raw)
+        x_data = df_true['plot_x']
+
     fig = go.Figure()
 
     # 1. Contour Layer
-    # Configure saturation
     zmax = saturation_cap if saturation_cap > 0 else None
 
     # Logic for View Mode
     if view_mode == "Quarterly":
-        # Split data by Quadrant and create 4 separate contour traces
-        # This naturally enforces the gap as no data bridges the gap
-
-        # We need to ensure we have QUADRANT info. 'plot_x' is derived, but 'QUADRANT' col should exist
-        # If not, we might need to recover it or assume standard split
         if 'QUADRANT' in df_true.columns:
             quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
             for q in quadrants:
-                q_df = df_true[df_true['QUADRANT'] == q]
-                if not q_df.empty:
+                q_mask = df_true['QUADRANT'] == q
+                if q_mask.any():
+                     q_x = x_data[q_mask]
+                     q_y = df_true.loc[q_mask, 'plot_y']
+
                      fig.add_trace(go.Histogram2dContour(
-                        x=q_df['plot_x'],
-                        y=q_df['plot_y'],
+                        x=q_x,
+                        y=q_y,
                         colorscale='Turbo',
                         reversescale=False,
                         ncontours=30,
-                        nbinsx=max(5, smoothing_factor // 2), # Reduce smoothing bins for smaller area
+                        nbinsx=max(5, smoothing_factor // 2),
                         nbinsy=max(5, smoothing_factor // 2),
                         zmax=zmax,
-                        contours=dict(coloring='heatmap', showlabels=False), # Hide labels for cleaner look in split
+                        contours=dict(coloring='heatmap', showlabels=False),
                         hoverinfo='x+y+z',
-                        showscale=False # Hide individual scales, we might want one shared?
+                        showscale=False
                      ))
 
-            # Add one dummy invisible trace to show colorbar if needed?
-            # Or just let the last one show it.
-            # Actually, Plotly might duplicate colorbars.
-            # Let's enable showscale only for the last non-empty trace.
-            # (Simplification: Just let them share or hide. Turbo is standard.)
             fig.update_traces(showscale=False)
             if fig.data:
                 fig.data[-1].showscale = True
 
         else:
-             # Fallback if QUADRANT not present
              fig.add_trace(go.Histogram2dContour(
-                x=df_true['plot_x'],
+                x=x_data,
                 y=df_true['plot_y'],
                 colorscale='Turbo',
                 reversescale=False,
@@ -819,9 +826,9 @@ def create_density_contour_map(
             ))
 
     else:
-        # Continuous Mode (Original Behavior)
+        # Continuous Mode
         fig.add_trace(go.Histogram2dContour(
-            x=df_true['plot_x'],
+            x=x_data,
             y=df_true['plot_y'],
             colorscale='Turbo',
             reversescale=False,
@@ -833,15 +840,14 @@ def create_density_contour_map(
             hoverinfo='x+y+z'
         ))
 
-    # 2. Points Overlay (Hybrid View)
+    # 2. Points Overlay
     if show_points:
-        # Re-use trace logic or simple scatter
         fig.add_trace(go.Scatter(
-            x=df_true['plot_x'],
+            x=x_data,
             y=df_true['plot_y'],
             mode='markers',
             marker=dict(color='white', size=3, opacity=0.5),
-            hoverinfo='skip', # Contour has hover
+            hoverinfo='skip',
             name='Defects'
         ))
 

@@ -55,7 +55,9 @@ def render_multi_layer_view(store: SessionStore, selected_layers: list, selected
              combined_df = combined_df[combined_df['Verification'].astype(str).isin(selected_verifs)]
 
     if not combined_df.empty:
-        fig = create_multi_layer_defect_map(combined_df, panel_rows, panel_cols)
+        # Pass the Flip Toggle state
+        flip_back = st.session_state.get("flip_back_side", True)
+        fig = create_multi_layer_defect_map(combined_df, panel_rows, panel_cols, flip_back=flip_back)
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No data matches current filters.")
