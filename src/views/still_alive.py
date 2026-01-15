@@ -149,12 +149,27 @@ def render_still_alive_main(store: SessionStore):
                     alive_units.append({'PHYSICAL_X': c, 'UNIT_INDEX_Y': r})
 
         if alive_units:
+            from src.utils import generate_standard_filename
+
+            # Smart determination of layer context
+            target_layer = None
+            if store.multi_layer_selection and len(store.multi_layer_selection) == 1:
+                target_layer = store.multi_layer_selection[0]
+
+            filename = generate_standard_filename(
+                prefix="PICK_LIST",
+                selected_layer=target_layer,
+                layer_data=store.layer_data,
+                analysis_params=store.analysis_params,
+                extension="csv"
+            )
+
             df_alive = pd.DataFrame(alive_units)
             csv = df_alive.to_csv(index=False).encode('utf-8')
             st.download_button(
                 "📥 Download Pick List",
                 data=csv,
-                file_name="alive_units_picklist.csv",
+                file_name=filename,
                 mime="text/csv",
                 help="CSV list of coordinate pairs (Physical X, Y) for good units."
             )

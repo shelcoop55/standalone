@@ -145,15 +145,20 @@ class ViewManager:
                  valid_selection = [x for x in current_selection if x in ver_options]
                  st.session_state['multi_verification_selection'] = valid_selection
 
-             # Determine default if no state exists yet
-             default_ver = ver_options # Default to all
-
-             st.multiselect(
-                 "Filter Verification Status",
-                 options=ver_options,
-                 default=default_ver,
-                 key="multi_verification_selection"
-             )
+                 st.multiselect(
+                     "Filter Verification Status",
+                     options=ver_options,
+                     key="multi_verification_selection"
+                 )
+             else:
+                 # Determine default if no state exists yet
+                 default_ver = ver_options # Default to all
+                 st.multiselect(
+                     "Filter Verification Status",
+                     options=ver_options,
+                     default=default_ver,
+                     key="multi_verification_selection"
+                 )
 
         # Update Store with Multi-Select for Layer View as well
         # Note: Layer view logic needs to handle list instead of string now
@@ -292,14 +297,20 @@ class ViewManager:
                  valid_selection = [x for x in current_selection if x in all_verifications]
                  st.session_state['multi_verification_selection'] = valid_selection
 
-             default_ver = all_verifications # Default to all
+                 st.multiselect(
+                     "Filter Verification Status",
+                     options=all_verifications,
+                     key="multi_verification_selection"
+                 )
+             else:
+                 default_ver = all_verifications # Default to all
 
-             st.multiselect(
-                 "Filter Verification Status",
-                 options=all_verifications,
-                 default=default_ver,
-                 key="multi_verification_selection"
-             )
+                 st.multiselect(
+                     "Filter Verification Status",
+                     options=all_verifications,
+                     default=default_ver,
+                     key="multi_verification_selection"
+                 )
 
              # Toggle for Back Side Alignment - Show only for Heatmap or Multi-Layer
              # Check current active tab text logic from _render_analysis_page_controls
@@ -524,39 +535,15 @@ class ViewManager:
                 st.success("Package generated successfully!")
 
         if self.store.report_bytes:
-            params_local = self.store.analysis_params
+            from src.utils import generate_standard_filename
 
-            # Construct Dynamic Filename: DEFECT_MAP_LAYER(BU_XX)_PROCESSSTEP_LOTNUMBER
-
-            # 1. Get Layer/BU Name
-            layer_label = f"LAYER_{self.store.selected_layer}"
-            # Try to find BU Name from loaded data if possible (though we don't have easy access to label here without re-looping)
-            # We can use selected_layer which is int.
-            # User example: LAYER(BU_02)
-            # Let's try to grab BU name from the first file of the selected layer if available
-            try:
-                layer_id = self.store.selected_layer
-                first_side = next(iter(self.store.layer_data[layer_id]))
-                src_file = str(self.store.layer_data[layer_id][first_side]['SOURCE_FILE'].iloc[0])
-                bu_part = get_bu_name_from_filename(src_file) # e.g. BU-02
-                if bu_part:
-                    layer_label = f"LAYER_({bu_part})"
-            except:
-                pass # Fallback to LAYER_X
-
-            # 2. Process Step
-            proc_step = params_local.get('process_comment', '').strip()
-            proc_str = f"_{proc_step}" if proc_step else ""
-
-            # 3. Lot Number
-            lot_num = params_local.get('lot_number', '').strip()
-            lot_str = f"_{lot_num}" if lot_num else ""
-
-            # Sanitize filename (replace spaces)
-            base_name = f"DEFECT_MAP_{layer_label}{proc_str}{lot_str}"
-            safe_name = "".join([c if c.isalnum() or c in "._-()" else "_" for c in base_name])
-
-            zip_filename = f"{safe_name}.zip"
+            zip_filename = generate_standard_filename(
+                prefix="DEFECT_MAP",
+                selected_layer=self.store.selected_layer,
+                layer_data=self.store.layer_data,
+                analysis_params=self.store.analysis_params,
+                extension="zip"
+            )
 
             st.download_button(
                 "Download Package (ZIP)",
