@@ -23,16 +23,16 @@ class InsightsTool(AnalysisTool):
         # However, I should respect the selection.
 
         selected_layer_nums = self.store.multi_layer_selection or self.store.layer_data.get_all_layer_nums()
-        side_mode = st.session_state.get("analysis_side_select", "Both")
+        side_pills = st.session_state.get("analysis_side_pills", ["Front", "Back"])
         selected_verifs = st.session_state.get("multi_verification_selection", [])
+        selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
 
         # Collect Data
         dfs = []
         for layer_num in selected_layer_nums:
             sides = []
-            if side_mode == "Front": sides = ['F']
-            elif side_mode == "Back": sides = ['B']
-            else: sides = ['F', 'B']
+            if "Front" in side_pills: sides.append('F')
+            if "Back" in side_pills: sides.append('B')
 
             for s in sides:
                 layer = self.store.layer_data.get_layer(layer_num, s)
@@ -41,9 +41,14 @@ class InsightsTool(AnalysisTool):
 
         if dfs:
             combined_df = pd.concat(dfs, ignore_index=True)
-            # Filter Verif
+
+            # 1. Filter Verif
             if 'Verification' in combined_df.columns and selected_verifs:
                  combined_df = combined_df[combined_df['Verification'].astype(str).isin(selected_verifs)]
+
+            # 2. Filter Quadrant
+            if selected_quadrant != "All" and 'QUADRANT' in combined_df.columns:
+                 combined_df = combined_df[combined_df['QUADRANT'] == selected_quadrant]
 
             if not combined_df.empty:
                 st.caption(f"Analyzing {len(combined_df)} defects from selected context.")

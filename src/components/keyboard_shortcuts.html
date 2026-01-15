@@ -1,0 +1,32 @@
+<script>
+document.addEventListener('keydown', function(e) {
+    // Only active if Alt key is pressed (to avoid conflicts with typing)
+    if (e.altKey) {
+        let buttonText = "";
+
+        switch(e.key.toLowerCase()) {
+            case 'd':
+                buttonText = "Defect View";
+                break;
+            case 's':
+                buttonText = "Summary View";
+                break;
+            case 'p':
+                buttonText = "Pareto View";
+                break;
+            default:
+                return;
+        }
+
+        if (buttonText) {
+            // Find buttons with exact text content match
+            const buttons = Array.from(document.getElementsByTagName('button'));
+            const targetBtn = buttons.find(btn => btn.innerText === buttonText);
+
+            if (targetBtn) {
+                targetBtn.click();
+            }
+        }
+    }
+});
+</script>
