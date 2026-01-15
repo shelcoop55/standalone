@@ -33,7 +33,7 @@ class StressMapTool(AnalysisTool):
         selected_verifs = st.session_state.get("multi_verification_selection", [])
 
         # 3. View Mode
-        view_mode = st.session_state.get("map_view_mode", "Quarterly")
+        view_mode = "Continuous"
 
         # Construct Keys (Layer, Side) based on filters
         keys = []

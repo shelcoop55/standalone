@@ -39,7 +39,7 @@ class HeatmapTool(AnalysisTool):
         saturation = 0 # Removed from context UI, default 0 or add if needed.
 
         # 5. View Mode
-        view_mode = st.session_state.get("map_view_mode", "Quarterly")
+        view_mode = "Continuous"
 
         # --- DATA PREPARATION ---
         dfs_to_concat = []

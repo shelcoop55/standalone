@@ -326,7 +326,23 @@ class ViewManager:
                  key="multi_verification_selection"
              )
 
-        col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+        # Inject CSS for Square Pills
+        st.markdown(
+            """
+            <style>
+            /* Target various possible internal structures for st.pills to ensure Square shape */
+            div[data-testid="stPills"] div[role="option"],
+            div[data-testid="stPills"] button,
+            div[data-testid="stPills"] span,
+            div[data-testid="stPills"] [data-baseweb="tag"] {
+                border-radius: 4px !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        col_f1, col_f2 = st.columns([3, 1])
 
         # Filter 1: Multi-Select Layer (Pills)
         with col_f1:
@@ -368,20 +384,6 @@ class ViewManager:
                  label_visibility="collapsed"
              )
              # Note: 'analysis_side_select' was the old key used by tools. We should update tools to use 'analysis_side_pills'
-
-        # Filter 3: Map View (Quarterly vs Continuous)
-        # Only relevant for Heatmap and Stress Map
-        if current_tab_text in ["Heatmap", "Stress Map"]:
-            with col_f3:
-                st.markdown("**Map View**")
-                st.radio(
-                    "View",
-                    ["Quarterly", "Continuous"],
-                    index=0, # Default Quarterly
-                    horizontal=True,
-                    key="map_view_mode",
-                    label_visibility="collapsed"
-                )
 
         # 3. Context Specific Row
         # current_tab_val is usually derived from state but here it was local variable 'current_tab' in _render_analysis_page_controls
