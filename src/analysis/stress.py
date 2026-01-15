@@ -29,24 +29,18 @@ class StressMapTool(AnalysisTool):
 
         # 2. Filters
         selected_layer_nums = self.store.multi_layer_selection or self.store.layer_data.get_all_layer_nums()
-        side_mode = st.session_state.get("analysis_side_select", "Both")
+        side_selection = st.session_state.get("analysis_side_pills", ["Front", "Back"])
         selected_verifs = st.session_state.get("multi_verification_selection", [])
 
-        # Construct Keys (Layer, Side) based on filters
-        # Note: aggregate_stress_data takes list of (layer_num, side)
-        # It handles filtering defects internally? No, aggregate_stress_data loads raw DF.
-        # We need to filter Verification manually or update aggregate_stress_data to accept filter.
-        # aggregate_stress_data DOES filter "True Defects" based on config, but doesn't take explicit list.
-        # To support "Verification" filter, we might need to pre-filter or modify the aggregator.
-        # Given "aggregate_stress_data" is cached, adding a list arg breaks cache efficiency if list is complex.
+        # 3. View Mode
+        view_mode = st.session_state.get("map_view_mode", "Quarterly")
 
-        # However, for now let's build the list of keys.
+        # Construct Keys (Layer, Side) based on filters
         keys = []
         for layer_num in selected_layer_nums:
             sides_to_process = []
-            if side_mode == "Front": sides_to_process = ['F']
-            elif side_mode == "Back": sides_to_process = ['B']
-            else: sides_to_process = ['F', 'B'] # Both
+            if "Front" in side_selection: sides_to_process.append('F')
+            if "Back" in side_selection: sides_to_process.append('B')
 
             for side in sides_to_process:
                  # Check if exists in data
@@ -54,21 +48,11 @@ class StressMapTool(AnalysisTool):
                      keys.append((layer_num, side))
 
         if mode_new == "Cumulative":
-            # Pass keys. What about Verification filter?
-            # aggregate_stress_data currently strictly filters for SAFE_VERIFICATION_VALUES.
-            # If user selects specific verifications, we need to respect that.
-            # Ideally, we refactor aggregate_stress_data or pre-filter.
-            # Let's trust aggregate_stress_data for now, or minimal refactor if critical.
-            # User requirement: "Filter by Verification List".
-            # The cached function is `aggregate_stress_data`.
-            # I can't easily inject a filter list into it without changing signature.
-            # I will modify `aggregate_stress_data` in data_handler to accept `allowed_verifications`.
-
-            # Temporary: Assume standard true defect logic or modify data_handler.
-            # Plan: I will modify `aggregate_stress_data` in next step if verification filter is vital here.
-            # For now, generate the map based on keys.
-            stress_data = aggregate_stress_data(self.store.layer_data, keys, panel_rows, panel_cols, panel_uid)
-            fig = create_stress_heatmap(stress_data, panel_rows, panel_cols)
+            stress_data = aggregate_stress_data(
+                self.store.layer_data, keys, panel_rows, panel_cols, panel_uid,
+                verification_filter=selected_verifs
+            )
+            fig = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode=view_mode)
 
         else: # Delta
             # Delta Difference logic: "When user have selected Stressmap he will see ... 4th would be Delta DIfference"
@@ -92,10 +76,16 @@ class StressMapTool(AnalysisTool):
             keys_f = [k for k in keys if k[1] == 'F']
             keys_b = [k for k in keys if k[1] == 'B']
 
-            stress_data_a = aggregate_stress_data(self.store.layer_data, keys_f, panel_rows, panel_cols, panel_uid)
-            stress_data_b = aggregate_stress_data(self.store.layer_data, keys_b, panel_rows, panel_cols, panel_uid)
+            stress_data_a = aggregate_stress_data(
+                self.store.layer_data, keys_f, panel_rows, panel_cols, panel_uid,
+                verification_filter=selected_verifs
+            )
+            stress_data_b = aggregate_stress_data(
+                self.store.layer_data, keys_b, panel_rows, panel_cols, panel_uid,
+                verification_filter=selected_verifs
+            )
 
             st.info("Delta Difference Mode: Calculating (Front Side - Back Side) for selected layers.")
-            fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols)
+            fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols, view_mode=view_mode)
 
         st.plotly_chart(fig, use_container_width=True)

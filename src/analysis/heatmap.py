@@ -25,9 +25,9 @@ class HeatmapTool(AnalysisTool):
         # manager.py stores this in self.store.multi_layer_selection (List[int])
         selected_layer_nums = self.store.multi_layer_selection or self.store.layer_data.get_all_layer_nums()
 
-        # 2. Side (Radio: Front, Back, Both)
-        # manager.py stores key "analysis_side_select" in session state.
-        side_mode = st.session_state.get("analysis_side_select", "Both")
+        # 2. Side (Pills: List of selected sides)
+        # manager.py stores key "analysis_side_pills" in session state (List[str]).
+        side_selection = st.session_state.get("analysis_side_pills", ["Front", "Back"])
 
         # 3. Verification
         # manager.py stores in key "multi_verification_selection"
@@ -38,6 +38,9 @@ class HeatmapTool(AnalysisTool):
         smoothing = st.session_state.get("heatmap_sigma", 5) # Slider from manager.py
         saturation = 0 # Removed from context UI, default 0 or add if needed.
 
+        # 5. View Mode
+        view_mode = st.session_state.get("map_view_mode", "Quarterly")
+
         # --- DATA PREPARATION ---
         dfs_to_concat = []
 
@@ -45,9 +48,8 @@ class HeatmapTool(AnalysisTool):
             layer_dict = self.store.layer_data.get(layer_num, {})
 
             sides_to_process = []
-            if side_mode == "Front": sides_to_process = ['F']
-            elif side_mode == "Back": sides_to_process = ['B']
-            else: sides_to_process = ['F', 'B'] # Both
+            if "Front" in side_selection: sides_to_process.append('F')
+            if "Back" in side_selection: sides_to_process.append('B')
 
             for side in sides_to_process:
                 if side in layer_dict:
@@ -72,7 +74,8 @@ class HeatmapTool(AnalysisTool):
                 show_points=False,
                 smoothing_factor=smoothing * 5, # Scale slider 1-20 to meaningful param
                 saturation_cap=saturation,
-                show_grid=False
+                show_grid=False,
+                view_mode=view_mode
             )
             st.plotly_chart(contour_fig, use_container_width=True)
         else:

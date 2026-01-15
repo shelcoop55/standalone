@@ -326,38 +326,74 @@ class ViewManager:
                  key="multi_verification_selection"
              )
 
-        col_f1, col_f2 = st.columns([2, 1])
+        col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
 
-        # Filter 1: Multi-Select Layer
+        # Filter 1: Multi-Select Layer (Pills)
         with col_f1:
-             st.multiselect(
-                 "Select Layers",
-                 options=all_layers,
-                 default=self.store.multi_layer_selection if self.store.multi_layer_selection else all_layers,
-                 key="analysis_layer_select",
-                 on_change=lambda: setattr(self.store, 'multi_layer_selection', st.session_state.analysis_layer_select)
-             )
+            st.markdown("**Select Layers**")
+            # Determine default selection (All)
+            default_layers = self.store.multi_layer_selection if self.store.multi_layer_selection else all_layers
 
-        # Filter 2: Side Radio (Front/Back) - MOVED to Middle as requested
+            selection = st.pills(
+                "Layers",
+                options=all_layers,
+                default=default_layers,
+                selection_mode="multi",
+                key="analysis_layer_select",
+                label_visibility="collapsed"
+            )
+            # Update store immediately (though st.pills updates session state key)
+            self.store.multi_layer_selection = selection
+
+        # Filter 2: Side Selection (Multi-Select Pills)
         with col_f2:
-             st.radio(
+             st.markdown("**Side**")
+             side_opts = ["Front", "Back"]
+             # Logic to maintain side selection state or default to Both
+             # Currently we used "Both" string. Now we use list ['Front', 'Back']
+             # Check if session state exists and is list, else default
+
+             # We need to map old "Both" string to list if necessary, or just init fresh
+             default_sides = side_opts # Default Both
+             if 'analysis_side_pills' in st.session_state:
+                 # It persists
+                 pass
+
+             side_selection = st.pills(
                  "Side",
-                 ["Front", "Back", "Both"],
-                 index=2, # Default Both
-                 horizontal=True,
-                 key="analysis_side_select"
+                 side_opts,
+                 default=default_sides,
+                 selection_mode="multi",
+                 key="analysis_side_pills",
+                 label_visibility="collapsed"
              )
+             # Note: 'analysis_side_select' was the old key used by tools. We should update tools to use 'analysis_side_pills'
+
+        # Filter 3: Map View (Quarterly vs Continuous)
+        # Only relevant for Heatmap and Stress Map
+        if current_tab_text in ["Heatmap", "Stress Map"]:
+            with col_f3:
+                st.markdown("**Map View**")
+                st.radio(
+                    "View",
+                    ["Quarterly", "Continuous"],
+                    index=0, # Default Quarterly
+                    horizontal=True,
+                    key="map_view_mode",
+                    label_visibility="collapsed"
+                )
 
         # 3. Context Specific Row
-        current_tab_val = current_tab
+        # current_tab_val is usually derived from state but here it was local variable 'current_tab' in _render_analysis_page_controls
+        # Ensure we use the correct variable name
 
-        if current_tab_val == "Heatmap":
+        if current_tab_text == "Heatmap":
              st.slider("Smoothing (Sigma)", min_value=1, max_value=20, value=5, key="heatmap_sigma")
 
-        elif current_tab_val == "Stress Map":
+        elif current_tab_text == "Stress Map":
              st.radio("Mode", ["Cumulative", "Delta Difference"], horizontal=True, key="stress_map_mode")
 
-        elif current_tab_val == "Root Cause":
+        elif current_tab_text == "Root Cause":
              c1, c2 = st.columns(2)
              with c1:
                  st.radio("Slice Axis", ["X (Column)", "Y (Row)"], horizontal=True, key="rca_axis")

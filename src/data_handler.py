@@ -333,7 +333,8 @@ def aggregate_stress_data(
     selected_keys: List[Tuple[int, str]],
     panel_rows: int,
     panel_cols: int,
-    panel_uid: str = ""
+    panel_uid: str = "",
+    verification_filter: Optional[List[str]] = None
 ) -> StressMapData:
     """
     Aggregates data for the Cumulative Stress Map using specific (Layer, Side) keys.
@@ -363,10 +364,14 @@ def aggregate_stress_data(
 
     combined_df = pd.concat(dfs_to_agg, ignore_index=True)
 
-    # Filter True Defects
+    # Filter True Defects (Standard)
     if 'Verification' in combined_df.columns:
         is_true = ~combined_df['Verification'].astype(str).str.upper().isin(safe_values_upper)
         combined_df = combined_df[is_true]
+
+    # Filter by Specific Selection (if provided)
+    if verification_filter and 'Verification' in combined_df.columns and not combined_df.empty:
+        combined_df = combined_df[combined_df['Verification'].astype(str).isin(verification_filter)]
 
     if combined_df.empty:
          return StressMapData(grid_counts, hover_text, 0, 0)

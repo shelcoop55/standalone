@@ -741,11 +741,13 @@ def create_density_contour_map(
     show_points: bool = False,
     smoothing_factor: int = 30,
     saturation_cap: int = 0,
-    show_grid: bool = True
+    show_grid: bool = True,
+    view_mode: str = "Continuous"
 ) -> go.Figure:
     """
     2. Smoothed Density Contour Map (Weather Map).
     Supports points overlay, variable smoothing, saturation cap, and grid toggle.
+    Supports 'Quarterly' view mode (separated quadrants) vs 'Continuous' (merged).
     """
     if df.empty:
         return go.Figure()
@@ -766,18 +768,70 @@ def create_density_contour_map(
     # Configure saturation
     zmax = saturation_cap if saturation_cap > 0 else None
 
-    fig.add_trace(go.Histogram2dContour(
-        x=df_true['plot_x'],
-        y=df_true['plot_y'],
-        colorscale='Turbo', # Vibrant, engineering style
-        reversescale=False,
-        ncontours=30,
-        nbinsx=smoothing_factor, # Adjustable smoothing
-        nbinsy=smoothing_factor,
-        zmax=zmax,
-        contours=dict(coloring='heatmap', showlabels=True, labelfont=dict(color='white')),
-        hoverinfo='x+y+z'
-    ))
+    # Logic for View Mode
+    if view_mode == "Quarterly":
+        # Split data by Quadrant and create 4 separate contour traces
+        # This naturally enforces the gap as no data bridges the gap
+
+        # We need to ensure we have QUADRANT info. 'plot_x' is derived, but 'QUADRANT' col should exist
+        # If not, we might need to recover it or assume standard split
+        if 'QUADRANT' in df_true.columns:
+            quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
+            for q in quadrants:
+                q_df = df_true[df_true['QUADRANT'] == q]
+                if not q_df.empty:
+                     fig.add_trace(go.Histogram2dContour(
+                        x=q_df['plot_x'],
+                        y=q_df['plot_y'],
+                        colorscale='Turbo',
+                        reversescale=False,
+                        ncontours=30,
+                        nbinsx=max(5, smoothing_factor // 2), # Reduce smoothing bins for smaller area
+                        nbinsy=max(5, smoothing_factor // 2),
+                        zmax=zmax,
+                        contours=dict(coloring='heatmap', showlabels=False), # Hide labels for cleaner look in split
+                        hoverinfo='x+y+z',
+                        showscale=False # Hide individual scales, we might want one shared?
+                     ))
+
+            # Add one dummy invisible trace to show colorbar if needed?
+            # Or just let the last one show it.
+            # Actually, Plotly might duplicate colorbars.
+            # Let's enable showscale only for the last non-empty trace.
+            # (Simplification: Just let them share or hide. Turbo is standard.)
+            fig.update_traces(showscale=False)
+            if fig.data:
+                fig.data[-1].showscale = True
+
+        else:
+             # Fallback if QUADRANT not present
+             fig.add_trace(go.Histogram2dContour(
+                x=df_true['plot_x'],
+                y=df_true['plot_y'],
+                colorscale='Turbo',
+                reversescale=False,
+                ncontours=30,
+                nbinsx=smoothing_factor,
+                nbinsy=smoothing_factor,
+                zmax=zmax,
+                contours=dict(coloring='heatmap', showlabels=True, labelfont=dict(color='white')),
+                hoverinfo='x+y+z'
+            ))
+
+    else:
+        # Continuous Mode (Original Behavior)
+        fig.add_trace(go.Histogram2dContour(
+            x=df_true['plot_x'],
+            y=df_true['plot_y'],
+            colorscale='Turbo',
+            reversescale=False,
+            ncontours=30,
+            nbinsx=smoothing_factor,
+            nbinsy=smoothing_factor,
+            zmax=zmax,
+            contours=dict(coloring='heatmap', showlabels=True, labelfont=dict(color='white')),
+            hoverinfo='x+y+z'
+        ))
 
     # 2. Points Overlay (Hybrid View)
     if show_points:
@@ -907,9 +961,10 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
 
     return fig
 
-def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int) -> go.Figure:
+def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int, view_mode: str = "Continuous") -> go.Figure:
     """
     Creates the Cumulative Stress Heatmap with defect counts in cells.
+    Supports 'Quarterly' view mode by injecting NaNs or splitting.
     """
     if data.total_defects == 0:
         return go.Figure(layout=dict(
@@ -917,85 +972,200 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int)
             paper_bgcolor=BACKGROUND_COLOR, plot_bgcolor=PLOT_AREA_COLOR
         ))
 
-    # Mask zero values so they appear empty/background color
     z_data = data.grid_counts.astype(float)
-    z_data[z_data == 0] = np.nan
-
     text_data = data.grid_counts.astype(str)
-    text_data[data.grid_counts == 0] = ""
+    hover_text = data.hover_text
 
-    fig = go.Figure(data=go.Heatmap(
-        z=z_data,
-        text=text_data,
-        texttemplate="%{text}",
-        textfont={"color": "white"}, # Or smart contrast if needed
-        colorscale='Magma',
-        xgap=2, ygap=2,
-        hovertext=data.hover_text,
-        hoverinfo="text",
-        colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
-    ))
+    # Process for View Mode
+    if view_mode == "Quarterly":
+        # Insert Gaps by modifying z_data, text_data, and hover_text?
+        # A heatmap trace relies on x, y coords or implied grid.
+        # Implied grid: The array shape determines layout.
+        # If we insert rows/cols, we change the axes.
+        # Alternatively, we can use 4 traces, one for each quadrant, shifted by GAP_SIZE.
 
-    total_cols = panel_cols * 2
-    total_rows = panel_rows * 2
+        # But wait, StressMapData is aggregated on a global grid (0..total_cols-1).
+        # This grid assumes NO GAPS in indexing.
+        # If we want to show gaps visually using physical coordinates, we need to map indices to coordinates.
+
+        # Let's map grid indices (col, row) to physical coordinates (x, y) accounting for GAP.
+        # Generate X, Y arrays matching z_data shape
+
+        rows, cols = z_data.shape
+        # Expect rows = panel_rows*2, cols = panel_cols*2
+
+        # Create meshgrid of coordinates
+        x_coords = np.zeros((rows, cols))
+        y_coords = np.zeros((rows, cols))
+
+        cell_width = QUADRANT_WIDTH / panel_cols
+        cell_height = QUADRANT_HEIGHT / panel_rows
+
+        for r in range(rows):
+            for c in range(cols):
+                # Determine Quadrant Logic for Gap
+                # Columns: 0..panel_cols-1 (Q1/Q3), panel_cols..end (Q2/Q4)
+                # Rows: 0..panel_rows-1 (Q1/Q2), panel_rows..end (Q3/Q4)
+
+                # Careful: Grid indexing (0,0) is usually top-left or bottom-left depending on plot?
+                # Plotly Heatmap default: (0,0) is bottom-left if y is numerical.
+                # data_handler.aggregate_stress_data uses:
+                # grid[y, x] += 1. And indices are 0-based.
+                # Assuming standard matrix visualization.
+
+                # Calculate Physical X
+                gap_x = GAP_SIZE if c >= panel_cols else 0
+                x_pos = (c * cell_width) + (cell_width/2) + gap_x
+
+                # Calculate Physical Y
+                gap_y = GAP_SIZE if r >= panel_rows else 0
+                y_pos = (r * cell_height) + (cell_height/2) + gap_y
+
+                x_coords[r, c] = x_pos
+                y_coords[r, c] = y_pos
+
+        # Now pass x and y to Heatmap. Plotly handles the spacing.
+        # Mask zeros
+        z_data[z_data == 0] = np.nan
+        text_data[data.grid_counts == 0] = ""
+
+        fig = go.Figure(data=go.Heatmap(
+            x=x_coords[0, :], # The X coordinates of the columns
+            y=y_coords[:, 0], # The Y coordinates of the rows
+            z=z_data,
+            text=text_data,
+            texttemplate="%{text}",
+            textfont={"color": "white"},
+            colorscale='Magma',
+            xgap=2, ygap=2,
+            hovertext=hover_text,
+            hoverinfo="text",
+            colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+        ))
+
+        # Add Grid Shapes for Quarterly view
+        fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
+
+        # Ranges
+        max_x = PANEL_WIDTH + GAP_SIZE*2
+        max_y = PANEL_HEIGHT + GAP_SIZE*2
+
+        fig.update_layout(
+            xaxis=dict(title="Physical X", range=[-GAP_SIZE, max_x], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[-GAP_SIZE, max_y], showticklabels=False)
+        )
+
+    else:
+        # Continuous Mode (Indices)
+        z_data[z_data == 0] = np.nan
+        text_data[data.grid_counts == 0] = ""
+
+        fig = go.Figure(data=go.Heatmap(
+            z=z_data,
+            text=text_data,
+            texttemplate="%{text}",
+            textfont={"color": "white"}, # Or smart contrast if needed
+            colorscale='Magma',
+            xgap=2, ygap=2,
+            hovertext=data.hover_text,
+            hoverinfo="text",
+            colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+        ))
+
+        total_cols = panel_cols * 2
+        total_rows = panel_rows * 2
+
+        fig.update_layout(
+            xaxis=dict(
+                title="Unit Index X",
+                tickmode='linear', dtick=1,
+                range=[-0.5, total_cols - 0.5],
+                constrain='domain'
+            ),
+            yaxis=dict(
+                title="Unit Index Y",
+                tickmode='linear', dtick=1,
+                range=[-0.5, total_rows - 0.5]
+            )
+        )
 
     apply_panel_theme(fig, "Cumulative Stress Map (Total Defects per Unit)", height=700)
-
-    fig.update_layout(
-        xaxis=dict(
-            title="Unit Index X",
-            tickmode='linear', dtick=1,
-            range=[-0.5, total_cols - 0.5],
-            constrain='domain'
-        ),
-        yaxis=dict(
-            title="Unit Index Y",
-            tickmode='linear', dtick=1,
-            range=[-0.5, total_rows - 0.5]
-        )
-    )
     return fig
 
-def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_rows: int, panel_cols: int) -> go.Figure:
+def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_rows: int, panel_cols: int, view_mode: str = "Continuous") -> go.Figure:
     """
     Creates a Delta Heatmap (Group A - Group B).
     """
     diff_grid = data_a.grid_counts.astype(float) - data_b.grid_counts.astype(float)
-
     # Text: Show signed difference
     text_data = np.array([f"{int(x):+d}" if x != 0 else "" for x in diff_grid.flatten()]).reshape(diff_grid.shape)
-
-    # Mask zeros for visual clarity
     diff_grid[diff_grid == 0] = np.nan
 
-    fig = go.Figure(data=go.Heatmap(
-        z=diff_grid,
-        text=text_data,
-        texttemplate="%{text}",
-        colorscale='RdBu_r', # Red for positive (more in A), Blue for negative (more in B)
-        zmid=0,
-        xgap=2, ygap=2,
-        colorbar=dict(title='Delta (A - B)', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
-    ))
+    if view_mode == "Quarterly":
+        rows, cols = diff_grid.shape
+        cell_width = QUADRANT_WIDTH / panel_cols
+        cell_height = QUADRANT_HEIGHT / panel_rows
 
-    total_cols = panel_cols * 2
-    total_rows = panel_rows * 2
+        # Calculate coords with gaps
+        x_vals = []
+        for c in range(cols):
+            gap_x = GAP_SIZE if c >= panel_cols else 0
+            x_vals.append((c * cell_width) + (cell_width/2) + gap_x)
+
+        y_vals = []
+        for r in range(rows):
+            gap_y = GAP_SIZE if r >= panel_rows else 0
+            y_vals.append((r * cell_height) + (cell_height/2) + gap_y)
+
+        fig = go.Figure(data=go.Heatmap(
+            x=x_vals,
+            y=y_vals,
+            z=diff_grid,
+            text=text_data,
+            texttemplate="%{text}",
+            colorscale='RdBu_r',
+            zmid=0,
+            xgap=2, ygap=2,
+            colorbar=dict(title='Delta (A - B)', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+        ))
+
+        fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
+        max_x = PANEL_WIDTH + GAP_SIZE*2
+        max_y = PANEL_HEIGHT + GAP_SIZE*2
+
+        fig.update_layout(
+            xaxis=dict(title="Physical X", range=[-GAP_SIZE, max_x], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[-GAP_SIZE, max_y], showticklabels=False)
+        )
+
+    else:
+        fig = go.Figure(data=go.Heatmap(
+            z=diff_grid,
+            text=text_data,
+            texttemplate="%{text}",
+            colorscale='RdBu_r', # Red for positive (more in A), Blue for negative (more in B)
+            zmid=0,
+            xgap=2, ygap=2,
+            colorbar=dict(title='Delta (A - B)', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
+        ))
+
+        total_cols = panel_cols * 2
+        total_rows = panel_rows * 2
+        fig.update_layout(
+            xaxis=dict(
+                title="Unit Index X",
+                tickmode='linear', dtick=1,
+                range=[-0.5, total_cols - 0.5],
+                constrain='domain'
+            ),
+            yaxis=dict(
+                title="Unit Index Y",
+                tickmode='linear', dtick=1,
+                range=[-0.5, total_rows - 0.5]
+            )
+        )
 
     apply_panel_theme(fig, "Delta Stress Map (Group A - Group B)", height=700)
-
-    fig.update_layout(
-        xaxis=dict(
-            title="Unit Index X",
-            tickmode='linear', dtick=1,
-            range=[-0.5, total_cols - 0.5],
-            constrain='domain'
-        ),
-        yaxis=dict(
-            title="Unit Index Y",
-            tickmode='linear', dtick=1,
-            range=[-0.5, total_rows - 0.5]
-        )
-    )
     return fig
 
 def create_cross_section_heatmap(
