@@ -113,16 +113,25 @@ def main() -> None:
                 }
                 store.report_bytes = None
 
-            st.form_submit_button("🚀 Run Analysis", on_click=on_run_analysis)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.form_submit_button("🚀 Run Analysis", on_click=on_run_analysis)
 
-        st.divider()
+            with c2:
+                # Reset Button logic integrated into the form area (but form_submit_button is primary action)
+                # Since we cannot put a standard button inside a form that triggers a rerun cleanly without submitting the form,
+                # we will use another form_submit_button or place it outside if strictly required.
+                # However, user asked "inside Data Source & Configuration".
+                # Standard st.button inside a form behaves as a submit button.
 
-        # --- Sidebar Reporting ---
+                def on_reset():
+                    store.clear_all()
+                    # Clear uploaded files in session state widget
+                    if "uploaded_files" in st.session_state:
+                         st.session_state["uploaded_files"] = []
+                    # Rerun will happen automatically after callback
 
-        if store.layer_data:
-            if st.button("🔄 Reset Analysis", type="secondary", help="Clears all loaded data and resets the tool."):
-                store.clear_all()
-                st.rerun()
+                st.form_submit_button("🔄 Reset", on_click=on_reset, type="secondary")
 
     # --- Main Content Area ---
     # Header removed to save space

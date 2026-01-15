@@ -69,5 +69,5 @@ body, h2, h3, .stRadio, .stSelectbox, .stNumberInput {
 
 /* Reduce top padding for main container */
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 3rem !important; /* Increased from 1rem to 3rem per user request */
 }

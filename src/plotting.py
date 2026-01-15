@@ -925,6 +925,14 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
     labels.append(f"Total<br>{total_count}")
     parents.append("")
     values.append(total_count)
+    # Root needs hover text too (or defaults)
+
+    # Prepare detailed hover info
+    # Format: Type/Status | Count | % of Parent | % of Total
+    custom_data = [] # Stores [Label, Count, Pct Parent, Pct Total]
+
+    # Root custom data
+    custom_data.append(["Total", total_count, "100%", "100%"])
 
     # Level 1: Defect Type
     for dtype in grouped['DEFECT_TYPE'].unique():
@@ -933,6 +941,9 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
         labels.append(dtype)
         parents.append("Total")
         values.append(dtype_count)
+
+        pct_total = (dtype_count / total_count) * 100
+        custom_data.append([dtype, dtype_count, f"{pct_total:.1f}%", f"{pct_total:.1f}%"])
 
         # Level 2: Verification (if exists)
         if has_verification:
@@ -944,19 +955,55 @@ def create_defect_sunburst(df: pd.DataFrame) -> go.Figure:
                 parents.append(f"{dtype}")
                 values.append(ver_count)
 
+                pct_parent = (ver_count / dtype_count) * 100
+                pct_total_ver = (ver_count / total_count) * 100
+                custom_data.append([ver, ver_count, f"{pct_parent:.1f}%", f"{pct_total_ver:.1f}%"])
+
     fig = go.Figure(go.Sunburst(
         ids=ids,
         labels=labels,
         parents=parents,
         values=values,
-        branchvalues="total"
+        branchvalues="total",
+        customdata=custom_data,
+        hovertemplate="<b>%{customdata[0]}</b><br>Count: %{customdata[1]}<br>% of Layer: %{customdata[2]}<br>% of Total: %{customdata[3]}<extra></extra>"
     ))
-    # IMPROVEMENT: Fix "Black and White" export by setting dark theme colors
+
+    # IMPROVEMENT: Fix "Black and White" export by setting dark theme colors explicit in layout
+    # Also add a dummy legend for Verification status colors if possible
+
+    # Manually add legend traces for Verification statuses
+    if has_verification:
+        # Define standard colors for verification
+        # Assuming Sunburst assigns colors automatically, we can't easily sync them without explicit color mapping.
+        # But we can add a legend explaining the statuses generally.
+        safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+        unique_verifs = sorted(grouped['Verification'].unique())
+
+        for ver in unique_verifs:
+            # We don't control the sunburst segment color easily here (it inherits or cycles)
+            # unless we map every ID to a color.
+            # But we can add invisible scatter traces to generate a legend.
+
+            # Simple color logic for legend: Green for Safe, Red for Defect
+            leg_color = VERIFICATION_COLOR_SAFE if ver.upper() in safe_values_upper else VERIFICATION_COLOR_DEFECT
+
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None],
+                mode='markers',
+                marker=dict(size=10, color=leg_color),
+                legendgroup='Verification',
+                showlegend=True,
+                name=ver
+            ))
+
     fig.update_layout(
         margin=dict(t=0, l=0, r=0, b=0),
         height=500,
         paper_bgcolor=BACKGROUND_COLOR,
-        font=dict(color=TEXT_COLOR)
+        plot_bgcolor=BACKGROUND_COLOR, # Ensure plot area is also dark/colored
+        font=dict(color=TEXT_COLOR),
+        legend=dict(title="Verification Status", x=1, y=1)
     )
 
     return fig

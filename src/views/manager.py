@@ -469,6 +469,11 @@ class ViewManager:
             st.markdown("*(Optional) Include static images for offline viewing.*")
             include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", value=False)
             include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False)
+            st.markdown("##### Additional Analysis Charts")
+            include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False)
+            include_stress_png = st.checkbox("Stress Map (PNG)", value=False)
+            include_root_cause_png = st.checkbox("Root Cause (PNG)", value=False)
+            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False)
 
         st.markdown("---")
 
@@ -491,6 +496,10 @@ class ViewManager:
                     include_insights=include_insights,
                     include_png_all_layers=include_png_all,
                     include_pareto_png=include_pareto_png,
+                    include_heatmap_png=include_heatmap_png,
+                    include_stress_png=include_stress_png,
+                    include_root_cause_png=include_root_cause_png,
+                    include_still_alive_png=include_still_alive_png,
                     layer_data=self.store.layer_data
                 )
                 st.success("Package generated successfully!")
