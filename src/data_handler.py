@@ -339,7 +339,8 @@ def aggregate_stress_data(
     panel_rows: int,
     panel_cols: int,
     panel_uid: str = "",
-    verification_filter: Optional[List[str]] = None
+    verification_filter: Optional[List[str]] = None,
+    quadrant_filter: str = "All"
 ) -> StressMapData:
     """
     Aggregates data for the Cumulative Stress Map using specific (Layer, Side) keys.
@@ -377,6 +378,10 @@ def aggregate_stress_data(
     # Filter by Specific Selection (if provided)
     if verification_filter and 'Verification' in combined_df.columns and not combined_df.empty:
         combined_df = combined_df[combined_df['Verification'].astype(str).isin(verification_filter)]
+
+    # Filter by Quadrant (if provided)
+    if quadrant_filter != "All" and 'QUADRANT' in combined_df.columns and not combined_df.empty:
+        combined_df = combined_df[combined_df['QUADRANT'] == quadrant_filter]
 
     if combined_df.empty:
          return StressMapData(grid_counts, hover_text, 0, 0)

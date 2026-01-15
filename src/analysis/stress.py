@@ -35,6 +35,9 @@ class StressMapTool(AnalysisTool):
         # 3. View Mode
         view_mode = "Continuous"
 
+        # 4. Quadrant Filter
+        selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
+
         # Construct Keys (Layer, Side) based on filters
         keys = []
         for layer_num in selected_layer_nums:
@@ -50,39 +53,25 @@ class StressMapTool(AnalysisTool):
         if mode_new == "Cumulative":
             stress_data = aggregate_stress_data(
                 self.store.layer_data, keys, panel_rows, panel_cols, panel_uid,
-                verification_filter=selected_verifs
+                verification_filter=selected_verifs,
+                quadrant_filter=selected_quadrant
             )
             fig = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode=view_mode)
 
         else: # Delta
-            # Delta Difference logic: "When user have selected Stressmap he will see ... 4th would be Delta DIfference"
-            # How do we define Group A vs Group B with the unified filters?
-            # The unified filter row (Layer/Verif/Side) applies globally.
-            # It doesn't allow selecting TWO groups.
-            # User Prompt: "When user will have selected Stressmap he will see First two and third one would be Cummulative and 4th would be Delta DIfference"
-            # It implies radio button [Cumulative, Delta].
-            # But if "Delta" is selected, WHERE does he select Group A and Group B?
-            # The prompt says "Below this We will have Filter tabs First two will be used in all Layer Selection List -> Verification List".
-            # It doesn't mention separate Group selectors for Delta.
-            # Assumption: Delta might be "Front vs Back" (Side Bias)?
-            # OR logic is needed to split the selection.
-            # If the user interface doesn't provide A/B selectors, I can defaults to:
-            # Group A = Selected Layers/Side
-            # Group B = ...?
-            # Or maybe Delta means Front - Back of selection?
-            # Given the constraint, I will implement "Front vs Back" Difference for the selected layers if Delta is chosen.
-            # This is a reasonable interpretation if no explicit Group A/B selectors are requested in the new UI.
-
+            # Delta Difference logic: "Front vs Back" for selected layers
             keys_f = [k for k in keys if k[1] == 'F']
             keys_b = [k for k in keys if k[1] == 'B']
 
             stress_data_a = aggregate_stress_data(
                 self.store.layer_data, keys_f, panel_rows, panel_cols, panel_uid,
-                verification_filter=selected_verifs
+                verification_filter=selected_verifs,
+                quadrant_filter=selected_quadrant
             )
             stress_data_b = aggregate_stress_data(
                 self.store.layer_data, keys_b, panel_rows, panel_cols, panel_uid,
-                verification_filter=selected_verifs
+                verification_filter=selected_verifs,
+                quadrant_filter=selected_quadrant
             )
 
             st.info("Delta Difference Mode: Calculating (Front Side - Back Side) for selected layers.")
