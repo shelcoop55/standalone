@@ -9,6 +9,7 @@ from src.views.multi_layer import render_multi_layer_view
 from src.views.layer_view import render_layer_view
 from src.documentation import render_documentation
 from src.analysis import get_analysis_tool
+import streamlit.components.v1 as components
 
 class ViewManager:
     """
@@ -19,6 +20,10 @@ class ViewManager:
         self.store = store
 
     def render_navigation(self):
+        # Inject Keyboard Shortcuts
+        with open("src/components/keyboard_shortcuts.html", "r") as f:
+            components.html(f.read(), height=0, width=0)
+
         """
         Renders the top navigation controls.
         Specific logic for 'Layer Inspection' view where we show Layer/Side/Quadrant/Verification controls.
@@ -352,7 +357,7 @@ class ViewManager:
         st.divider()
 
         # --- ROW 2: ANALYSIS MODULES (Tabs) ---
-        tabs = ["Heatmap", "Stress Map", "Root Cause", "Insights", "Still Alive", "Multi-Layer", "Documentation"]
+        tabs = ["Still Alive", "Heatmap", "Stress Map", "Root Cause", "Insights", "Multi-Layer", "Documentation"]
 
         # Logic to determine active tab text
         current_tab_text = "Heatmap"
