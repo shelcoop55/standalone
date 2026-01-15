@@ -425,62 +425,81 @@ def create_still_alive_map(
     panel_rows: int,
     panel_cols: int,
     true_defect_data: Dict[Tuple[int, int], Dict[str, Any]]
-) -> List[go.Heatmap]:
+) -> Tuple[List[Dict[str, Any]], List[go.Scatter]]:
     """
-    Creates a Heatmap trace for the 'Still Alive' map.
-    Replaces thousands of shape objects with a single efficient Heatmap trace.
+    Creates the shapes for the 'Still Alive' map AND invisible scatter points for tooltips.
+    Reverted to shape-based implementation for visual fidelity as requested.
+
+    Returns:
+        (shapes, traces)
     """
+    shapes = []
+    traces = []
+
     total_cols, total_rows = panel_cols * 2, panel_rows * 2
+    all_origins = {'Q1': (0, 0), 'Q2': (QUADRANT_WIDTH + GAP_SIZE, 0), 'Q3': (0, QUADRANT_HEIGHT + GAP_SIZE), 'Q4': (QUADRANT_WIDTH + GAP_SIZE, QUADRANT_HEIGHT + GAP_SIZE)}
+    cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
 
-    # Initialize Grids
-    # 0 = Alive (Green), 1 = Dead (Red)
-    z_grid = np.zeros((total_rows, total_cols), dtype=int)
-    hover_text = np.full((total_rows, total_cols), "Status: <b>Alive</b>", dtype=object)
+    # Prepare lists for scatter trace (Tooltips)
+    hover_x = []
+    hover_y = []
+    hover_text = []
+    hover_colors = []
 
-    if true_defect_data:
-        for (col, row), metadata in true_defect_data.items():
-            if 0 <= col < total_cols and 0 <= row < total_rows:
-                z_grid[row, col] = 1 # Dead
+    # 1. Draw the colored cells first (without borders)
+    for row in range(total_rows):
+        for col in range(total_cols):
+            quadrant_col, local_col = divmod(col, panel_cols)
+            quadrant_row, local_row = divmod(row, panel_rows)
+            quad_key = f"Q{quadrant_row * 2 + quadrant_col + 1}"
+            x_origin, y_origin = all_origins[quad_key]
+            x0, y0 = x_origin + local_col * cell_width, y_origin + local_row * cell_height
 
-                first_killer = metadata.get('first_killer_layer', 'Unknown')
-                summary = metadata.get('defect_summary', '')
+            # Determine status
+            is_dead = (col, row) in true_defect_data
+
+            if is_dead:
+                metadata = true_defect_data[(col, row)]
+                first_killer = metadata['first_killer_layer']
+
+                # Color logic: Revert to binary RED for all defects
+                fill_color = DEFECTIVE_CELL_COLOR
+
+                # Add to hover data (Keep Autopsy Tooltip)
+                center_x = x0 + cell_width/2
+                center_y = y0 + cell_height/2
+                hover_x.append(center_x)
+                hover_y.append(center_y)
 
                 tooltip = (
                     f"<b>Unit: ({col}, {row})</b><br>"
-                    f"Status: <b>Defective</b><br>"
                     f"First Killer: Layer {first_killer}<br>"
-                    f"Details: {summary}"
+                    f"Details: {metadata['defect_summary']}"
                 )
-                hover_text[row, col] = tooltip
+                hover_text.append(tooltip)
+                # Hover dots should also match the cell color (Red) to be invisible
+                hover_colors.append(fill_color)
 
-    # Vectorized Coordinate Calculation
-    cell_width = QUADRANT_WIDTH / panel_cols
-    cell_height = QUADRANT_HEIGHT / panel_rows
+            else:
+                fill_color = ALIVE_CELL_COLOR
 
-    col_indices = np.arange(total_cols)
-    row_indices = np.arange(total_rows)
+            shapes.append({'type': 'rect', 'x0': x0, 'y0': y0, 'x1': x0 + cell_width, 'y1': y0 + cell_height, 'fillcolor': fill_color, 'line': {'width': 0}, 'layer': 'below'})
 
-    # Apply Gaps
-    x_gaps = np.where(col_indices >= panel_cols, GAP_SIZE, 0)
-    y_gaps = np.where(row_indices >= panel_rows, GAP_SIZE, 0)
+    # 2. Draw grid lines over the colored cells
+    shapes.extend(create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
 
-    # 1D Coordinates (Heatmap accepts 1D arrays for X and Y)
-    x_coords = (col_indices * cell_width) + (cell_width / 2) + x_gaps
-    y_coords = (row_indices * cell_height) + (cell_height / 2) + y_gaps
+    # 3. Create Scatter Trace for Hover
+    if hover_x:
+        traces.append(go.Scatter(
+            x=hover_x,
+            y=hover_y,
+            mode='markers',
+            marker=dict(size=0, color=hover_colors, opacity=0), # Invisible markers
+            text=hover_text,
+            hoverinfo='text'
+        ))
 
-    heatmap = go.Heatmap(
-        x=x_coords,
-        y=y_coords,
-        z=z_grid,
-        text=hover_text,
-        hoverinfo="text",
-        colorscale=[[0, ALIVE_CELL_COLOR], [1, DEFECTIVE_CELL_COLOR]],
-        showscale=False, # Hide colorbar as it's binary
-        xgap=1, # Small visual gap between cells
-        ygap=1
-    )
-
-    return [heatmap]
+    return shapes, traces
 
 def create_still_alive_figure(
     panel_rows: int,
@@ -488,26 +507,19 @@ def create_still_alive_figure(
     true_defect_data: Dict[Tuple[int, int], Dict[str, Any]]
 ) -> go.Figure:
     """
-    Creates the Still Alive Map Figure using optimized Heatmap.
+    Creates the Still Alive Map Figure (Shapes + Layout + Tooltips).
     """
-    traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data)
+    map_shapes, hover_traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data)
 
-    fig = go.Figure(data=traces)
+    fig = go.Figure(data=hover_traces) # Add hover traces
 
-    # Calculate ticks for axes
-    cell_width = QUADRANT_WIDTH / panel_cols
-    cell_height = QUADRANT_HEIGHT / panel_rows
-
+    cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
     x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
     x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
     y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
     y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
-
-    # Add Grid Shapes (but efficiently) - Optional since xgap/ygap does the job for cells.
-    # We still need the Quadrant separators.
-    shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False)
 
     apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)")
 
@@ -520,8 +532,7 @@ def create_still_alive_figure(
             title="Unit Row Index", range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
             tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text
         ),
-        shapes=shapes,
-        margin=dict(l=20, r=20, t=80, b=20),
+        shapes=map_shapes, margin=dict(l=20, r=20, t=80, b=20),
         showlegend=False
     )
     return fig

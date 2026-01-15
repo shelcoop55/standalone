@@ -446,7 +446,8 @@ class ViewManager:
 
         elif current_tab_text == "Root Cause":
              c1, c2 = st.columns(2)
-             with c1: st.radio("Slice Axis", ["X (Column)", "Y (Row)"], horizontal=True, key="rca_axis")
+             # Fixed: Zonal Yield (Slice Axis) made vertical (column) instead of row as requested
+             with c1: st.radio("Slice Axis", ["X (Column)", "Y (Row)"], horizontal=False, key="rca_axis")
              with c2:
                  max_idx = (self.store.analysis_params.get('panel_cols', 7) * 2) - 1
                  st.slider("Slice Index", 0, max_idx, 0, key="rca_index")

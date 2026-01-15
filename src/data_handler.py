@@ -188,7 +188,7 @@ def load_data(
         total_units_y = 2 * panel_rows
 
         # 4. Define a Seed (Set it once before generation)
-        np.random.seed(42)
+        np.random.seed(55)
 
         # 1. Add two more layers (5 total)
         layers_to_generate = [1, 2, 3, 4, 5]

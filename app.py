@@ -46,7 +46,8 @@ def main() -> None:
 
         # --- 1. Analysis Configuration Form ---
         with st.form(key="analysis_form"):
-            with st.expander("📁 Data Source & Configuration", expanded=True):
+            # Update: Collapsed by default as per request
+            with st.expander("📁 Data Source & Configuration", expanded=False):
                 # Use dynamic key to allow resetting the widget
                 uploader_key = f"uploaded_files_{st.session_state['uploader_key']}"
                 st.file_uploader(
