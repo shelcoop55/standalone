@@ -19,6 +19,7 @@ from src.plotting import (
     create_grid_shapes, create_still_alive_figure, create_defect_map_figure,
     create_pareto_figure
 )
+from src.data_handler import aggregate_stress_data_from_df
 from src.enums import Quadrant
 
 # ==============================================================================
@@ -357,7 +358,14 @@ def generate_zip_package(
 
                         filtered_df = df
                         if verification_selection != 'All':
-                            filtered_df = filtered_df[filtered_df['Verification'] == verification_selection]
+                            if isinstance(verification_selection, list):
+                                if not verification_selection:
+                                    # If empty list (unselected all), assume NO filtering match -> empty
+                                    filtered_df = filtered_df.iloc[0:0]
+                                else:
+                                    filtered_df = filtered_df[filtered_df['Verification'].isin(verification_selection)]
+                            else:
+                                filtered_df = filtered_df[filtered_df['Verification'] == verification_selection]
 
                         if filtered_df.empty:
                             log(f"  Skipped: DataFrame empty after filtering (Filter: {verification_selection})")
@@ -441,12 +449,11 @@ def generate_zip_package(
 
         if include_stress_png:
             log("Generating Stress Map PNG (Cumulative)...")
-            from src.data_handler import aggregate_stress_data
             from src.plotting import create_stress_heatmap
             try:
                 # Need to aggregate first
                 # Default to Cumulative Mode
-                stress_data = aggregate_stress_data(full_df, panel_rows, panel_cols)
+                stress_data = aggregate_stress_data_from_df(full_df, panel_rows, panel_cols)
                 fig_stress = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode="Continuous")
                 img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=2)
                 zip_file.writestr("Images/Analysis_StressMap_Cumulative.png", img_bytes)

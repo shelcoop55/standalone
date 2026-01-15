@@ -332,64 +332,32 @@ def prepare_multi_layer_data(_panel_data: PanelData, panel_uid: str = "") -> pd.
 
     return _panel_data.get_combined_dataframe(filter_func=true_defect_filter)
 
-@st.cache_data
-def aggregate_stress_data(
-    _panel_data: PanelData,
-    selected_keys: List[Tuple[int, str]],
+def aggregate_stress_data_from_df(
+    df: pd.DataFrame,
     panel_rows: int,
-    panel_cols: int,
-    panel_uid: str = "",
-    verification_filter: Optional[List[str]] = None,
-    quadrant_filter: str = "All"
+    panel_cols: int
 ) -> StressMapData:
     """
-    Aggregates data for the Cumulative Stress Map using specific (Layer, Side) keys.
+    Core logic to aggregate a DataFrame into a StressMapData object.
+    Accepts a pre-filtered DataFrame.
     """
     total_cols = panel_cols * 2
     total_rows = panel_rows * 2
 
     grid_counts = np.zeros((total_rows, total_cols), dtype=int)
     hover_text = np.empty((total_rows, total_cols), dtype=object)
-    hover_text[:] = ""
+    hover_text[:] = "No Defects" # Default
 
-    cell_defects: Dict[Tuple[int, int], Dict[str, int]] = {}
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-
-    total_defects_acc = 0
-    max_count_acc = 0
-
-    # OPTIMIZATION: Vectorized Aggregation
-    dfs_to_agg = []
-    for layer_num, side in selected_keys:
-        layer = _panel_data.get_layer(layer_num, side)
-        if layer and not layer.data.empty:
-            dfs_to_agg.append(layer.data)
-
-    if not dfs_to_agg:
-        return StressMapData(grid_counts, hover_text, 0, 0)
-
-    combined_df = pd.concat(dfs_to_agg, ignore_index=True)
-
-    # Filter True Defects (Standard)
-    if 'Verification' in combined_df.columns:
-        is_true = ~combined_df['Verification'].astype(str).str.upper().isin(safe_values_upper)
-        combined_df = combined_df[is_true]
-
-    # Filter by Specific Selection (if provided)
-    if verification_filter and 'Verification' in combined_df.columns and not combined_df.empty:
-        combined_df = combined_df[combined_df['Verification'].astype(str).isin(verification_filter)]
-
-    # Filter by Quadrant (if provided)
-    if quadrant_filter != "All" and 'QUADRANT' in combined_df.columns and not combined_df.empty:
-        combined_df = combined_df[combined_df['QUADRANT'] == quadrant_filter]
-
-    if combined_df.empty:
+    if df.empty:
          return StressMapData(grid_counts, hover_text, 0, 0)
 
     # Vectorized Histogram
     # Use RAW COORDINATES (UNIT_INDEX_X)
-    x_coords = combined_df['UNIT_INDEX_X'].values
-    y_coords = combined_df['UNIT_INDEX_Y'].values
+    if 'UNIT_INDEX_X' not in df.columns or 'UNIT_INDEX_Y' not in df.columns:
+        return StressMapData(grid_counts, hover_text, 0, 0)
+
+    x_coords = df['UNIT_INDEX_X'].values
+    y_coords = df['UNIT_INDEX_Y'].values
 
     # Filter out of bounds
     valid_mask = (x_coords >= 0) & (x_coords < total_cols) & (y_coords >= 0) & (y_coords < total_rows)
@@ -410,44 +378,36 @@ def aggregate_stress_data(
     max_count_acc = int(grid_counts.max()) if total_defects_acc > 0 else 0
 
     # 2. Hover Text (Group By Optimization)
-    # Group by cell and defect type to get counts
-    # We use valid mask on the df as well
-    valid_df = combined_df[valid_mask]
+    valid_df = df[valid_mask]
 
-    # Group by (Y, X, Type) -> Count
-    type_counts = valid_df.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X', 'DEFECT_TYPE'], observed=True).size()
+    if 'DEFECT_TYPE' in valid_df.columns:
+        # Group by (Y, X, Type) -> Count
+        type_counts = valid_df.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X', 'DEFECT_TYPE'], observed=True).size()
 
-    # Reset index to iterate easily or pivot
-    # But since we need "Top 3 per cell", let's iterate over the GroupBy object of cells
-    # This is much faster than iterating 7000x7000 cells because we only touch active cells
-    grouped_cells = type_counts.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X'], observed=True)
+        # Group by Cell (Y, X)
+        grouped_cells = type_counts.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X'], observed=True)
 
-    hover_text[:] = "No Defects" # Reset default
+        for (gy, gx), sub_series in grouped_cells:
+            cell_total = sub_series.sum()
+            counts_per_type = sub_series.droplevel([0, 1])
+            sorted_types = counts_per_type.sort_values(ascending=False)
+            top_3 = sorted_types.head(3)
 
-    for (gy, gx), sub_series in grouped_cells:
-        # sub_series index is (Y, X, Type), values are counts
-        # We want to extract Type and Count
-        # sub_series.index.get_level_values('DEFECT_TYPE')
-        cell_total = sub_series.sum()
+            tooltip = f"<b>Total: {cell_total}</b><br>"
+            tooltip_lines = [f"{dtype}: {cnt}" for dtype, cnt in top_3.items()]
+            tooltip += "<br>".join(tooltip_lines)
 
-        # Get types and counts
-        # sub_series is a Series with MultiIndex. Dropping levels to get just Types is cleaner
-        counts_per_type = sub_series.droplevel([0, 1])
+            remaining = len(sorted_types) - 3
+            if remaining > 0:
+                tooltip += f"<br>... (+{remaining} types)"
 
-        # Sort desc
-        sorted_types = counts_per_type.sort_values(ascending=False)
-
-        top_3 = sorted_types.head(3)
-
-        tooltip = f"<b>Total: {cell_total}</b><br>"
-        tooltip_lines = [f"{dtype}: {cnt}" for dtype, cnt in top_3.items()]
-        tooltip += "<br>".join(tooltip_lines)
-
-        remaining = len(sorted_types) - 3
-        if remaining > 0:
-            tooltip += f"<br>... (+{remaining} types)"
-
-        hover_text[gy, gx] = tooltip
+            hover_text[gy, gx] = tooltip
+    else:
+        # Fallback if no Defect Type
+        # Just show total count
+        grouped = valid_df.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X']).size()
+        for (gy, gx), count in grouped.items():
+            hover_text[gy, gx] = f"<b>Total: {count}</b>"
 
     return StressMapData(
         grid_counts=grid_counts,
@@ -455,6 +415,47 @@ def aggregate_stress_data(
         total_defects=total_defects_acc,
         max_count=max_count_acc
     )
+
+@st.cache_data
+def aggregate_stress_data(
+    _panel_data: PanelData,
+    selected_keys: List[Tuple[int, str]],
+    panel_rows: int,
+    panel_cols: int,
+    panel_uid: str = "",
+    verification_filter: Optional[List[str]] = None,
+    quadrant_filter: str = "All"
+) -> StressMapData:
+    """
+    Aggregates data for the Cumulative Stress Map using specific (Layer, Side) keys.
+    """
+    # OPTIMIZATION: Vectorized Aggregation
+    dfs_to_agg = []
+    for layer_num, side in selected_keys:
+        layer = _panel_data.get_layer(layer_num, side)
+        if layer and not layer.data.empty:
+            dfs_to_agg.append(layer.data)
+
+    if not dfs_to_agg:
+        return StressMapData(np.zeros((panel_rows*2, panel_cols*2), int), np.empty((panel_rows*2, panel_cols*2), object), 0, 0)
+
+    combined_df = pd.concat(dfs_to_agg, ignore_index=True)
+
+    # Filter True Defects (Standard)
+    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+    if 'Verification' in combined_df.columns:
+        is_true = ~combined_df['Verification'].astype(str).str.upper().isin(safe_values_upper)
+        combined_df = combined_df[is_true]
+
+    # Filter by Specific Selection (if provided)
+    if verification_filter and 'Verification' in combined_df.columns and not combined_df.empty:
+        combined_df = combined_df[combined_df['Verification'].astype(str).isin(verification_filter)]
+
+    # Filter by Quadrant (if provided)
+    if quadrant_filter != "All" and 'QUADRANT' in combined_df.columns and not combined_df.empty:
+        combined_df = combined_df[combined_df['QUADRANT'] == quadrant_filter]
+
+    return aggregate_stress_data_from_df(combined_df, panel_rows, panel_cols)
 
 @st.cache_data
 def calculate_yield_killers(_panel_data: PanelData, panel_rows: int, panel_cols: int) -> Optional[YieldKillerMetrics]:
