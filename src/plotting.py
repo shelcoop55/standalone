@@ -151,42 +151,52 @@ def create_defect_traces(df: pd.DataFrame) -> List[go.Scatter]:
             local_style_map[code] = color
             fallback_index += 1
 
-    # Generate traces
-    for group_val, color in local_style_map.items():
-        dff = df[df[group_col] == group_val]
-        if not dff.empty:
-            if 'Verification' in dff.columns:
-                 dff = dff.copy()
-                 dff['Description'] = dff['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
-            else:
-                 dff['Description'] = "N/A"
+    # Generate traces using GroupBy (Optimization #4)
+    # 1. Pre-calculate Descriptions globally
+    if 'Verification' in df.columns:
+        # Avoid SettingWithCopyWarning if df is a slice
+        df = df.copy()
+        df['Description'] = df['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
+    else:
+        df = df.copy()
+        df['Description'] = "N/A"
 
-            # Add Raw Coords if available (Convert um to mm)
-            coord_str = ""
-            if 'X_COORDINATES' in dff.columns and 'Y_COORDINATES' in dff.columns:
-                dff['RAW_COORD_STR'] = dff.apply(lambda row: f"({row['X_COORDINATES']/1000:.2f}, {row['Y_COORDINATES']/1000:.2f}) mm", axis=1)
-                custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'RAW_COORD_STR']
-                coord_str = "<br>Raw Coords: %{customdata[6]}"
-            else:
-                custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
+    # 2. Pre-calculate Raw Coords globally
+    has_raw_coords = 'X_COORDINATES' in df.columns and 'Y_COORDINATES' in df.columns
+    coord_str = ""
+    if has_raw_coords:
+        df['RAW_COORD_STR'] = df.apply(lambda row: f"({row['X_COORDINATES']/1000:.2f}, {row['Y_COORDINATES']/1000:.2f}) mm", axis=1)
+        custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'RAW_COORD_STR']
+        coord_str = "<br>Raw Coords: %{customdata[6]}"
+    else:
+        custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
 
-            hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
-                             "Description : %{customdata[5]}<br>"
-                             "Type: %{customdata[2]}<br>"
-                             "Unit Index (X, Y): (%{customdata[0]}, %{customdata[1]})<br>"
-                             "Defect ID: %{customdata[3]}"
-                             + coord_str +
-                             "<extra></extra>")
+    # 3. GroupBy Loop
+    grouped = df.groupby(group_col)
 
-            traces.append(go.Scatter(
-                x=dff['plot_x'],
-                y=dff['plot_y'],
-                mode='markers',
-                marker=dict(color=color, size=8, line=dict(width=1, color='black')),
-                name=group_val,
-                customdata=dff[custom_data_cols],
-                hovertemplate=hovertemplate
-            ))
+    for group_val, dff in grouped:
+        if group_val not in local_style_map:
+            continue
+
+        color = local_style_map[group_val]
+
+        hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
+                            "Description : %{customdata[5]}<br>"
+                            "Type: %{customdata[2]}<br>"
+                            "Unit Index (X, Y): (%{customdata[0]}, %{customdata[1]})<br>"
+                            "Defect ID: %{customdata[3]}"
+                            + coord_str +
+                            "<extra></extra>")
+
+        traces.append(go.Scatter(
+            x=dff['plot_x'],
+            y=dff['plot_y'],
+            mode='markers',
+            marker=dict(color=color, size=8, line=dict(width=1, color='black')),
+            name=str(group_val),
+            customdata=dff[custom_data_cols],
+            hovertemplate=hovertemplate
+        ))
 
     return traces
 
@@ -415,80 +425,62 @@ def create_still_alive_map(
     panel_rows: int,
     panel_cols: int,
     true_defect_data: Dict[Tuple[int, int], Dict[str, Any]]
-) -> Tuple[List[Dict[str, Any]], List[go.Scatter]]:
+) -> List[go.Heatmap]:
     """
-    Creates the shapes for the 'Still Alive' map AND invisible scatter points for tooltips.
-
-    Returns:
-        (shapes, traces)
+    Creates a Heatmap trace for the 'Still Alive' map.
+    Replaces thousands of shape objects with a single efficient Heatmap trace.
     """
-    shapes = []
-    traces = []
-
     total_cols, total_rows = panel_cols * 2, panel_rows * 2
-    all_origins = {'Q1': (0, 0), 'Q2': (QUADRANT_WIDTH + GAP_SIZE, 0), 'Q3': (0, QUADRANT_HEIGHT + GAP_SIZE), 'Q4': (QUADRANT_WIDTH + GAP_SIZE, QUADRANT_HEIGHT + GAP_SIZE)}
-    cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
 
-    # Prepare lists for scatter trace (Tooltips)
-    hover_x = []
-    hover_y = []
-    hover_text = []
-    hover_colors = []
+    # Initialize Grids
+    # 0 = Alive (Green), 1 = Dead (Red)
+    z_grid = np.zeros((total_rows, total_cols), dtype=int)
+    hover_text = np.full((total_rows, total_cols), "Status: <b>Alive</b>", dtype=object)
 
-    # 1. Draw the colored cells first (without borders)
-    for row in range(total_rows):
-        for col in range(total_cols):
-            quadrant_col, local_col = divmod(col, panel_cols)
-            quadrant_row, local_row = divmod(row, panel_rows)
-            quad_key = f"Q{quadrant_row * 2 + quadrant_col + 1}"
-            x_origin, y_origin = all_origins[quad_key]
-            x0, y0 = x_origin + local_col * cell_width, y_origin + local_row * cell_height
+    if true_defect_data:
+        for (col, row), metadata in true_defect_data.items():
+            if 0 <= col < total_cols and 0 <= row < total_rows:
+                z_grid[row, col] = 1 # Dead
 
-            # Determine status
-            is_dead = (col, row) in true_defect_data
-
-            if is_dead:
-                metadata = true_defect_data[(col, row)]
-                first_killer = metadata['first_killer_layer']
-
-                # Color logic: Revert to binary RED for all defects
-                fill_color = DEFECTIVE_CELL_COLOR
-
-                # Add to hover data (Keep Autopsy Tooltip)
-                center_x = x0 + cell_width/2
-                center_y = y0 + cell_height/2
-                hover_x.append(center_x)
-                hover_y.append(center_y)
+                first_killer = metadata.get('first_killer_layer', 'Unknown')
+                summary = metadata.get('defect_summary', '')
 
                 tooltip = (
                     f"<b>Unit: ({col}, {row})</b><br>"
+                    f"Status: <b>Defective</b><br>"
                     f"First Killer: Layer {first_killer}<br>"
-                    f"Details: {metadata['defect_summary']}"
+                    f"Details: {summary}"
                 )
-                hover_text.append(tooltip)
-                # Hover dots should also match the cell color (Red) to be invisible
-                hover_colors.append(fill_color)
+                hover_text[row, col] = tooltip
 
-            else:
-                fill_color = ALIVE_CELL_COLOR
+    # Vectorized Coordinate Calculation
+    cell_width = QUADRANT_WIDTH / panel_cols
+    cell_height = QUADRANT_HEIGHT / panel_rows
 
-            shapes.append({'type': 'rect', 'x0': x0, 'y0': y0, 'x1': x0 + cell_width, 'y1': y0 + cell_height, 'fillcolor': fill_color, 'line': {'width': 0}, 'layer': 'below'})
+    col_indices = np.arange(total_cols)
+    row_indices = np.arange(total_rows)
 
-    # 2. Draw grid lines over the colored cells
-    shapes.extend(create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False))
+    # Apply Gaps
+    x_gaps = np.where(col_indices >= panel_cols, GAP_SIZE, 0)
+    y_gaps = np.where(row_indices >= panel_rows, GAP_SIZE, 0)
 
-    # 3. Create Scatter Trace for Hover
-    if hover_x:
-        traces.append(go.Scatter(
-            x=hover_x,
-            y=hover_y,
-            mode='markers',
-            marker=dict(size=0, color=hover_colors, opacity=0), # Invisible markers
-            text=hover_text,
-            hoverinfo='text'
-        ))
+    # 1D Coordinates (Heatmap accepts 1D arrays for X and Y)
+    x_coords = (col_indices * cell_width) + (cell_width / 2) + x_gaps
+    y_coords = (row_indices * cell_height) + (cell_height / 2) + y_gaps
 
-    return shapes, traces
+    heatmap = go.Heatmap(
+        x=x_coords,
+        y=y_coords,
+        z=z_grid,
+        text=hover_text,
+        hoverinfo="text",
+        colorscale=[[0, ALIVE_CELL_COLOR], [1, DEFECTIVE_CELL_COLOR]],
+        showscale=False, # Hide colorbar as it's binary
+        xgap=1, # Small visual gap between cells
+        ygap=1
+    )
+
+    return [heatmap]
 
 def create_still_alive_figure(
     panel_rows: int,
@@ -496,19 +488,26 @@ def create_still_alive_figure(
     true_defect_data: Dict[Tuple[int, int], Dict[str, Any]]
 ) -> go.Figure:
     """
-    Creates the Still Alive Map Figure (Shapes + Layout + Tooltips).
+    Creates the Still Alive Map Figure using optimized Heatmap.
     """
-    map_shapes, hover_traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data)
+    traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data)
 
-    fig = go.Figure(data=hover_traces) # Add hover traces
+    fig = go.Figure(data=traces)
 
-    cell_width, cell_height = QUADRANT_WIDTH / panel_cols, QUADRANT_HEIGHT / panel_rows
+    # Calculate ticks for axes
+    cell_width = QUADRANT_WIDTH / panel_cols
+    cell_height = QUADRANT_HEIGHT / panel_rows
+
     x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
     x_tick_vals_q2 = [(QUADRANT_WIDTH + GAP_SIZE) + (i * cell_width) + (cell_width / 2) for i in range(panel_cols)]
     y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
     y_tick_vals_q3 = [(QUADRANT_HEIGHT + GAP_SIZE) + (i * cell_height) + (cell_height / 2) for i in range(panel_rows)]
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
+
+    # Add Grid Shapes (but efficiently) - Optional since xgap/ygap does the job for cells.
+    # We still need the Quadrant separators.
+    shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False)
 
     apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)")
 
@@ -521,7 +520,8 @@ def create_still_alive_figure(
             title="Unit Row Index", range=[-GAP_SIZE, PANEL_HEIGHT + (GAP_SIZE * 2)],
             tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text
         ),
-        shapes=map_shapes, margin=dict(l=20, r=20, t=80, b=20),
+        shapes=shapes,
+        margin=dict(l=20, r=20, t=80, b=20),
         showlegend=False
     )
     return fig
@@ -1020,35 +1020,23 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int,
         rows, cols = z_data.shape
         # Expect rows = panel_rows*2, cols = panel_cols*2
 
-        # Create meshgrid of coordinates
-        x_coords = np.zeros((rows, cols))
-        y_coords = np.zeros((rows, cols))
-
+        # Vectorized Coordinate Calculation
         cell_width = QUADRANT_WIDTH / panel_cols
         cell_height = QUADRANT_HEIGHT / panel_rows
 
-        for r in range(rows):
-            for c in range(cols):
-                # Determine Quadrant Logic for Gap
-                # Columns: 0..panel_cols-1 (Q1/Q3), panel_cols..end (Q2/Q4)
-                # Rows: 0..panel_rows-1 (Q1/Q2), panel_rows..end (Q3/Q4)
+        col_indices = np.arange(cols)
+        row_indices = np.arange(rows)
 
-                # Careful: Grid indexing (0,0) is usually top-left or bottom-left depending on plot?
-                # Plotly Heatmap default: (0,0) is bottom-left if y is numerical.
-                # data_handler.aggregate_stress_data uses:
-                # grid[y, x] += 1. And indices are 0-based.
-                # Assuming standard matrix visualization.
+        # Apply Gaps
+        x_gaps = np.where(col_indices >= panel_cols, GAP_SIZE, 0)
+        y_gaps = np.where(row_indices >= panel_rows, GAP_SIZE, 0)
 
-                # Calculate Physical X
-                gap_x = GAP_SIZE if c >= panel_cols else 0
-                x_pos = (c * cell_width) + (cell_width/2) + gap_x
+        # 1D Coordinates
+        x_vals = (col_indices * cell_width) + (cell_width / 2) + x_gaps
+        y_vals = (row_indices * cell_height) + (cell_height / 2) + y_gaps
 
-                # Calculate Physical Y
-                gap_y = GAP_SIZE if r >= panel_rows else 0
-                y_pos = (r * cell_height) + (cell_height/2) + gap_y
-
-                x_coords[r, c] = x_pos
-                y_coords[r, c] = y_pos
+        # Broadcast to 2D Grid
+        x_coords, y_coords = np.meshgrid(x_vals, y_vals)
 
         # Now pass x and y to Heatmap. Plotly handles the spacing.
         # Mask zeros
@@ -1132,16 +1120,15 @@ def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_row
         cell_width = QUADRANT_WIDTH / panel_cols
         cell_height = QUADRANT_HEIGHT / panel_rows
 
-        # Calculate coords with gaps
-        x_vals = []
-        for c in range(cols):
-            gap_x = GAP_SIZE if c >= panel_cols else 0
-            x_vals.append((c * cell_width) + (cell_width/2) + gap_x)
+        # Vectorized Gaps
+        col_indices = np.arange(cols)
+        row_indices = np.arange(rows)
 
-        y_vals = []
-        for r in range(rows):
-            gap_y = GAP_SIZE if r >= panel_rows else 0
-            y_vals.append((r * cell_height) + (cell_height/2) + gap_y)
+        x_gaps = np.where(col_indices >= panel_cols, GAP_SIZE, 0)
+        y_gaps = np.where(row_indices >= panel_rows, GAP_SIZE, 0)
+
+        x_vals = (col_indices * cell_width) + (cell_width / 2) + x_gaps
+        y_vals = (row_indices * cell_height) + (cell_height / 2) + y_gaps
 
         fig = go.Figure(data=go.Heatmap(
             x=x_vals,

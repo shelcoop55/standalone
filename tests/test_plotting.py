@@ -64,9 +64,8 @@ def test_create_still_alive_map():
     """
     Tests that the still alive map correctly colors cells and generates the grid.
     """
-    # Use a 2x2 grid per quadrant to ensure internal grid lines are generated.
+    # Use a 2x2 grid per quadrant
     panel_rows, panel_cols = 2, 2
-    total_cells = (panel_rows * 2) * (panel_cols * 2)
 
     # Define some cells as having "True" defects with metadata.
     # Dict[Tuple[int, int], Dict[str, Any]]
@@ -76,24 +75,26 @@ def test_create_still_alive_map():
         (3, 2): {'first_killer_layer': 1, 'defect_summary': 'L1: 1'}
     }
 
-    shapes, traces = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
+    # UPDATED: Returns [Heatmap]
+    traces = create_still_alive_map(panel_rows, panel_cols, true_defect_coords)
 
-    assert isinstance(shapes, list)
     assert isinstance(traces, list)
-
-    # Test colored cells
-    colored_cells = [s for s in shapes if s.get('type') == 'rect' and s.get('line', {}).get('width') == 0]
-    assert len(colored_cells) == total_cells
-    defective_count = sum(1 for s in colored_cells if s['fillcolor'] == DEFECTIVE_CELL_COLOR)
-    assert defective_count == len(true_defect_coords)
-
-    # Test grid lines (they have a width > 0)
-    grid_lines = [s for s in shapes if s.get('type') == 'line']
-    assert len(grid_lines) > 0, "Grid lines should be drawn over the colored cells"
-
-    # Test Traces (Tooltips)
     assert len(traces) == 1
-    assert len(traces[0].x) == len(true_defect_coords)
+
+    heatmap = traces[0]
+    assert isinstance(heatmap, go.Heatmap)
+
+    # Check dimensions of grid
+    z_grid = heatmap.z
+    assert z_grid.shape == (panel_rows * 2, panel_cols * 2) # (4, 4)
+
+    # Check specific values
+    # (0,0) should be 1 (Dead)
+    assert z_grid[0, 0] == 1
+    # (1,1) should be 1
+    assert z_grid[1, 1] == 1
+    # (0,1) should be 0 (Alive)
+    assert z_grid[0, 1] == 0
 
 def test_create_defect_sankey_overlap():
     """

@@ -123,7 +123,8 @@ def load_data(
                 if not has_verification_data:
                     df['Verification'] = 'Under Verification'
                 else:
-                    df['Verification'] = df['Verification'].fillna('N').astype(str).str.strip()
+                    # OPTIMIZATION: Normalize to uppercase once here
+                    df['Verification'] = df['Verification'].fillna('N').astype(str).str.strip().str.upper()
                     # Also handle empty strings that might result from stripping
                     df['Verification'] = df['Verification'].replace('', 'N')
 
@@ -282,7 +283,8 @@ def get_true_defect_coordinates(
 
     # Filter for True Defects
     safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-    is_true_defect = ~all_layers_df['Verification'].str.upper().isin(safe_values_upper)
+    # Verification is already normalized to upper in load_data
+    is_true_defect = ~all_layers_df['Verification'].isin(safe_values_upper)
     true_defects_df = all_layers_df[is_true_defect].copy()
 
     if true_defects_df.empty:
@@ -327,7 +329,8 @@ def prepare_multi_layer_data(_panel_data: PanelData, panel_uid: str = "") -> pd.
 
     def true_defect_filter(df):
         if 'Verification' in df.columns:
-            return df[~df['Verification'].str.upper().isin(safe_values_upper)]
+            # Verification is already normalized to upper in load_data
+            return df[~df['Verification'].isin(safe_values_upper)]
         return df
 
     return _panel_data.get_combined_dataframe(filter_func=true_defect_filter)
@@ -381,27 +384,40 @@ def aggregate_stress_data_from_df(
     valid_df = df[valid_mask]
 
     if 'DEFECT_TYPE' in valid_df.columns:
-        # Group by (Y, X, Type) -> Count
-        type_counts = valid_df.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X', 'DEFECT_TYPE'], observed=True).size()
+        # Optimization: Avoid iterating through every cell group if possible
+        # Use a vectorized approach or simplified tooltip for massive data
 
-        # Group by Cell (Y, X)
-        grouped_cells = type_counts.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X'], observed=True)
+        # 1. Count by Cell + Type
+        type_counts = valid_df.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X', 'DEFECT_TYPE'], observed=True).size().reset_index(name='Count')
 
-        for (gy, gx), sub_series in grouped_cells:
-            cell_total = sub_series.sum()
-            counts_per_type = sub_series.droplevel([0, 1])
-            sorted_types = counts_per_type.sort_values(ascending=False)
-            top_3 = sorted_types.head(3)
+        # 2. Sort by Count descending within each cell (Y, X)
+        type_counts.sort_values(['UNIT_INDEX_Y', 'UNIT_INDEX_X', 'Count'], ascending=[True, True, False], inplace=True)
 
-            tooltip = f"<b>Total: {cell_total}</b><br>"
-            tooltip_lines = [f"{dtype}: {cnt}" for dtype, cnt in top_3.items()]
-            tooltip += "<br>".join(tooltip_lines)
+        # 3. Calculate Total per Cell
+        cell_totals = type_counts.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X'])['Count'].sum()
 
-            remaining = len(sorted_types) - 3
-            if remaining > 0:
-                tooltip += f"<br>... (+{remaining} types)"
+        # 4. Get Top 3 per Cell
+        top_3 = type_counts.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X']).head(3)
 
-            hover_text[gy, gx] = tooltip
+        # 5. Count how many types per cell
+        types_per_cell = type_counts.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X']).size()
+
+        # 6. Build Tooltip parts
+        # Iterate over the groups of 'top_3' (simplified dataset)
+        top_3_dict = {}
+        for (y, x), group in top_3.groupby(['UNIT_INDEX_Y', 'UNIT_INDEX_X']):
+             lines = [f"{row.DEFECT_TYPE}: {row.Count}" for row in group.itertuples()]
+             top_3_dict[(y, x)] = lines
+
+        for (y, x), total in cell_totals.items():
+            lines = top_3_dict.get((y,x), [])
+            tooltip = f"<b>Total: {total}</b><br>" + "<br>".join(lines)
+
+            total_types = types_per_cell.get((y,x), 0)
+            if total_types > 3:
+                tooltip += f"<br>... (+{total_types - 3} types)"
+
+            hover_text[y, x] = tooltip
     else:
         # Fallback if no Defect Type
         # Just show total count
@@ -444,7 +460,8 @@ def aggregate_stress_data(
     # Filter True Defects (Standard)
     safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
     if 'Verification' in combined_df.columns:
-        is_true = ~combined_df['Verification'].astype(str).str.upper().isin(safe_values_upper)
+        # Verification is already normalized to upper in load_data
+        is_true = ~combined_df['Verification'].astype(str).isin(safe_values_upper)
         combined_df = combined_df[is_true]
 
     # Filter by Specific Selection (if provided)
@@ -468,7 +485,8 @@ def calculate_yield_killers(_panel_data: PanelData, panel_rows: int, panel_cols:
 
     def true_defect_filter(df):
         if 'Verification' in df.columns:
-            return df[~df['Verification'].str.upper().isin(safe_values_upper)]
+            # Verification is already normalized to upper in load_data
+            return df[~df['Verification'].isin(safe_values_upper)]
         return df
 
     combined_df = _panel_data.get_combined_dataframe(filter_func=true_defect_filter)
@@ -552,10 +570,12 @@ def get_cross_section_matrix(
             df = layer_obj.data
             if df.empty: continue
 
-            df_copy = df.copy()
-            if 'Verification' in df_copy.columns:
-                is_true = ~df_copy['Verification'].str.upper().isin(safe_values_upper)
-                df_copy = df_copy[is_true]
+            # Optimization: Avoid full copy
+            if 'Verification' in df.columns:
+                is_true = ~df['Verification'].isin(safe_values_upper)
+                df_copy = df[is_true].copy() # Filter first then copy
+            else:
+                df_copy = df.copy()
 
             if df_copy.empty: continue
 
