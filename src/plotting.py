@@ -839,7 +839,7 @@ def create_density_contour_map(
     saturation_cap: int = 0,
     show_grid: bool = True,
     view_mode: str = "Continuous",
-    flip_back: bool = True,
+    flip_back: bool = False,
     quadrant_selection: str = 'All'
 ) -> go.Figure:
     """
@@ -898,15 +898,23 @@ def create_density_contour_map(
     # But we have 2 quadrants. So 28 across.
     # So we need roughly 4 bins per quadrant-dimension?
 
-    # Let's implement: bins_x = (panel_cols * 2) * 2
-    # This gives 2 bins per physical unit.
+    # Let's implement: bins_x = (panel_cols * 2) * 2 * Scaling_Factor
+    # This gives 2 bins per physical unit at Base (Smoothing=10).
+
+    # Scaling Logic:
+    # Smoothing 1 (High Detail) -> Multiplier 4.0
+    # Smoothing 5 (Default) -> Multiplier 2.0 (Nyquist)
+    # Smoothing 20 (Low Detail) -> Multiplier 0.5
+
+    # Inverse relationship:
+    # Multiplier = 10.0 / smoothing_factor
+
+    scale_factor = 10.0 / max(1, smoothing_factor)
 
     # Dynamic Binning
-    bins_x = (panel_cols * 2) * 2
-    bins_y = (panel_rows * 2) * 2
-
-    # If dimensions are huge, cap it?
-    # No, server-side numpy is fast. 100x100 is instant.
+    # Ensure at least 10 bins total
+    bins_x = max(10, int((panel_cols * 2) * 2 * scale_factor))
+    bins_y = max(10, int((panel_rows * 2) * 2 * scale_factor))
 
     # We pass [bins_y, bins_x] to histogram2d (y is rows, x is cols)
     num_bins = [bins_y, bins_x]
