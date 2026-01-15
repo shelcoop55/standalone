@@ -7,8 +7,8 @@ including color themes and the method for loading defect-specific styles.
 
 # --- Physical Constants (in mm) ---
 # These define the real-world dimensions of the panel being simulated.
-PANEL_WIDTH = 480
-PANEL_HEIGHT = 480
+PANEL_WIDTH = 462
+PANEL_HEIGHT = 465
 # The physical gap between the quadrants on the panel.
 GAP_SIZE = 20
 
