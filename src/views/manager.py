@@ -84,6 +84,8 @@ class ViewManager:
         # Layer Options
         layer_options = []
         layer_option_map = {}
+        process_comment = self.store.analysis_params.get("process_comment", "")
+
         for num in layer_keys:
             # Try to get BU name
             bu_name = ""
@@ -94,7 +96,8 @@ class ViewManager:
             except (IndexError, AttributeError, StopIteration):
                 pass
             # Use BU name if available (cleaner look), else fallback to Layer Num
-            label = bu_name if bu_name else f"Layer {num}"
+            base_label = bu_name if bu_name else f"Layer {num}"
+            label = f"{base_label} ({process_comment})" if process_comment else base_label
             layer_options.append(label)
             layer_option_map[label] = num
 
@@ -291,17 +294,12 @@ class ViewManager:
                  key="multi_verification_selection"
              )
 
-        # --- ROW 1: GLOBAL FILTERS (Layer -> Side -> Quadrant) ---
+        # --- ROW 1: GLOBAL FILTERS (Layer Only) ---
         # Headers removed as per request to save space
 
-        # We will try to pack everything into one logical row using columns.
-        # Since button widths vary, we can't easily predict the exact column split.
-        # We'll group them: [Layer Group] [Side Group] [Quadrant Group]
-        # Layout: 4 parts for Layers, 1 for Side, 1 for Quadrant (Total 6)?
-        # Or let Streamlit handle it.
-
-        # Prepare Layer Buttons: [ALL, BU-XX, BU-YY...]
+        # Prepare Layer Buttons: [BU-XX (Comment)...]
         layer_buttons_data = []
+        process_comment = self.store.analysis_params.get("process_comment", "")
 
         # Logic to get BU Name or Layer Num
         for num in all_layers:
@@ -312,21 +310,16 @@ class ViewManager:
                 bu_name = get_bu_name_from_filename(str(source_file))
             except: pass
 
-            label = bu_name if bu_name else f"Layer {num}"
+            base_label = bu_name if bu_name else f"Layer {num}"
+            label = f"{base_label} ({process_comment})" if process_comment else base_label
             layer_buttons_data.append({'num': num, 'label': label})
 
-        # Calculate Total Buttons for Row 1
-        # [Layers...] + [Front, Back] + [All, Q1, Q2, Q3, Q4]
-        # Ratio: 50% Layers, 20% Side, 30% Quadrant
-        c_layers, c_sides, c_quads = st.columns([5, 2, 3], gap="small")
-
-        # --- Layers Group ---
-        with c_layers:
+        # Render Layer Buttons Row
+        if layer_buttons_data:
             btns = [d['label'] for d in layer_buttons_data]
             l_cols = st.columns(len(btns), gap="small")
             current_selection = self.store.multi_layer_selection if self.store.multi_layer_selection else all_layers
 
-            # Layer Buttons (Toggle)
             for i, d in enumerate(layer_buttons_data):
                 num = d['num']
                 is_sel = num in current_selection
@@ -340,10 +333,14 @@ class ViewManager:
                     return cb
                 l_cols[i].button(d['label'], key=f"an_btn_l_{num}", type="primary" if is_sel else "secondary", use_container_width=True, on_click=on_click_layer(num))
 
+        # --- ROW 2: SIDE + QUADRANT (50% / 50%) ---
+        c_sides, c_quads = st.columns(2, gap="medium")
+
         # --- Sides Group ---
         with c_sides:
-            # "Front" and "Back" as independent toggles. No "Both" button.
+            # "Front" and "Back" as independent toggles.
             current_sides = st.session_state.get("analysis_side_pills", ["Front", "Back"])
+            # Just 2 buttons, fill the column
             s_cols = st.columns(2, gap="small")
 
             def toggle_side(side):

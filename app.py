@@ -65,6 +65,11 @@ def main() -> None:
                     help="Enter the Lot Number to display it on the defect map.",
                     key="lot_number"
                 )
+                st.text_input(
+                    "Process Step / Comment",
+                    help="Enter a comment (e.g., Post Etching) to tag these layers.",
+                    key="process_comment"
+                )
 
             # Callback for Analysis
             def on_run_analysis():
@@ -72,6 +77,7 @@ def main() -> None:
                 rows = st.session_state.panel_rows
                 cols = st.session_state.panel_cols
                 lot = st.session_state.lot_number
+                comment = st.session_state.process_comment
 
                 # Load Data
                 data = load_data(files, rows, cols)
@@ -102,7 +108,8 @@ def main() -> None:
                     "panel_rows": rows,
                     "panel_cols": cols,
                     "gap_size": GAP_SIZE,
-                    "lot_number": lot
+                    "lot_number": lot,
+                    "process_comment": comment
                 }
                 store.report_bytes = None
 
