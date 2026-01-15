@@ -281,7 +281,8 @@ def generate_zip_package(
     include_insights: bool = True,
     include_png_all_layers: bool = False,
     include_pareto_png: bool = False,
-    layer_data: Optional[Dict] = None
+    layer_data: Optional[Dict] = None,
+    process_comment: str = ""
 ) -> bytes:
     """
     Generates a ZIP file containing selected report components.
@@ -306,12 +307,14 @@ def generate_zip_package(
             excel_bytes = generate_excel_report(
                 full_df, panel_rows, panel_cols, source_filename, quadrant_selection, verification_selection
             )
-            zip_file.writestr("Defect_Analysis_Report.xlsx", excel_bytes)
+            name_suffix = f"_{process_comment}" if process_comment else ""
+            zip_file.writestr(f"Defect_Analysis_Report{name_suffix}.xlsx", excel_bytes)
 
         # 2. Coordinate List (CSV/Excel)
         if include_coords:
             coord_bytes = generate_coordinate_list_report(true_defect_coords)
-            zip_file.writestr("Defective_Cell_Coordinates.xlsx", coord_bytes)
+            name_suffix = f"_{process_comment}" if process_comment else ""
+            zip_file.writestr(f"Defective_Cell_Coordinates{name_suffix}.xlsx", coord_bytes)
 
         # 3. Defect Map (Interactive HTML) - CURRENT VIEW
         if include_map:
@@ -355,6 +358,9 @@ def generate_zip_package(
                             log(f"  Skipped: DataFrame empty after filtering (Filter: {verification_selection})")
                             continue
 
+                        # Suffix for images
+                        img_suffix = f"_{process_comment}" if process_comment else ""
+
                         # Generate Defect Map PNG
                         if include_png_all_layers:
                             log("  Generating Defect Map PNG...")
@@ -364,7 +370,7 @@ def generate_zip_package(
                             )
                             try:
                                 img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=2)
-                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_DefectMap.png", img_bytes)
+                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_DefectMap{img_suffix}.png", img_bytes)
                                 log("  Success.")
                             except Exception as e:
                                 msg = f"Failed to generate map PNG for Layer {layer_num} {side}: {e}"
@@ -378,7 +384,7 @@ def generate_zip_package(
                             fig_pareto.update_layout(title=f"Layer {layer_num} - {side_name} - Pareto")
                             try:
                                 img_bytes = fig_pareto.to_image(format="png", engine="kaleido", scale=2)
-                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_Pareto.png", img_bytes)
+                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_Pareto{img_suffix}.png", img_bytes)
                                 log("  Success.")
                             except Exception as e:
                                 msg = f"Failed to generate pareto PNG for Layer {layer_num} {side}: {e}"
