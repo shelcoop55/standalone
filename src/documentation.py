@@ -5,6 +5,7 @@ This module contains:
 1. The full technical documentation for ICS & Core Defects.
 2. A dictionary mapping verification codes to short descriptions for UI tooltips.
 """
+import streamlit as st
 
 # Dictionary for Hover Tooltips (Code -> Short Description)
 VERIFICATION_DESCRIPTIONS = {
@@ -396,3 +397,7 @@ TECHNICAL_DOCUMENTATION = """
 **Accept Conditions:**
 *   Minor scratches/dents without exposed plug ink.
 """
+
+def render_documentation():
+    """Renders the technical documentation in the Streamlit app."""
+    st.markdown(TECHNICAL_DOCUMENTATION)
