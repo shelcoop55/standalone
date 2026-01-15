@@ -41,6 +41,9 @@ class HeatmapTool(AnalysisTool):
         # 5. View Mode
         view_mode = "Continuous"
 
+        # 6. Quadrant Filter
+        selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
+
         # --- DATA PREPARATION ---
         dfs_to_concat = []
 
@@ -57,11 +60,14 @@ class HeatmapTool(AnalysisTool):
                     if not df.empty:
                         # Apply Verification Filter
                         if 'Verification' in df.columns and selected_verifs:
-                             # If "All" is selected? No, list is explicit values.
-                             # If logic is inclusion:
-                             df_filtered = df[df['Verification'].astype(str).isin(selected_verifs)]
-                             dfs_to_concat.append(df_filtered)
-                        else:
+                             df = df[df['Verification'].astype(str).isin(selected_verifs)]
+
+                        # Apply Quadrant Filter
+                        # The dataframe should have 'QUADRANT' column.
+                        if selected_quadrant != "All" and 'QUADRANT' in df.columns:
+                             df = df[df['QUADRANT'] == selected_quadrant]
+
+                        if not df.empty:
                              dfs_to_concat.append(df)
 
         combined_heatmap_df = pd.DataFrame()

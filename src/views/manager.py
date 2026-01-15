@@ -225,100 +225,18 @@ class ViewManager:
     def _render_analysis_page_controls(self):
         """Renders the Tabs and Context Filters for the Unified Analysis Page."""
 
-        # 1. Top Level Tabs
-        tabs = [
-            "Heatmap", "Stress Map", "Root Cause", "Insights", "Still Alive", "Multi-Layer", "Documentation"
-        ]
-
-        current_tab = "Heatmap"
-        if self.store.active_view == 'still_alive':
-            current_tab = "Still Alive"
-        elif self.store.active_view == 'multi_layer_defects':
-            current_tab = "Multi-Layer"
-        elif self.store.active_view == 'documentation':
-            current_tab = "Documentation"
-        elif self.store.active_view == 'analysis_dashboard':
-             sub_map_rev = {
-                 ViewMode.HEATMAP.value: "Heatmap",
-                 ViewMode.STRESS.value: "Stress Map",
-                 ViewMode.ROOT_CAUSE.value: "Root Cause",
-                 ViewMode.INSIGHTS.value: "Insights"
-             }
-             current_tab = sub_map_rev.get(self.store.analysis_subview, "Heatmap")
-
-        st.subheader("Analysis View")
-
-        # Determine current active tab text
-        current_tab_text = "Heatmap" # Default
-        if self.store.active_view == 'still_alive':
-            current_tab_text = "Still Alive"
-        elif self.store.active_view == 'multi_layer_defects':
-            current_tab_text = "Multi-Layer"
-        elif self.store.active_view == 'documentation':
-            current_tab_text = "Documentation"
-        elif self.store.active_view == 'analysis_dashboard':
-             sub_map_rev = {
-                 ViewMode.HEATMAP.value: "Heatmap",
-                 ViewMode.STRESS.value: "Stress Map",
-                 ViewMode.ROOT_CAUSE.value: "Root Cause",
-                 ViewMode.INSIGHTS.value: "Insights"
-             }
-             current_tab_text = sub_map_rev.get(self.store.analysis_subview, "Heatmap")
-
-        # Create columns for full-width buttons
-        # Split into two rows if too many, but here we have 6 items
-        # Let's try one row of 6
-        cols = st.columns(len(tabs), gap="small")
-
-        for i, label in enumerate(tabs):
-            is_active = (label == current_tab_text)
-
-            def make_callback(sel):
-                def cb():
-                    if sel == "Still Alive":
-                         self.store.active_view = 'still_alive'
-                    elif sel == "Multi-Layer":
-                         self.store.active_view = 'multi_layer_defects'
-                    elif sel == "Documentation":
-                         self.store.active_view = 'documentation'
-                    else:
-                         self.store.active_view = 'analysis_dashboard'
-                         sub_map = {
-                             "Heatmap": ViewMode.HEATMAP.value,
-                             "Stress Map": ViewMode.STRESS.value,
-                             "Root Cause": ViewMode.ROOT_CAUSE.value,
-                             "Insights": ViewMode.INSIGHTS.value
-                         }
-                         self.store.analysis_subview = sub_map[sel]
-                return cb
-
-            cols[i].button(
-                label,
-                key=f"analysis_tab_btn_{i}",
-                type="primary" if is_active else "secondary",
-                use_container_width=True,
-                on_click=make_callback(label)
-            )
-
-        st.divider()
-
-        # 2. Filter Rows (Context Aware)
-        # Order: Layer -> Side -> Verification (Inspection)
-
+        # --- PREPARE DATA ---
         all_layers = sorted(self.store.layer_data.keys())
-
         full_df = self.store.layer_data.get_combined_dataframe()
         all_verifications = []
         if not full_df.empty and 'Verification' in full_df.columns:
             all_verifications = sorted(full_df['Verification'].dropna().astype(str).unique().tolist())
 
-        # Move Verification Filter to Sidebar
+        # Move Verification Filter to Sidebar (Persistent)
         with st.sidebar:
              st.divider()
              st.markdown("### Analysis Filters")
-
-             # CRITICAL: Intersection logic here too.
-             # Sanitize session state directly.
+             # Sanitize selection against available options
              if 'multi_verification_selection' in st.session_state:
                  current_selection = st.session_state['multi_verification_selection']
                  valid_selection = [x for x in current_selection if x in all_verifications]
@@ -333,105 +251,141 @@ class ViewManager:
                  key="multi_verification_selection"
              )
 
-        col_f1, col_f2 = st.columns([3, 1])
+        # --- ROW 1: GLOBAL FILTERS (Layer -> Side -> Quadrant) ---
+        st.subheader("Analysis View")
+        st.markdown("**Select Layers & Scope**")
 
-        # Filter 1: Multi-Select Layer (Buttons)
-        with col_f1:
-            st.markdown("**Select Layers**")
-            # Current Selection
+        # We will try to pack everything into one logical row using columns.
+        # Since button widths vary, we can't easily predict the exact column split.
+        # We'll group them: [Layer Group] [Side Group] [Quadrant Group]
+        # Layout: 4 parts for Layers, 1 for Side, 1 for Quadrant (Total 6)?
+        # Or let Streamlit handle it.
+
+        # Prepare Layer Buttons: [ALL, BU-XX, BU-YY...]
+        layer_buttons_data = []
+
+        # Logic to get BU Name or Layer Num
+        for num in all_layers:
+            bu_name = ""
+            try:
+                first_side_key = next(iter(self.store.layer_data[num]))
+                source_file = self.store.layer_data[num][first_side_key]['SOURCE_FILE'].iloc[0]
+                bu_name = get_bu_name_from_filename(str(source_file))
+            except: pass
+
+            label = bu_name if bu_name else f"Layer {num}"
+            layer_buttons_data.append({'num': num, 'label': label})
+
+        # Calculate Total Buttons for Row 1
+        # [ALL] + [Layers...] + [Front, Back, Both] + [All, Q1, Q2, Q3, Q4]
+        # This is a lot for one row, but user requested wrapping.
+        # Streamlit st.columns doesn't wrap.
+        # We'll split into 3 chunks to organize: Layers | Sides | Quadrants
+
+        c_layers, c_sides, c_quads = st.columns([3, 1, 1], gap="small")
+
+        # --- Layers Group ---
+        with c_layers:
+            # We need to emulate a wrapping row for Layers if there are many.
+            # Since st.columns doesn't wrap, we might need multiple rows if count is high.
+            # Or just use one very dense st.columns list.
+            # Let's try putting all layer buttons in one st.columns call.
+
+            btns = ["ALL"] + [d['label'] for d in layer_buttons_data]
+            l_cols = st.columns(len(btns), gap="small")
+
             current_selection = self.store.multi_layer_selection if self.store.multi_layer_selection else all_layers
-
-            # Prepare button Layout
-            # Buttons: [ALL, L1, L2, L3...]
-            layer_buttons = ["ALL"] + [f"Layer {l}" for l in all_layers]
-
-            # Use small gap columns
-            # If too many layers, this might wrap poorly if not handled.
-            # st.columns(len) works best for ~5-10 items.
-            l_cols = st.columns(len(layer_buttons), gap="small")
-
-            # 1. ALL Button
             is_all_selected = (set(current_selection) == set(all_layers))
 
+            # ALL Button
             def on_click_all():
-                def cb():
-                    self.store.multi_layer_selection = all_layers
+                def cb(): self.store.multi_layer_selection = all_layers
                 return cb
 
-            l_cols[0].button(
-                "ALL",
-                key="btn_layer_all",
-                type="primary" if is_all_selected else "secondary",
-                use_container_width=True,
-                on_click=on_click_all()
-            )
+            l_cols[0].button("ALL", key="an_btn_all", type="primary" if is_all_selected else "secondary", use_container_width=True, on_click=on_click_all())
 
-            # 2. Individual Layer Buttons
-            for i, layer_num in enumerate(all_layers):
-                is_selected = (layer_num in current_selection)
-                label = f"Layer {layer_num}"
-
-                def on_click_layer(num):
+            # Layer Buttons
+            for i, d in enumerate(layer_buttons_data):
+                num = d['num']
+                is_sel = num in current_selection
+                def on_click_layer(n):
                     def cb():
-                        # Toggle logic
                         new_sel = list(self.store.multi_layer_selection) if self.store.multi_layer_selection else list(all_layers)
-                        if num in new_sel:
-                            if len(new_sel) > 1: # Prevent empty selection
-                                new_sel.remove(num)
-                        else:
-                            new_sel.append(num)
+                        if n in new_sel:
+                            if len(new_sel) > 1: new_sel.remove(n)
+                        else: new_sel.append(n)
                         self.store.multi_layer_selection = sorted(new_sel)
                     return cb
 
-                l_cols[i+1].button(
-                    label,
-                    key=f"btn_layer_{layer_num}",
-                    type="primary" if is_selected else "secondary",
-                    use_container_width=True,
-                    on_click=on_click_layer(layer_num)
-                )
+                l_cols[i+1].button(d['label'], key=f"an_btn_l_{num}", type="primary" if is_sel else "secondary", use_container_width=True, on_click=on_click_layer(num))
 
+        # --- Sides Group ---
+        with c_sides:
+            side_opts = ["Front", "Back", "Both"]
+            current_sides = st.session_state.get("analysis_side_pills", ["Front", "Back"])
+            s_cols = st.columns(len(side_opts), gap="small")
 
-        # Filter 2: Side Selection (Buttons: Front / Back / Both)
-        with col_f2:
-             st.markdown("**Side**")
-             side_opts = ["Front", "Back", "Both"]
+            def set_sides(l): st.session_state["analysis_side_pills"] = l
 
-             # Current State
-             # We rely on 'analysis_side_pills' in session state for compatibility with tools
-             current_sides = st.session_state.get("analysis_side_pills", ["Front", "Back"])
+            # Front
+            is_f = ("Front" in current_sides) and ("Back" not in current_sides)
+            s_cols[0].button("Front", key="an_side_f", type="primary" if is_f else "secondary", use_container_width=True, on_click=lambda: set_sides(["Front"]))
+            # Back
+            is_b = ("Back" in current_sides) and ("Front" not in current_sides)
+            s_cols[1].button("Back", key="an_side_b", type="primary" if is_b else "secondary", use_container_width=True, on_click=lambda: set_sides(["Back"]))
+            # Both
+            is_both = ("Front" in current_sides) and ("Back" in current_sides)
+            s_cols[2].button("Both", key="an_side_both", type="primary" if is_both else "secondary", use_container_width=True, on_click=lambda: set_sides(["Front", "Back"]))
 
-             s_cols = st.columns(len(side_opts), gap="small")
+        # --- Quadrants Group ---
+        with c_quads:
+            quad_opts = ["All", "Q1", "Q2", "Q3", "Q4"]
+            current_quad = st.session_state.get("analysis_quadrant_selection", "All")
+            q_cols = st.columns(len(quad_opts), gap="small")
 
-             # Helper to sync state
-             def set_sides(sides_list):
-                 st.session_state["analysis_side_pills"] = sides_list
+            def set_quad(q): st.session_state["analysis_quadrant_selection"] = q
 
-             # Front Button
-             is_front_active = ("Front" in current_sides) and ("Back" not in current_sides)
-             def on_front():
-                 def cb(): set_sides(["Front"])
-                 return cb
-             s_cols[0].button("Front", key="btn_side_front", type="primary" if is_front_active else "secondary", use_container_width=True, on_click=on_front())
+            for i, q_label in enumerate(quad_opts):
+                is_active = (current_quad == q_label)
+                q_cols[i].button(q_label, key=f"an_quad_{q_label}", type="primary" if is_active else "secondary", use_container_width=True, on_click=lambda q=q_label: set_quad(q))
 
-             # Back Button
-             is_back_active = ("Back" in current_sides) and ("Front" not in current_sides)
-             def on_back():
-                 def cb(): set_sides(["Back"])
-                 return cb
-             s_cols[1].button("Back", key="btn_side_back", type="primary" if is_back_active else "secondary", use_container_width=True, on_click=on_back())
+        st.divider()
 
-             # Both Button
-             is_both_active = ("Front" in current_sides) and ("Back" in current_sides)
-             def on_both():
-                 def cb(): set_sides(["Front", "Back"])
-                 return cb
-             s_cols[2].button("Both", key="btn_side_both", type="primary" if is_both_active else "secondary", use_container_width=True, on_click=on_both())
+        # --- ROW 2: ANALYSIS MODULES (Tabs) ---
+        tabs = ["Heatmap", "Stress Map", "Root Cause", "Insights", "Still Alive", "Multi-Layer", "Documentation"]
 
-        # 3. Context Specific Row
-        # current_tab_val is usually derived from state but here it was local variable 'current_tab' in _render_analysis_page_controls
-        # Ensure we use the correct variable name
+        # Logic to determine active tab text
+        current_tab_text = "Heatmap"
+        if self.store.active_view == 'still_alive': current_tab_text = "Still Alive"
+        elif self.store.active_view == 'multi_layer_defects': current_tab_text = "Multi-Layer"
+        elif self.store.active_view == 'documentation': current_tab_text = "Documentation"
+        elif self.store.active_view == 'analysis_dashboard':
+             sub_map_rev = {
+                 ViewMode.HEATMAP.value: "Heatmap",
+                 ViewMode.STRESS.value: "Stress Map",
+                 ViewMode.ROOT_CAUSE.value: "Root Cause",
+                 ViewMode.INSIGHTS.value: "Insights"
+             }
+             current_tab_text = sub_map_rev.get(self.store.analysis_subview, "Heatmap")
 
+        t_cols = st.columns(len(tabs), gap="small")
+        for i, label in enumerate(tabs):
+            is_active = (label == current_tab_text)
+            def on_tab(sel):
+                def cb():
+                    if sel == "Still Alive": self.store.active_view = 'still_alive'
+                    elif sel == "Multi-Layer": self.store.active_view = 'multi_layer_defects'
+                    elif sel == "Documentation": self.store.active_view = 'documentation'
+                    else:
+                         self.store.active_view = 'analysis_dashboard'
+                         sub_map = {"Heatmap": ViewMode.HEATMAP.value, "Stress Map": ViewMode.STRESS.value, "Root Cause": ViewMode.ROOT_CAUSE.value, "Insights": ViewMode.INSIGHTS.value}
+                         self.store.analysis_subview = sub_map[sel]
+                return cb
+            t_cols[i].button(label, key=f"an_tab_{i}", type="primary" if is_active else "secondary", use_container_width=True, on_click=on_tab(label))
+
+        st.divider()
+
+        # --- ROW 3: CONTEXT FILTERS ---
         if current_tab_text == "Heatmap":
              st.slider("Smoothing (Sigma)", min_value=1, max_value=20, value=5, key="heatmap_sigma")
 
@@ -440,11 +394,11 @@ class ViewManager:
 
         elif current_tab_text == "Root Cause":
              c1, c2 = st.columns(2)
-             with c1:
-                 st.radio("Slice Axis", ["X (Column)", "Y (Row)"], horizontal=True, key="rca_axis")
+             with c1: st.radio("Slice Axis", ["X (Column)", "Y (Row)"], horizontal=True, key="rca_axis")
              with c2:
                  max_idx = (self.store.analysis_params.get('panel_cols', 7) * 2) - 1
                  st.slider("Slice Index", 0, max_idx, 0, key="rca_index")
+
 
 
     def render_main_view(self):
