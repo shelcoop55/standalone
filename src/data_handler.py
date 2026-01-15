@@ -219,13 +219,67 @@ def load_data(
                 unit_x = np.random.randint(0, total_units_x, size=num_points)
                 unit_y = np.random.randint(0, total_units_y, size=num_points)
 
-                # 3. Define Random X and Y coordinates between 30 and 48
-                # Multiply by 1000 to simulate um (or keep as is, plotting usually expects um for raw coords)
-                # Assuming simple float values as requested: "30 and 48"
-                # If these are meant to be within a Unit, the plotting logic usually handles mapping.
-                # However, if these are meant to be 'raw coordinates' that plotting uses for tooltip, we add them.
-                rand_x_coords = np.random.uniform(30, 48, size=num_points)
-                rand_y_coords = np.random.uniform(30, 48, size=num_points)
+                # 3. Define Random X and Y coordinates between 30 and 480 mm
+                # The prompt requested "30 and 480 mm".
+                # These coordinates are meant to represent the "Raw" coordinates relative to the panel.
+                # Since the plotting logic uses `plot_x` derived from `UNIT_INDEX`, we must ensure
+                # the `X_COORDINATES` and `Y_COORDINATES` columns reflect valid physical positions.
+                # If these are raw micron coordinates, 30mm = 30000um.
+                # But looking at previous code "30, 48", it seems units were ambiguous.
+                # Let's assume millimeters as per the latest request (30-480mm).
+                # We also need to map these to UNIT INDICES to ensure consistency with the plotting logic.
+
+                # Panel is 510x510 or 600x600 depending on config.
+                # Default Config is 600x600.
+                # So 30-480 is a safe inner range.
+
+                rand_x_coords_mm = np.random.uniform(30, 480, size=num_points)
+                rand_y_coords_mm = np.random.uniform(30, 480, size=num_points)
+
+                # Convert mm to microns if that's what the system expects downstream?
+                # The plotting tooltip divides by 1000 to show mm. So it expects Microns.
+                rand_x_coords = rand_x_coords_mm * 1000
+                rand_y_coords = rand_y_coords_mm * 1000
+
+                # --- SYNC UNIT INDICES ---
+                # The current logic generates random Unit Indices INDEPENDENTLY of X/Y coords.
+                # This causes the mismatch: "Why do I see >600mm?".
+                # Because Unit Index 7 might map to 600mm, even if X_COORD says 30mm.
+                # To fix: Reverse map the random X/Y to Unit Indices.
+
+                # Calculate Quadrant size
+                quad_w = PANEL_WIDTH / 2 # 300
+                quad_h = PANEL_HEIGHT / 2 # 300
+                cell_w = quad_w / panel_cols
+                cell_h = quad_h / panel_rows
+
+                # We need to map global X (0-600) to Unit Index X.
+                # NOTE: The plotting logic `models.py` uses `UNIT_INDEX_X` to derive `plot_x`.
+                # If we want `plot_x` to be 30-480, we must pick `UNIT_INDEX_X` accordingly.
+                # Or better: Just generate Unit Indices that correspond to the valid range.
+
+                # 30mm to 480mm range.
+                # Max index = panel_cols * 2 (e.g. 14).
+                # Max width = 600mm + Gap.
+                # 480mm falls roughly at 80% of width.
+
+                # Let's derive indices from the coords.
+                # Handle Gap logic:
+                # If x > quad_w (300), it's in Q2/Q4.
+                # Actually, simply: unit_x = int(x / cell_w).
+                # But we must account for the gap if we want to be precise?
+                # Models.py adds gap if index >= panel_cols.
+                # So here we just map 0-600 linear range to 0-14 indices roughly.
+
+                unit_x = (rand_x_coords_mm / (PANEL_WIDTH + GAP_SIZE)) * (2 * panel_cols)
+                unit_y = (rand_y_coords_mm / (PANEL_HEIGHT + GAP_SIZE)) * (2 * panel_rows)
+
+                unit_x = unit_x.astype(int)
+                unit_y = unit_y.astype(int)
+
+                # Clamp
+                unit_x = np.clip(unit_x, 0, (2 * panel_cols) - 1)
+                unit_y = np.clip(unit_y, 0, (2 * panel_rows) - 1)
 
                 # Generate Defect Types and Verification statuses
                 defect_types = []
