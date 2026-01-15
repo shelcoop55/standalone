@@ -536,7 +536,9 @@ class ViewManager:
                     include_stress_png=include_stress_png,
                     include_root_cause_png=include_root_cause_png,
                     include_still_alive_png=include_still_alive_png,
-                    layer_data=self.store.layer_data
+                    layer_data=self.store.layer_data,
+                    process_comment=self.store.analysis_params.get("process_comment", ""),
+                    lot_number=self.store.analysis_params.get("lot_number", "")
                 )
                 st.success("Package generated successfully!")
 

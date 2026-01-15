@@ -287,7 +287,8 @@ def generate_zip_package(
     include_root_cause_png: bool = False,
     include_still_alive_png: bool = False,
     layer_data: Optional[Dict] = None,
-    process_comment: str = ""
+    process_comment: str = "",
+    lot_number: str = ""
 ) -> bytes:
     """
     Generates a ZIP file containing selected report components.
@@ -372,7 +373,15 @@ def generate_zip_package(
                             continue
 
                         # Suffix for images
-                        img_suffix = f"_{process_comment}" if process_comment else ""
+                        # Format: _{Comment}_{LotNumber}
+                        # Handle empty fields gracefully to avoid double underscores
+                        parts = []
+                        if process_comment:
+                            parts.append(process_comment)
+                        if lot_number:
+                            parts.append(lot_number)
+
+                        img_suffix = "_" + "_".join(parts) if parts else ""
 
                         # Generate Defect Map PNG
                         if include_png_all_layers:
