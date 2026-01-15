@@ -81,12 +81,54 @@ class BuildUpLayer:
         x_offset_raw = np.where(df['UNIT_INDEX_X'] >= self.panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
         y_offset = np.where(df['UNIT_INDEX_Y'] >= self.panel_rows, QUADRANT_HEIGHT + GAP_SIZE, 0)
 
-        # Jitter
-        jitter_x = np.random.rand(len(df)) * cell_width * 0.8 + (cell_width * 0.1)
-        jitter_y = np.random.rand(len(df)) * cell_height * 0.8 + (cell_height * 0.1)
+        # --- SPATIAL LOGIC ---
+        # If Front Side and X/Y Coordinates exist, use them for relative positioning.
+        # Otherwise, default to random jitter.
 
-        df['plot_x'] = plot_x_base_raw + x_offset_raw + jitter_x
-        df['plot_y'] = plot_y_base + y_offset + jitter_y
+        use_spatial_coords = False
+        norm_x = None
+        norm_y = None
+
+        if self.is_front and 'X_COORDINATES' in df.columns and 'Y_COORDINATES' in df.columns:
+            try:
+                # Group by Unit to normalize coordinates locally
+                # We use transform to keep shape aligned with df
+
+                # Function to MinMax scale with 10% padding [0.1, 0.9]
+                def normalize_group(g):
+                    if len(g) == 1:
+                        return np.array([0.5]) # Center single points
+
+                    min_val = g.min()
+                    max_val = g.max()
+
+                    if min_val == max_val:
+                        return np.full(len(g), 0.5) # Center if all same
+
+                    # Normalize to 0-1 then scale to 0.1-0.9
+                    normalized = (g - min_val) / (max_val - min_val)
+                    return normalized * 0.8 + 0.1
+
+                norm_x = df.groupby(['UNIT_INDEX_X', 'UNIT_INDEX_Y'])['X_COORDINATES'].transform(normalize_group)
+                norm_y = df.groupby(['UNIT_INDEX_X', 'UNIT_INDEX_Y'])['Y_COORDINATES'].transform(normalize_group)
+
+                use_spatial_coords = True
+            except Exception as e:
+                # Fallback to jitter if normalization fails (e.g., non-numeric data)
+                print(f"Spatial normalization failed: {e}")
+                use_spatial_coords = False
+
+        if use_spatial_coords and norm_x is not None and norm_y is not None:
+            # Use normalized relative positions
+            offset_x = norm_x * cell_width
+            offset_y = norm_y * cell_height
+        else:
+            # Use Random Jitter (10% to 90% of cell)
+            offset_x = np.random.rand(len(df)) * cell_width * 0.8 + (cell_width * 0.1)
+            offset_y = np.random.rand(len(df)) * cell_height * 0.8 + (cell_height * 0.1)
+
+        df['plot_x'] = plot_x_base_raw + x_offset_raw + offset_x
+        df['plot_y'] = plot_y_base + y_offset + offset_y
 
         # --- 2. PHYSICAL COORDINATES (Stacked View - Flip Back Side) ---
         # Logic: If Side is Back, Flip X Index.
@@ -104,8 +146,13 @@ class BuildUpLayer:
         plot_x_base_phys = local_index_x_phys * cell_width
         x_offset_phys = np.where(df['PHYSICAL_X'] >= self.panel_cols, QUADRANT_WIDTH + GAP_SIZE, 0)
 
-        # Reuse jitter for visual consistency across views
-        df['physical_plot_x'] = plot_x_base_phys + x_offset_phys + jitter_x
+        # Reuse offset for visual consistency (spatial or jitter)
+        # Note: For Back side, we are currently reusing the 'offset_x' calculated above.
+        # If 'use_spatial_coords' was True (only for Front), it uses that.
+        # If Back side, it uses jitter.
+        # IMPORTANT: If we ever enable spatial coords for Back side, we might need to FLIP the offset_x?
+        # But for now, user requested Front only.
+        df['physical_plot_x'] = plot_x_base_phys + x_offset_phys + offset_x
 
 
 class PanelData:
