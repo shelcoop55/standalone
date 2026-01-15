@@ -42,6 +42,10 @@ def create_trend_chart(df: pd.DataFrame) -> go.Figure:
          return go.Figure(layout=dict(title="No True Defects for Trend Analysis"))
 
     # Group by Layer
+    # Check if LAYER_NUM exists
+    if 'LAYER_NUM' not in df_true.columns:
+        return go.Figure(layout=dict(title="Missing Layer Information for Trend Analysis"))
+
     trend_data = df_true.groupby('LAYER_NUM').size().reset_index(name='Count')
     trend_data = trend_data.sort_values('LAYER_NUM')
 
