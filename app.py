@@ -76,6 +76,12 @@ def main() -> None:
                     key="process_comment"
                 )
 
+                c_off1, c_off2 = st.columns(2)
+                with c_off1:
+                    st.number_input("X Offset (mm)", value=0.0, step=1.0, key="offset_x", help="Shift origin X by this amount.")
+                with c_off2:
+                    st.number_input("Y Offset (mm)", value=0.0, step=1.0, key="offset_y", help="Shift origin Y by this amount.")
+
             # Callback for Analysis
             def on_run_analysis():
                 # Read from dynamic key
@@ -86,6 +92,8 @@ def main() -> None:
                 cols = st.session_state.panel_cols
                 lot = st.session_state.lot_number
                 comment = st.session_state.process_comment
+                off_x = st.session_state.get("offset_x", 0.0)
+                off_y = st.session_state.get("offset_y", 0.0)
 
                 # Load Data (This will now hit the cache if arguments are same)
                 data = load_data(files, rows, cols)
@@ -131,7 +139,9 @@ def main() -> None:
                     "panel_cols": cols,
                     "gap_size": GAP_SIZE,
                     "lot_number": lot,
-                    "process_comment": comment
+                    "process_comment": comment,
+                    "offset_x": off_x,
+                    "offset_y": off_y
                 }
                 store.report_bytes = None
 
