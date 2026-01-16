@@ -26,7 +26,6 @@ class StressMapTool(AnalysisTool):
         # READ INPUTS
         # 1. Mode (Cumulative vs Delta)
         # manager.py stores "stress_map_mode"
-        mode = st.session_state.get('stress_mode', 'Cumulative') # From sidebar if legacy? No, use new key
         mode_new = st.session_state.get('stress_map_mode', 'Cumulative')
 
         # 2. Filters
@@ -57,19 +56,17 @@ class StressMapTool(AnalysisTool):
         offset_y = params.get("offset_y", 0.0)
         gap_size = params.get("gap_size", GAP_SIZE)
 
-        # Dynamic Dimensions
-        # Note: Stress Maps use Grid Counts (Indices), not physical coords for bins.
-        # But 'Quarterly' view mode in plotting.py overlays physical grid.
-        # So we should pass dimensions.
-        # create_stress_heatmap signature needs update?
-        # Let's check src/plotting.py again.
-        # create_stress_heatmap currently: (..., offset_x, offset_y, gap_size)
-        # It calls create_grid_shapes internally.
-        # create_grid_shapes NOW requires panel_width/height (defaults to global if not passed).
-        # We must update create_stress_heatmap to accept and pass dimensions.
-        # I need to update src/plotting.py FIRST for stress functions.
-        # Assuming I missed it in the previous step?
-        # Let's double check src/plotting.py via grep.
+        fig = None
+
+        if mode_new == "Cumulative":
+             stress_data = aggregate_stress_data(
+                self.store.layer_data, keys, panel_rows, panel_cols, panel_uid,
+                verification_filter=selected_verifs,
+                quadrant_filter=selected_quadrant
+            )
+             fig = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_size=gap_size, panel_width=PANEL_WIDTH, panel_height=PANEL_HEIGHT)
+
+        elif mode_new == "Delta Difference":
             # Delta Difference logic: "Front vs Back" for selected layers
             keys_f = [k for k in keys if k[1] == 'F']
             keys_b = [k for k in keys if k[1] == 'B']
@@ -86,6 +83,7 @@ class StressMapTool(AnalysisTool):
             )
 
             st.info("Delta Difference Mode: Calculating (Front Side - Back Side) for selected layers.")
-            fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_size=gap_size)
+            fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_size=gap_size, panel_width=PANEL_WIDTH, panel_height=PANEL_HEIGHT)
 
-        st.plotly_chart(fig, use_container_width=True)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
