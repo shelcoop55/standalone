@@ -12,7 +12,8 @@ from src.config import (
     PANEL_COLOR, GRID_COLOR, defect_style_map, TEXT_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR,
     PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE,
     ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS, SAFE_VERIFICATION_VALUES,
-    VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT, NEON_PALETTE
+    VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT, NEON_PALETTE,
+    UNIT_FACE_COLOR, UNIT_EDGE_COLOR, AXIS_TEXT_COLOR, PANEL_BACKGROUND_COLOR, INTER_UNIT_GAP
 )
 from src.data_handler import StressMapData
 from src.documentation import VERIFICATION_DESCRIPTIONS
@@ -26,7 +27,8 @@ from src.enums import Quadrant
 def _draw_border_and_gaps(ox: float = 0.0, oy: float = 0.0, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT) -> List[Dict[str, Any]]:
     """Creates the shapes for the outer border and inner gaps of the panel."""
     shapes = []
-    gap_color = '#A8652A'
+    # Main Panel Background (Copper) is used for outer border and major gaps
+    gap_color = PANEL_BACKGROUND_COLOR
     total_width_with_gap = panel_width + gap_x
     total_height_with_gap = panel_height + gap_y
 
@@ -55,26 +57,56 @@ def _draw_border_and_gaps(ox: float = 0.0, oy: float = 0.0, gap_x: float = GAP_S
     return shapes
 
 def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int, fill: bool = True, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT) -> List[Dict[str, Any]]:
-    """Creates the shapes for the quadrant outlines and their internal grid lines."""
+    """Creates the shapes for the quadrant outlines and individual unit rectangles."""
     shapes = []
     quad_width = panel_width / 2
     quad_height = panel_height / 2
 
-    cell_width = quad_width / panel_cols
-    cell_height = quad_height / panel_rows
+    # Calculate Unit Dimensions accounting for inter-unit gaps
+    # Formula: UnitWidth = (QuadWidth - (Cols - 1) * gap) / Cols
+    unit_width = (quad_width - (panel_cols - 1) * INTER_UNIT_GAP) / panel_cols
+    unit_height = (quad_height - (panel_rows - 1) * INTER_UNIT_GAP) / panel_rows
 
     for x_start, y_start in origins_to_draw.values():
         if fill:
+            # 1. Draw the Background Copper Rect for the whole quadrant
             shapes.append(dict(
                 type="rect", x0=x_start, y0=y_start, x1=x_start + quad_width, y1=y_start + quad_height,
-                line=dict(color=GRID_COLOR, width=2), fillcolor=PANEL_COLOR, layer='below'
+                line=dict(width=0), fillcolor=PANEL_BACKGROUND_COLOR, layer='below'
             ))
-        for i in range(1, panel_cols):
-            line_x = x_start + (i * cell_width)
-            shapes.append(dict(type="line", x0=line_x, y0=y_start, x1=line_x, y1=y_start + quad_height, line=dict(color=GRID_COLOR, width=1, dash='solid'), opacity=0.5, layer='below'))
-        for i in range(1, panel_rows):
-            line_y = y_start + (i * cell_height)
-            shapes.append(dict(type="line", x0=x_start, y0=line_y, x1=x_start + quad_width, y1=line_y, line=dict(color=GRID_COLOR, width=1, dash='solid'), opacity=0.5, layer='below'))
+
+            # 2. Draw individual Unit Rects (Peach)
+            for r in range(panel_rows):
+                for c in range(panel_cols):
+                    # Calculate position
+                    ux = x_start + c * (unit_width + INTER_UNIT_GAP)
+                    uy = y_start + r * (unit_height + INTER_UNIT_GAP)
+
+                    shapes.append(dict(
+                        type="rect",
+                        x0=ux, y0=uy,
+                        x1=ux + unit_width, y1=uy + unit_height,
+                        line=dict(color=UNIT_EDGE_COLOR, width=1),
+                        fillcolor=UNIT_FACE_COLOR,
+                        layer='below'
+                    ))
+        else:
+            # For overlay mode (e.g. heatmap), we might still want the grid structure visible
+            # But usually 'fill=False' implies we just want the lines.
+            # Since we have gaps now, we should draw the gap lines or unit outlines.
+            # Let's draw unit outlines.
+             for r in range(panel_rows):
+                for c in range(panel_cols):
+                    ux = x_start + c * (unit_width + INTER_UNIT_GAP)
+                    uy = y_start + r * (unit_height + INTER_UNIT_GAP)
+                    shapes.append(dict(
+                        type="rect",
+                        x0=ux, y0=uy,
+                        x1=ux + unit_width, y1=uy + unit_height,
+                        line=dict(color=UNIT_EDGE_COLOR, width=1),
+                        fillcolor="rgba(0,0,0,0)", # Transparent
+                        layer='below'
+                    ))
             
     return shapes
 
@@ -97,12 +129,12 @@ def apply_panel_theme(fig: go.Figure, title: str = "", height: int = 800) -> go.
         xaxis=dict(
             showgrid=False, zeroline=False, showline=True,
             linewidth=2, linecolor=GRID_COLOR, mirror=True,
-            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR)
+            title_font=dict(color=AXIS_TEXT_COLOR), tickfont=dict(color=AXIS_TEXT_COLOR)
         ),
         yaxis=dict(
             showgrid=False, zeroline=False, showline=True,
             linewidth=2, linecolor=GRID_COLOR, mirror=True,
-            title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR),
+            title_font=dict(color=AXIS_TEXT_COLOR), tickfont=dict(color=AXIS_TEXT_COLOR),
             scaleanchor="x", scaleratio=1
         ),
         legend=dict(
@@ -489,7 +521,10 @@ def create_still_alive_map(
         'Q3': (0 + offset_x, quad_height + gap_y + offset_y),
         'Q4': (quad_width + gap_x + offset_x, quad_height + gap_y + offset_y)
     }
-    cell_width, cell_height = quad_width / panel_cols, quad_height / panel_rows
+
+    # Calculate Unit Dimensions with gaps
+    unit_width = (quad_width - (panel_cols - 1) * INTER_UNIT_GAP) / panel_cols
+    unit_height = (quad_height - (panel_rows - 1) * INTER_UNIT_GAP) / panel_rows
 
     # Prepare lists for scatter trace (Tooltips)
     hover_x = []
@@ -497,14 +532,26 @@ def create_still_alive_map(
     hover_text = []
     hover_colors = []
 
-    # 1. Draw the colored cells first (without borders)
+    # 0. Draw Background Copper first (for the gaps to show through if cells don't touch)
+    shapes.extend(_draw_border_and_gaps(offset_x, offset_y, gap_x, gap_y, panel_width, panel_height))
+    # We also need quadrant backgrounds for the inter-unit gaps
+    for q_key, (qx, qy) in all_origins.items():
+         shapes.append(dict(
+            type="rect", x0=qx, y0=qy, x1=qx + quad_width, y1=qy + quad_height,
+            line=dict(width=0), fillcolor=PANEL_BACKGROUND_COLOR, layer='below'
+        ))
+
+    # 1. Draw the colored cells (Units)
     for row in range(total_rows):
         for col in range(total_cols):
             quadrant_col, local_col = divmod(col, panel_cols)
             quadrant_row, local_row = divmod(row, panel_rows)
             quad_key = f"Q{quadrant_row * 2 + quadrant_col + 1}"
             x_origin, y_origin = all_origins[quad_key]
-            x0, y0 = x_origin + local_col * cell_width, y_origin + local_row * cell_height
+
+            # Position with Gaps
+            x0 = x_origin + local_col * (unit_width + INTER_UNIT_GAP)
+            y0 = y_origin + local_row * (unit_height + INTER_UNIT_GAP)
 
             # Determine status
             is_dead = (col, row) in true_defect_data
@@ -517,8 +564,8 @@ def create_still_alive_map(
                 fill_color = DEFECTIVE_CELL_COLOR
 
                 # Add to hover data (Keep Autopsy Tooltip)
-                center_x = x0 + cell_width/2
-                center_y = y0 + cell_height/2
+                center_x = x0 + unit_width/2
+                center_y = y0 + unit_height/2
                 hover_x.append(center_x)
                 hover_y.append(center_y)
 
@@ -534,10 +581,9 @@ def create_still_alive_map(
             else:
                 fill_color = ALIVE_CELL_COLOR
 
-            shapes.append({'type': 'rect', 'x0': x0, 'y0': y0, 'x1': x0 + cell_width, 'y1': y0 + cell_height, 'fillcolor': fill_color, 'line': {'width': 0}, 'layer': 'below'})
+            shapes.append({'type': 'rect', 'x0': x0, 'y0': y0, 'x1': x0 + unit_width, 'y1': y0 + unit_height, 'fillcolor': fill_color, 'line': {'width': 1, 'color': UNIT_EDGE_COLOR}, 'layer': 'below'})
 
-    # 2. Draw grid lines over the colored cells
-    shapes.extend(create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height))
+    # 2. No need to draw grid lines again, the cells themselves form the grid now.
 
     # 3. Create Scatter Trace for Hover
     if hover_x:
@@ -1009,6 +1055,13 @@ def create_density_contour_map(
         shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height)
 
     # 4. Axis Labels
+    total_cols = panel_cols * 2
+    total_rows = panel_rows * 2
+    quad_width = panel_width / 2
+    quad_height = panel_height / 2
+    cell_width = quad_width / panel_cols
+    cell_height = quad_height / panel_rows
+
     x_tick_vals = []
     x_tick_text = []
     for i in range(total_cols):

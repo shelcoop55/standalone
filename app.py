@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from src.config import GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y, DEFAULT_GAP_X, DEFAULT_GAP_Y
+from src.config import GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y, DEFAULT_GAP_X, DEFAULT_GAP_Y, DEFAULT_PANEL_ROWS, DEFAULT_PANEL_COLS
 from src.data_handler import load_data, get_true_defect_coordinates
 from src.reporting import generate_zip_package
 from src.enums import ViewMode, Quadrant
@@ -56,12 +56,12 @@ def main() -> None:
                     key=uploader_key
                 )
                 st.number_input(
-                    "Panel Rows", min_value=1, value=7,
+                    "Panel Rows", min_value=1, value=DEFAULT_PANEL_ROWS,
                     help="Number of vertical units in a single quadrant.",
                     key="panel_rows"
                 )
                 st.number_input(
-                    "Panel Columns", min_value=1, value=7,
+                    "Panel Columns", min_value=1, value=DEFAULT_PANEL_COLS,
                     help="Number of horizontal units in a single quadrant.",
                     key="panel_cols"
                 )
