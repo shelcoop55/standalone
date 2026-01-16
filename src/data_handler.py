@@ -82,7 +82,9 @@ def load_data(
     panel_rows: int,
     panel_cols: int,
     panel_width: float = PANEL_WIDTH, # Default to config if not provided
-    panel_height: float = PANEL_HEIGHT
+    panel_height: float = PANEL_HEIGHT,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE
 ) -> PanelData:
     """
     Loads defect data from multiple build-up layer files, validates filenames
@@ -174,7 +176,8 @@ def load_data(
         for layer_num, sides in temp_data.items():
             for side, dfs in sides.items():
                 merged_df = pd.concat(dfs, ignore_index=True)
-                layer_obj = BuildUpLayer(layer_num, side, merged_df, panel_rows, panel_cols, panel_width, panel_height)
+                # Pass gap_x and gap_y to BuildUpLayer
+                layer_obj = BuildUpLayer(layer_num, side, merged_df, panel_rows, panel_cols, panel_width, panel_height, gap_x, gap_y)
                 panel_data.add_layer(layer_obj)
 
         if panel_data:
@@ -268,8 +271,9 @@ def load_data(
                 # Models.py adds gap if index >= panel_cols.
                 # So here we just map 0-600 linear range to 0-14 indices roughly.
 
-                unit_x = (rand_x_coords_mm / (panel_width + GAP_SIZE)) * (2 * panel_cols)
-                unit_y = (rand_y_coords_mm / (panel_height + GAP_SIZE)) * (2 * panel_rows)
+                # Updated logic to use gap_x and gap_y
+                unit_x = (rand_x_coords_mm / (panel_width + gap_x)) * (2 * panel_cols)
+                unit_y = (rand_y_coords_mm / (panel_height + gap_y)) * (2 * panel_rows)
 
                 unit_x = unit_x.astype(int)
                 unit_y = unit_y.astype(int)
@@ -311,7 +315,7 @@ def load_data(
                 }
 
                 df = pd.DataFrame(defect_data)
-                layer_obj = BuildUpLayer(layer_num, side, df, panel_rows, panel_cols, panel_width, panel_height)
+                layer_obj = BuildUpLayer(layer_num, side, df, panel_rows, panel_cols, panel_width, panel_height, gap_x, gap_y)
                 panel_data.add_layer(layer_obj)
 
     return panel_data

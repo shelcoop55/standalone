@@ -54,7 +54,13 @@ class StressMapTool(AnalysisTool):
         # Layout Params
         offset_x = params.get("offset_x", 0.0)
         offset_y = params.get("offset_y", 0.0)
-        gap_size = params.get("gap_size", GAP_SIZE)
+        # Use dynamic gaps from params (set in app.py)
+        gap_x = params.get("gap_x", GAP_SIZE)
+        gap_y = params.get("gap_y", GAP_SIZE)
+
+        # Use panel dimensions from params
+        p_width = params.get("panel_width", PANEL_WIDTH)
+        p_height = params.get("panel_height", PANEL_HEIGHT)
 
         fig = None
 
@@ -64,7 +70,7 @@ class StressMapTool(AnalysisTool):
                 verification_filter=selected_verifs,
                 quadrant_filter=selected_quadrant
             )
-             fig = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_size=gap_size, panel_width=PANEL_WIDTH, panel_height=PANEL_HEIGHT)
+             fig = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=p_width, panel_height=p_height)
 
         elif mode_new == "Delta Difference":
             # Delta Difference logic: "Front vs Back" for selected layers
@@ -83,7 +89,7 @@ class StressMapTool(AnalysisTool):
             )
 
             st.info("Delta Difference Mode: Calculating (Front Side - Back Side) for selected layers.")
-            fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_size=gap_size, panel_width=PANEL_WIDTH, panel_height=PANEL_HEIGHT)
+            fig = create_delta_heatmap(stress_data_a, stress_data_b, panel_rows, panel_cols, view_mode=view_mode, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=p_width, panel_height=p_height)
 
         if fig:
             st.plotly_chart(fig, use_container_width=True)

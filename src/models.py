@@ -22,6 +22,8 @@ class BuildUpLayer:
     panel_cols: int
     panel_width: float = PANEL_WIDTH
     panel_height: float = PANEL_HEIGHT
+    gap_x: float = GAP_SIZE
+    gap_y: float = GAP_SIZE
 
     def __post_init__(self):
         self._validate()
@@ -85,8 +87,8 @@ class BuildUpLayer:
         plot_x_base_raw = local_index_x_raw * cell_width
         plot_y_base = local_index_y * cell_height
 
-        x_offset_raw = np.where(df['UNIT_INDEX_X'] >= self.panel_cols, quad_width + GAP_SIZE, 0)
-        y_offset = np.where(df['UNIT_INDEX_Y'] >= self.panel_rows, quad_height + GAP_SIZE, 0)
+        x_offset_raw = np.where(df['UNIT_INDEX_X'] >= self.panel_cols, quad_width + self.gap_x, 0)
+        y_offset = np.where(df['UNIT_INDEX_Y'] >= self.panel_rows, quad_height + self.gap_y, 0)
 
         # --- SPATIAL LOGIC ---
         # Use X/Y Coordinates for relative positioning if available (for both Front and Back).
@@ -142,10 +144,10 @@ class BuildUpLayer:
 
             # Logic:
             # 1. Identify if point is in Q2/Q4 (Right Side).
-            # 2. If so, add GAP_SIZE to its X.
+            # 2. If so, add GAP to its X.
             # 3. Add global UI offset (handled in plotting.py).
 
-            # We use x_offset_raw which adds GAP_SIZE based on UNIT_INDEX.
+            # We use x_offset_raw which adds GAP based on UNIT_INDEX.
             # We assume UNIT_INDEX correctly identifies the quadrant even if we use absolute coords.
 
             df['plot_x'] = offset_x + x_offset_raw
@@ -173,13 +175,13 @@ class BuildUpLayer:
 
         local_index_x_flipped = df['PHYSICAL_X_FLIPPED'] % self.panel_cols
         plot_x_base_flipped = local_index_x_flipped * cell_width
-        x_offset_flipped = np.where(df['PHYSICAL_X_FLIPPED'] >= self.panel_cols, quad_width + GAP_SIZE, 0)
+        x_offset_flipped = np.where(df['PHYSICAL_X_FLIPPED'] >= self.panel_cols, quad_width + self.gap_x, 0)
 
         # B) RAW MODE (No Flip) - PRE-CALCULATE VARIABLES
         df['PHYSICAL_X_RAW'] = df['UNIT_INDEX_X']
         local_index_x_raw_phys = df['PHYSICAL_X_RAW'] % self.panel_cols
         plot_x_base_raw_phys = local_index_x_raw_phys * cell_width
-        x_offset_raw_phys = np.where(df['PHYSICAL_X_RAW'] >= self.panel_cols, quad_width + GAP_SIZE, 0)
+        x_offset_raw_phys = np.where(df['PHYSICAL_X_RAW'] >= self.panel_cols, quad_width + self.gap_x, 0)
 
         if use_spatial_coords:
             # For flipped view, we need to flip the absolute coordinate relative to the panel width?

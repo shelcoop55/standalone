@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from src.config import GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR, PANEL_WIDTH, PANEL_HEIGHT
+from src.config import GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y, DEFAULT_GAP_X, DEFAULT_GAP_Y
 from src.data_handler import load_data, get_true_defect_coordinates
 from src.reporting import generate_zip_package
 from src.enums import ViewMode, Quadrant
@@ -79,16 +79,21 @@ def main() -> None:
             with st.expander("⚙️ Advanced Configuration", expanded=False):
                 # 1. Panel Dimensions (UI Removed - Hardcoded Defaults)
                 # Used to be: c_dim1, c_dim2 inputs for Panel Width/Height
+                # Now using Frame Width/Height (510/515) internally for calculation.
 
                 # 2. Origins (Renamed from Offsets)
                 c_off1, c_off2 = st.columns(2)
                 with c_off1:
-                    st.number_input("X Origin (mm)", value=40.0, step=1.0, key="offset_x", help="Shift origin X by this amount.")
+                    st.number_input("X Origin (mm)", value=DEFAULT_OFFSET_X, step=1.0, key="offset_x", help="Shift origin X by this amount.")
                 with c_off2:
-                    st.number_input("Y Origin (mm)", value=22.5, step=1.0, key="offset_y", help="Shift origin Y by this amount.")
+                    st.number_input("Y Origin (mm)", value=DEFAULT_OFFSET_Y, step=1.0, key="offset_y", help="Shift origin Y by this amount.")
 
-                # 3. Gap Size
-                st.number_input("Gap Size (mm)", value=float(GAP_SIZE), step=1.0, min_value=0.0, key="custom_gap_size", help="Distance between quadrants.")
+                # 3. Gaps
+                c_gap1, c_gap2 = st.columns(2)
+                with c_gap1:
+                    st.number_input("Gap X (mm)", value=float(DEFAULT_GAP_X), step=1.0, min_value=0.0, key="gap_x", help="Horizontal gap between quadrants.")
+                with c_gap2:
+                    st.number_input("Gap Y (mm)", value=float(DEFAULT_GAP_Y), step=1.0, min_value=0.0, key="gap_y", help="Vertical gap between quadrants.")
 
             # Callback for Analysis
             def on_run_analysis():
@@ -102,17 +107,19 @@ def main() -> None:
                 comment = st.session_state.process_comment
 
                 # Retrieve Advanced Params
-                off_x = st.session_state.get("offset_x", 40.0)
-                off_y = st.session_state.get("offset_y", 22.5)
-                gap_size = st.session_state.get("custom_gap_size", GAP_SIZE)
+                off_x = st.session_state.get("offset_x", DEFAULT_OFFSET_X)
+                off_y = st.session_state.get("offset_y", DEFAULT_OFFSET_Y)
+                gap_x = st.session_state.get("gap_x", DEFAULT_GAP_X)
+                gap_y = st.session_state.get("gap_y", DEFAULT_GAP_Y)
 
-                # Hardcoded Defaults used directly (UI Inputs removed)
-                p_width = float(PANEL_WIDTH)
-                p_height = float(PANEL_HEIGHT)
+                # DYNAMIC CALCULATION of Active Panel Dimensions
+                # Logic: Active_Dim = Total_Frame - (2 * Offset) - Gap
+                p_width = float(FRAME_WIDTH) - (2 * off_x) - gap_x
+                p_height = float(FRAME_HEIGHT) - (2 * off_y) - gap_y
 
                 # Load Data (This will now hit the cache if arguments are same)
-                # Pass width/height to ensure models are built with correct dimensions
-                data = load_data(files, rows, cols, p_width, p_height)
+                # Pass dynamically calculated width/height
+                data = load_data(files, rows, cols, p_width, p_height, gap_x, gap_y)
                 if data:
                     # UPDATE: Store ID and Metadata, NOT the object
                     if not files:
@@ -155,7 +162,9 @@ def main() -> None:
                     "panel_cols": cols,
                     "panel_width": p_width,
                     "panel_height": p_height,
-                    "gap_size": gap_size,
+                    "gap_x": gap_x,
+                    "gap_y": gap_y,
+                    "gap_size": gap_x, # Backwards compatibility
                     "lot_number": lot,
                     "process_comment": comment,
                     "offset_x": off_x,
@@ -176,6 +185,11 @@ def main() -> None:
 
                 def on_reset():
                     store.clear_all()
+                    # Re-initialize uploader_key immediately after clearing state
+                    # to prevent KeyError on rerun or subsequent access
+                    if "uploader_key" not in st.session_state:
+                        st.session_state["uploader_key"] = 0
+
                     # Increment key to recreate file uploader widget (effectively clearing it)
                     st.session_state["uploader_key"] += 1
                     # Rerun will happen automatically after callback
