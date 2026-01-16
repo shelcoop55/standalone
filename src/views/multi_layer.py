@@ -60,11 +60,18 @@ def render_multi_layer_view(store: SessionStore, selected_layers: list, selected
         flip_back = st.session_state.get("flip_back_side", True)
         offset_x = params.get("offset_x", 0.0)
         offset_y = params.get("offset_y", 0.0)
-        gap_size = params.get("gap_size", GAP_SIZE)
+        gap_x = params.get("gap_x", GAP_SIZE)
+        gap_y = params.get("gap_y", GAP_SIZE)
         panel_width = params.get("panel_width", 410)
         panel_height = params.get("panel_height", 452)
 
-        fig = create_multi_layer_defect_map(combined_df, panel_rows, panel_cols, flip_back=flip_back, offset_x=offset_x, offset_y=offset_y, gap_size=gap_size, panel_width=panel_width, panel_height=panel_height)
+        fig = create_multi_layer_defect_map(
+            combined_df, panel_rows, panel_cols,
+            flip_back=flip_back,
+            offset_x=offset_x, offset_y=offset_y,
+            gap_x=gap_x, gap_y=gap_y,
+            panel_width=panel_width, panel_height=panel_height
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No data matches current filters.")

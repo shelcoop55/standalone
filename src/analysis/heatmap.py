@@ -98,7 +98,9 @@ class HeatmapTool(AnalysisTool):
         # 7. Layout Params
         offset_x = params.get("offset_x", 0.0)
         offset_y = params.get("offset_y", 0.0)
-        gap_size = params.get("gap_size", GAP_SIZE)
+        gap_x = params.get("gap_x", GAP_SIZE)
+        gap_y = params.get("gap_y", GAP_SIZE)
+        gap_size = gap_x # Local alias for compatibility with click logic
 
         # Dynamic Panel Size
         panel_width = params.get("panel_width", PANEL_WIDTH)
@@ -134,7 +136,8 @@ class HeatmapTool(AnalysisTool):
                 quadrant_selection=selected_quadrant,
                 offset_x=offset_x,
                 offset_y=offset_y,
-                gap_size=gap_size,
+                gap_x=gap_x,
+                gap_y=gap_y,
                 panel_width=panel_width,
                 panel_height=panel_height
             )
