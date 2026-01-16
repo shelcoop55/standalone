@@ -185,12 +185,9 @@ class BuildUpLayer:
 
             total_frame_width = self.panel_width + self.gap_x
 
-            if self.is_back:
-                # Mirror the coordinate
-                df['physical_plot_x_flipped'] = total_frame_width - abs_x_mm
-            else:
-                # Front side stays as is
-                df['physical_plot_x_flipped'] = abs_x_mm
+            # User explicitly requested NO mirroring for Back side data.
+            # We treat the provided coordinates as absolute and correct for the desired view.
+            df['physical_plot_x_flipped'] = abs_x_mm
 
         else:
             # Grid-based Jitter Logic
