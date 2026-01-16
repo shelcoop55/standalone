@@ -240,8 +240,14 @@ def create_defect_traces(df: pd.DataFrame, offset_x: float = 0.0, offset_y: floa
                             + coord_str +
                             "<extra></extra>")
 
-        x_vals = dff['plot_x'] + offset_x
-        y_vals = dff['plot_y'] + offset_y
+        # FIX: If data has absolute spatial coords, do not add external margin offsets.
+        # We check if the raw columns exist to determine mode.
+        if 'X_COORDINATES' in df.columns:
+            x_vals = dff['plot_x']
+            y_vals = dff['plot_y']
+        else:
+            x_vals = dff['plot_x'] + offset_x
+            y_vals = dff['plot_y'] + offset_y
 
         traces.append(go.Scattergl(
             x=x_vals,
@@ -331,10 +337,14 @@ def create_multi_layer_defect_map(
 
                 x_coords = dff[x_col_name]
 
+                # FIX: Conditional offset application
+                final_x = x_coords if 'X_COORDINATES' in df.columns else x_coords + offset_x
+                final_y = dff['plot_y'] if 'X_COORDINATES' in df.columns else dff['plot_y'] + offset_y
+
                 # OPTIMIZATION: Use WebGL
                 fig.add_trace(go.Scattergl(
-                    x=x_coords + offset_x,
-                    y=dff['plot_y'] + offset_y,
+                    x=final_x,
+                    y=final_y,
                     mode='markers',
                     marker=dict(
                         color=layer_color,
