@@ -45,7 +45,7 @@ UNIT_EDGE_COLOR = '#8B4513'        # Saddle Brown (Unit Edges)
 GRID_COLOR = UNIT_EDGE_COLOR       # Use edge color for grid lines if drawn as lines
 AXIS_TEXT_COLOR = '#5A2D0C'        # Dark Bronze (Text/Labels)
 
-BACKGROUND_COLOR = '#FFFFFF' # White background.
+BACKGROUND_COLOR = '#2C3E50' # White background.
 PLOT_AREA_COLOR = '#333333'  # Dark Grey for plot area (contrast).
 TEXT_COLOR = '#000000'       # Black text for readability on white.
 
