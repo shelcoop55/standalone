@@ -46,7 +46,7 @@ GRID_COLOR = UNIT_EDGE_COLOR       # Use edge color for grid lines if drawn as l
 AXIS_TEXT_COLOR = '#5A2D0C'        # Dark Bronze (Text/Labels)
 
 BACKGROUND_COLOR = '#FFFFFF' # White background.
-PLOT_AREA_COLOR = '#FFFFFF'  # White for plot area to blend in.
+PLOT_AREA_COLOR = '#333333'  # Dark Grey for plot area (contrast).
 TEXT_COLOR = '#000000'       # Black text for readability on white.
 
 # Colors for the "Still Alive" yield map
