@@ -148,15 +148,12 @@ class BuildUpLayer:
             # Usually raw coords are contiguous. We want to insert a gap.
 
             # Logic:
-            # 1. Identify if point is in Q2/Q4 (Right Side).
-            # 2. If so, add GAP to its X.
-            # 3. Add global UI offset (handled in plotting.py).
+            # If using spatial coordinates, they are assumed to be Absolute (Frame Origin).
+            # Thus, they ALREADY include the gap if they are physically correct.
+            # We should NOT add the calculated gap offset again.
 
-            # We use x_offset_raw which adds GAP based on UNIT_INDEX.
-            # We assume UNIT_INDEX correctly identifies the quadrant even if we use absolute coords.
-
-            df['plot_x'] = offset_x + x_offset_raw
-            df['plot_y'] = offset_y + y_offset
+            df['plot_x'] = offset_x
+            df['plot_y'] = offset_y
         else:
             # Relative/Grid-based positioning
             df['plot_x'] = plot_x_base_raw + x_offset_raw + offset_x
