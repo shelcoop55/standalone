@@ -23,8 +23,7 @@ INTER_UNIT_GAP = 0.25
 # Active Panel Dimensions (Calculated Defaults)
 # These act as fallback constants if dynamic calculation isn't used.
 # Logic: Active = Total - (2 * Offset) - Gap
-PANEL_WIDTH = FRAME_WIDTH - (DEFAULT_OFFSET_X) - DEFAULT_GAP_X  # 480
-PANEL_HEIGHT = FRAME_HEIGHT - (DEFAULT_OFFSET_Y) - DEFAULT_GAP_Y # 482
+
 
 # Legacy Gap Constant (for backward compatibility)
 GAP_SIZE = DEFAULT_GAP_X
@@ -43,11 +42,11 @@ UNIT_FACE_COLOR = '#F4B486'        # Light Copper/Peach (Unit Faces)
 UNIT_EDGE_COLOR = '#8B4513'        # Saddle Brown (Unit Edges)
 
 GRID_COLOR = UNIT_EDGE_COLOR       # Use edge color for grid lines if drawn as lines
-AXIS_TEXT_COLOR = '#5A2D0C'        # Dark Bronze (Text/Labels)
+AXIS_TEXT_COLOR = '#FFFFFF'        # Dark Bronze (Text/Labels)
 
-BACKGROUND_COLOR = '#FFFFFF' # White background.
+BACKGROUND_COLOR = '#2C3E50' # White background.
 PLOT_AREA_COLOR = '#333333'  # Dark Grey for plot area (contrast).
-TEXT_COLOR = '#000000'       # Black text for readability on white.
+TEXT_COLOR = '#FFFFFF'       # Black text for readability on white.
 
 # Colors for the "Still Alive" yield map
 ALIVE_CELL_COLOR = '#2ECC71' # A vibrant green for cells without "True" defects.
