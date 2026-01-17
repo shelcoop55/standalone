@@ -93,9 +93,9 @@ def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int
         border_color = GRID_COLOR
 
     # Calculate Unit Dimensions accounting for inter-unit gaps
-    # Formula: UnitWidth = (QuadWidth - (Cols - 1) * gap) / Cols
-    unit_width = (quad_width - (panel_cols - 1) * INTER_UNIT_GAP) / panel_cols
-    unit_height = (quad_height - (panel_rows - 1) * INTER_UNIT_GAP) / panel_rows
+    # Formula: UnitWidth = (QuadWidth - (Cols + 1) * gap) / Cols (Gap before first and after last)
+    unit_width = (quad_width - (panel_cols + 1) * INTER_UNIT_GAP) / panel_cols
+    unit_height = (quad_height - (panel_rows + 1) * INTER_UNIT_GAP) / panel_rows
 
     for x_start, y_start in origins_to_draw.values():
         if fill:
@@ -112,9 +112,9 @@ def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int
             # 2. Draw individual Unit Rects (Peach)
             for r in range(panel_rows):
                 for c in range(panel_cols):
-                    # Calculate position
-                    ux = x_start + c * (unit_width + INTER_UNIT_GAP)
-                    uy = y_start + r * (unit_height + INTER_UNIT_GAP)
+                    # Calculate position (Start at Gap)
+                    ux = x_start + INTER_UNIT_GAP + c * (unit_width + INTER_UNIT_GAP)
+                    uy = y_start + INTER_UNIT_GAP + r * (unit_height + INTER_UNIT_GAP)
 
                     shapes.append(dict(
                         type="rect",
@@ -128,8 +128,8 @@ def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int
             # For overlay mode (e.g. heatmap), we might still want the grid structure visible
              for r in range(panel_rows):
                 for c in range(panel_cols):
-                    ux = x_start + c * (unit_width + INTER_UNIT_GAP)
-                    uy = y_start + r * (unit_height + INTER_UNIT_GAP)
+                    ux = x_start + INTER_UNIT_GAP + c * (unit_width + INTER_UNIT_GAP)
+                    uy = y_start + INTER_UNIT_GAP + r * (unit_height + INTER_UNIT_GAP)
                     shapes.append(dict(
                         type="rect",
                         x0=ux, y0=uy,
@@ -587,9 +587,9 @@ def create_still_alive_map(
         'Q4': (quad_width + gap_x + offset_x, quad_height + gap_y + offset_y)
     }
 
-    # Calculate Unit Dimensions with gaps
-    unit_width = (quad_width - (panel_cols - 1) * INTER_UNIT_GAP) / panel_cols
-    unit_height = (quad_height - (panel_rows - 1) * INTER_UNIT_GAP) / panel_rows
+    # Calculate Unit Dimensions with gaps (n+1)
+    unit_width = (quad_width - (panel_cols + 1) * INTER_UNIT_GAP) / panel_cols
+    unit_height = (quad_height - (panel_rows + 1) * INTER_UNIT_GAP) / panel_rows
 
     # Prepare lists for scatter trace (Tooltips)
     hover_x = []
@@ -618,9 +618,9 @@ def create_still_alive_map(
             quad_key = f"Q{quadrant_row * 2 + quadrant_col + 1}"
             x_origin, y_origin = all_origins[quad_key]
 
-            # Position with Gaps
-            x0 = x_origin + local_col * (unit_width + INTER_UNIT_GAP)
-            y0 = y_origin + local_row * (unit_height + INTER_UNIT_GAP)
+            # Position with Gaps (Start at Gap)
+            x0 = x_origin + INTER_UNIT_GAP + local_col * (unit_width + INTER_UNIT_GAP)
+            y0 = y_origin + INTER_UNIT_GAP + local_row * (unit_height + INTER_UNIT_GAP)
 
             # Determine status
             is_dead = (col, row) in true_defect_data
@@ -1337,8 +1337,39 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int,
         y_gaps = np.where(row_indices >= panel_rows, gap_y, 0)
 
         # 1D Coordinates
-        x_vals = (col_indices * cell_width) + (cell_width / 2) + x_gaps + offset_x
-        y_vals = (row_indices * cell_height) + (cell_height / 2) + y_gaps + offset_y
+        # Recalculate cell_width strictly for heatmap centers using new layout
+        # (Start + Gap + c*Stride + HalfWidth)
+        # We can simulate this by shifting the whole array
+
+        # Original: (col * cell_width) + (cell_width / 2) implied 0 start.
+        # New: Gap + (col * (cell_width + Gap)) + (cell_width / 2)
+
+        # Recalculate width for this scope locally to be safe
+        u_w = (quad_width - (panel_cols + 1) * INTER_UNIT_GAP) / panel_cols
+        u_h = (quad_height - (panel_rows + 1) * INTER_UNIT_GAP) / panel_rows
+
+        stride_x = u_w + INTER_UNIT_GAP
+        stride_y = u_h + INTER_UNIT_GAP
+
+        # Local Indices (0..n within quadrant)
+        l_cols = col_indices % panel_cols
+        l_rows = row_indices % panel_rows
+
+        # Calculate Base within Quadrant
+        x_base = INTER_UNIT_GAP + l_cols * stride_x + (u_w / 2)
+        y_base = INTER_UNIT_GAP + l_rows * stride_y + (u_h / 2)
+
+        # Add Quadrant Offsets (Gap between quadrants already handled by x_gaps + quad_width logic? No.)
+        # x_gaps logic above was simple: `gap_x` if >= panel_cols.
+        # But we also need to add `quad_width` for Q2/Q4.
+        # The previous logic `(col_indices * cell_width)` assumed continuous tiling + gap.
+        # Let's rebuild robustly.
+
+        quad_offset_x = np.where(col_indices >= panel_cols, quad_width + gap_x, 0)
+        quad_offset_y = np.where(row_indices >= panel_rows, quad_height + gap_y, 0)
+
+        x_vals = offset_x + quad_offset_x + x_base
+        y_vals = offset_y + quad_offset_y + y_base
 
         # Broadcast to 2D Grid
         x_coords, y_coords = np.meshgrid(x_vals, y_vals)
@@ -1437,11 +1468,24 @@ def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_row
         col_indices = np.arange(cols)
         row_indices = np.arange(rows)
 
-        x_gaps = np.where(col_indices >= panel_cols, gap_x, 0)
-        y_gaps = np.where(row_indices >= panel_rows, gap_y, 0)
+        # Robust Centers Calculation
+        u_w = (quad_width - (panel_cols + 1) * INTER_UNIT_GAP) / panel_cols
+        u_h = (quad_height - (panel_rows + 1) * INTER_UNIT_GAP) / panel_rows
 
-        x_vals = (col_indices * cell_width) + (cell_width / 2) + x_gaps + offset_x
-        y_vals = (row_indices * cell_height) + (cell_height / 2) + y_gaps + offset_y
+        stride_x = u_w + INTER_UNIT_GAP
+        stride_y = u_h + INTER_UNIT_GAP
+
+        l_cols = col_indices % panel_cols
+        l_rows = row_indices % panel_rows
+
+        x_base = INTER_UNIT_GAP + l_cols * stride_x + (u_w / 2)
+        y_base = INTER_UNIT_GAP + l_rows * stride_y + (u_h / 2)
+
+        quad_offset_x = np.where(col_indices >= panel_cols, quad_width + gap_x, 0)
+        quad_offset_y = np.where(row_indices >= panel_rows, quad_height + gap_y, 0)
+
+        x_vals = offset_x + quad_offset_x + x_base
+        y_vals = offset_y + quad_offset_y + y_base
 
         fig = go.Figure(data=go.Heatmap(
             x=x_vals,

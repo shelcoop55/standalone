@@ -12,7 +12,7 @@ from io import BytesIO
 from dataclasses import dataclass
 
 # Import constants from the configuration file
-from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, SAFE_VERIFICATION_VALUES, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y
+from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, SAFE_VERIFICATION_VALUES, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y, INTER_UNIT_GAP
 from .models import PanelData, BuildUpLayer
 
 # --- DEFECT DEFINITIONS ---
@@ -209,8 +209,13 @@ def load_data(
         # Calculate Grid Parameters for accurate physical simulation
         quad_w = panel_width / 2
         quad_h = panel_height / 2
-        cell_w = quad_w / panel_cols
-        cell_h = quad_h / panel_rows
+
+        # New Logic: (n+1) gaps
+        cell_w = (quad_w - (panel_cols + 1) * INTER_UNIT_GAP) / panel_cols
+        cell_h = (quad_h - (panel_rows + 1) * INTER_UNIT_GAP) / panel_rows
+
+        stride_x = cell_w + INTER_UNIT_GAP
+        stride_y = cell_h + INTER_UNIT_GAP
 
         for layer_num in layers_to_generate:
             # Random False Alarm Rate for this layer (50% - 60%)
@@ -250,9 +255,16 @@ def load_data(
                     # Calculate Min/Max Physical Bounds for this Cell
                     # Formula: Offset + (QuadrantOffset) + (LocalOffset)
                     # Quadrant Offset includes the Gap if qx=1 or qy=1
+                    # Local Offset now includes initial INTER_UNIT_GAP
 
-                    x_start = DEFAULT_OFFSET_X + (qx * (quad_w + gap_x)) + (lx * cell_w)
-                    y_start = DEFAULT_OFFSET_Y + (qy * (quad_h + gap_y)) + (ly * cell_h)
+                    quad_off_x = qx * (quad_w + gap_x)
+                    quad_off_y = qy * (quad_h + gap_y)
+
+                    local_off_x = INTER_UNIT_GAP + lx * stride_x
+                    local_off_y = INTER_UNIT_GAP + ly * stride_y
+
+                    x_start = DEFAULT_OFFSET_X + quad_off_x + local_off_x
+                    y_start = DEFAULT_OFFSET_Y + quad_off_y + local_off_y
 
                     x_end = x_start + cell_w
                     y_end = y_start + cell_h

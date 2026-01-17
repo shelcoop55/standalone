@@ -68,8 +68,9 @@ class BuildUpLayer:
         quad_height = self.panel_height / 2
 
         # Updated Logic: Subtract gaps first to get true unit size
-        cell_width = (quad_width - (self.panel_cols - 1) * INTER_UNIT_GAP) / self.panel_cols
-        cell_height = (quad_height - (self.panel_rows - 1) * INTER_UNIT_GAP) / self.panel_rows
+        # Change: (n + 1) gaps to account for gap before first and after last unit
+        cell_width = (quad_width - (self.panel_cols + 1) * INTER_UNIT_GAP) / self.panel_cols
+        cell_height = (quad_height - (self.panel_rows + 1) * INTER_UNIT_GAP) / self.panel_rows
 
         # Stride includes the unit width plus the gap
         stride_x = cell_width + INTER_UNIT_GAP
@@ -89,8 +90,9 @@ class BuildUpLayer:
         local_index_x_raw = df['UNIT_INDEX_X'] % self.panel_cols
         local_index_y = df['UNIT_INDEX_Y'] % self.panel_rows
 
-        plot_x_base_raw = local_index_x_raw * stride_x
-        plot_y_base = local_index_y * stride_y
+        # Start at INTER_UNIT_GAP (Gap before first unit)
+        plot_x_base_raw = INTER_UNIT_GAP + local_index_x_raw * stride_x
+        plot_y_base = INTER_UNIT_GAP + local_index_y * stride_y
 
         x_offset_raw = np.where(df['UNIT_INDEX_X'] >= self.panel_cols, quad_width + self.gap_x, 0)
         y_offset = np.where(df['UNIT_INDEX_Y'] >= self.panel_rows, quad_height + self.gap_y, 0)
@@ -163,11 +165,11 @@ class BuildUpLayer:
 
         # Base Grid Calculation (Fallback if no spatial coords)
         local_index_x_flipped = df['PHYSICAL_X_FLIPPED'] % self.panel_cols
-        plot_x_base_flipped = local_index_x_flipped * stride_x
+        plot_x_base_flipped = INTER_UNIT_GAP + local_index_x_flipped * stride_x
         x_offset_flipped = np.where(df['PHYSICAL_X_FLIPPED'] >= self.panel_cols, quad_width + self.gap_x, 0)
 
         local_index_x_raw_phys = df['PHYSICAL_X_RAW'] % self.panel_cols
-        plot_x_base_raw_phys = local_index_x_raw_phys * stride_x
+        plot_x_base_raw_phys = INTER_UNIT_GAP + local_index_x_raw_phys * stride_x
         x_offset_raw_phys = np.where(df['PHYSICAL_X_RAW'] >= self.panel_cols, quad_width + self.gap_x, 0)
 
         if use_spatial_coords:
