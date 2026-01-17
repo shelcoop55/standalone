@@ -13,7 +13,7 @@ def render_still_alive_sidebar(store: SessionStore):
     """
     pass
 
-def render_still_alive_main(store: SessionStore):
+def render_still_alive_main(store: SessionStore, theme_config=None):
     """Renders the Main Content for the Still Alive view."""
     params = store.analysis_params
     panel_rows = params.get("panel_rows", 7)
@@ -88,7 +88,8 @@ def render_still_alive_main(store: SessionStore):
             panel_rows, panel_cols, true_defect_data,
             offset_x=offset_x, offset_y=offset_y,
             gap_x=gap_x, gap_y=gap_y,
-            panel_width=panel_width, panel_height=panel_height
+            panel_width=panel_width, panel_height=panel_height,
+            theme_config=theme_config
         )
         st.plotly_chart(fig, use_container_width=True)
 

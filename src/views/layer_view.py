@@ -144,7 +144,12 @@ def render_summary_view(
 
         top_offenders['Percentage'] = (top_offenders['Count'] / total_defects) * 100
         theme_cmap = mcolors.LinearSegmentedColormap.from_list("theme_cmap", [plot_col, panel_col])
-        st.dataframe(top_offenders.style.format({'Percentage': '{:.2f}%'}).background_gradient(cmap=theme_cmap, subset=['Count']), use_container_width=True)
+        # st.dataframe(top_offenders.style.format({'Percentage': '{:.2f}%'}).background_gradient(cmap=theme_cmap, subset=['Count']), use_container_width=True)
+        # FIX: Replace use_container_width with width='stretch'
+        st.dataframe(
+            top_offenders.style.format({'Percentage': '{:.2f}%'}).background_gradient(cmap=theme_cmap, subset=['Count']),
+            width='stretch' # Deprecation fix for use_container_width=True
+        )
     else:
         st.markdown("### Panel-Wide KPIs (Filtered)")
         total_defects = len(display_df)
@@ -223,7 +228,7 @@ def render_summary_view(
                 kpi_df.style
                 .background_gradient(cmap='Reds', subset=['Total Defects', 'True Defects', 'Non-Detects (Safe)'])
                 .format({'Safe Ratio': '{:>8}', 'Yield': '{:>8}'}), # Alignment
-                use_container_width=True
+                width='stretch' # Deprecation fix for use_container_width=True
             )
         else:
             st.info("No data to display for the quarterly breakdown based on current filters.")
