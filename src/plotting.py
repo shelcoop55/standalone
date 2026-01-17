@@ -156,8 +156,8 @@ def create_grid_shapes(panel_rows: int, panel_cols: int, quadrant: str = 'All', 
 
     all_origins = {
         'Q1': (0+offset_x , 0+offset_y),
-        'Q2': (quad_width + gap_x + offset_x, 0),
-        'Q3': (0, quad_height + gap_y + offset_y),
+        'Q2': (quad_width + gap_x + offset_x, 0+offset_y),
+        'Q3': (0+offset_x, quad_height + gap_y + offset_y),
         'Q4': (quad_width + gap_x + offset_x, quad_height + gap_y + offset_y)
     }
     origins_to_draw = all_origins if quadrant == 'All' else {quadrant: all_origins[quadrant]}
@@ -240,11 +240,15 @@ def create_defect_traces(df: pd.DataFrame, offset_x: float = 0.0, offset_y: floa
                             + coord_str +
                             "<extra></extra>")
 
-        # Always add external margin offsets (offset_x/y) to Panel Coordinates.
-        # Whether derived from Grid (Jitter) or Spatial (Absolute mm), the coordinates
-        # are relative to the Panel Origin (0,0), while the plot is in Frame Coordinates.
-        x_vals = dff['plot_x'] + offset_x
-        y_vals = dff['plot_y'] + offset_y
+        # Check if coordinates are Absolute (from CSV) or Relative (Grid Jitter)
+        # If 'X_COORDINATES' exists, plot_x is already Absolute. Do NOT add offset.
+        if 'X_COORDINATES' in df.columns:
+            x_vals = dff['plot_x']
+            y_vals = dff['plot_y']
+        else:
+            # Only add offset for random jitter/grid-based relative coordinates
+            x_vals = dff['plot_x'] + offset_x
+            y_vals = dff['plot_y'] + offset_y
 
         traces.append(go.Scattergl(
             x=x_vals,
@@ -334,9 +338,13 @@ def create_multi_layer_defect_map(
 
                 x_coords = dff[x_col_name]
 
-                # Always add external margin offsets to align Panel Coordinates to Frame.
-                final_x = x_coords + offset_x
-                final_y = dff['plot_y'] + offset_y
+                # FIX: Check if coordinates are Absolute (from CSV) or Relative
+                if 'X_COORDINATES' in dff.columns:
+                     final_x = x_coords
+                     final_y = dff['plot_y']
+                else:
+                     final_x = x_coords + offset_x
+                     final_y = dff['plot_y'] + offset_y
 
                 # OPTIMIZATION: Use WebGL
                 fig.add_trace(go.Scattergl(
@@ -939,8 +947,12 @@ def create_density_contour_map(
             return None, None, None, None, None
 
         # Apply offsets to data before binning
-        x_c = q_df[x_col].values + offset_x
-        y_c = q_df['plot_y_corrected'].values + offset_y
+        if 'X_COORDINATES' in q_df.columns:
+            x_c = q_df[x_col].values
+            y_c = q_df['plot_y_corrected'].values
+        else:
+            x_c = q_df[x_col].values + offset_x
+            y_c = q_df['plot_y_corrected'].values + offset_y
 
         # 1. Density (Z)
         H, x_edges, y_edges = np.histogram2d(x_c, y_c, bins=num_bins, range=[x_range, y_range])
@@ -959,8 +971,12 @@ def create_density_contour_map(
                 sub_df = q_df[q_df['DEFECT_TYPE'] == dtype]
                 if not sub_df.empty:
                     # Apply offsets here too
-                    sub_x = sub_df[x_col] + offset_x
-                    sub_y = sub_df['plot_y_corrected'] + offset_y
+                    if 'X_COORDINATES' in sub_df.columns:
+                        sub_x = sub_df[x_col]
+                        sub_y = sub_df['plot_y_corrected']
+                    else:
+                        sub_x = sub_df[x_col] + offset_x
+                        sub_y = sub_df['plot_y_corrected'] + offset_y
                     h_sub, _, _ = np.histogram2d(sub_x, sub_y, bins=num_bins, range=[x_range, y_range])
                     type_grids.append(h_sub)
                     type_labels.append(dtype)
@@ -1047,9 +1063,16 @@ def create_density_contour_map(
 
     # 2. Points Overlay (Scattergl)
     if show_points:
+        if 'X_COORDINATES' in df_true.columns:
+            px = df_true[x_col]
+            py = df_true['plot_y_corrected']
+        else:
+            px = df_true[x_col] + offset_x
+            py = df_true['plot_y_corrected'] + offset_y
+
         fig.add_trace(go.Scattergl(
-            x=df_true[x_col] + offset_x,
-            y=df_true['plot_y_corrected'] + offset_y,
+            x=px,
+            y=py,
             mode='markers',
             marker=dict(color='white', size=3, opacity=0.5),
             hoverinfo='skip',
