@@ -7,8 +7,8 @@ including color themes and the method for loading defect-specific styles.
 
 # --- Physical Constants (in mm) ---
 # Hardcoded Total Frame Dimensions as per user request
-FRAME_WIDTH = 510
-FRAME_HEIGHT = 515
+FRAME_WIDTH = 540
+FRAME_HEIGHT = 582
 
 # Default Configuration Values (Copper Grid Panel Spec)
 DEFAULT_OFFSET_X = 18.5
