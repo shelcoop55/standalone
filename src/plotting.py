@@ -155,10 +155,10 @@ def create_grid_shapes(panel_rows: int, panel_cols: int, quadrant: str = 'All', 
     quad_height = panel_height / 2
 
     all_origins = {
-        'Q1': (0 , 0 ),
-        'Q2': (quad_width + gap_x + offset_x, 0),
-        'Q3': (0, quad_height + gap_y + offset_y),
-        'Q4': (quad_width + gap_x + offset_x, quad_height + gap_y + offset_y)
+        'Q1': (0+offset_x , 0+offset_y ),
+        'Q2': (quad_width + gap_x/2 + offset_x, 0),
+        'Q3': (0, quad_height + gap_y/2 + offset_y),
+        'Q4': (quad_width + gap_x/2 + offset_x, quad_height + gap_y/2 + offset_y)
     }
     origins_to_draw = all_origins if quadrant == 'All' else {quadrant: all_origins[quadrant]}
     shapes = []
