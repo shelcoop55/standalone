@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from src.config import GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y, DEFAULT_GAP_X, DEFAULT_GAP_Y, DEFAULT_PANEL_ROWS, DEFAULT_PANEL_COLS
+from src.config import GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y, DEFAULT_GAP_X, DEFAULT_GAP_Y, DEFAULT_PANEL_ROWS, DEFAULT_PANEL_COLS, DYNAMIC_GAP_X, DYNAMIC_GAP_Y
 from src.data_handler import load_data, get_true_defect_coordinates
 from src.reporting import generate_zip_package
 from src.enums import ViewMode, Quadrant
@@ -88,12 +88,12 @@ def main() -> None:
                 with c_off2:
                     st.number_input("Y Origin (mm)", value=float(DEFAULT_OFFSET_Y), step=1.0, key="offset_y", help="Shift origin Y by this amount.")
 
-                # 3. Gaps
+                # 3. Dynamic Gaps
                 c_gap1, c_gap2 = st.columns(2)
                 with c_gap1:
-                    st.number_input("Gap X (mm)", value=float(DEFAULT_GAP_X), step=1.0, min_value=0.0, key="gap_x", help="Horizontal gap between quadrants.")
+                    st.number_input("Dynamic Gap X (mm)", value=float(DYNAMIC_GAP_X), step=1.0, min_value=0.0, key="dyn_gap_x", help="Dynamic Horizontal Gap.")
                 with c_gap2:
-                    st.number_input("Gap Y (mm)", value=float(DEFAULT_GAP_Y), step=1.0, min_value=0.0, key="gap_y", help="Vertical gap between quadrants.")
+                    st.number_input("Dynamic Gap Y (mm)", value=float(DYNAMIC_GAP_Y), step=1.0, min_value=0.0, key="dyn_gap_y", help="Dynamic Vertical Gap.")
 
             # Callback for Analysis
             def on_run_analysis():
@@ -109,13 +109,17 @@ def main() -> None:
                 # Retrieve Advanced Params
                 off_x = st.session_state.get("offset_x", DEFAULT_OFFSET_X)
                 off_y = st.session_state.get("offset_y", DEFAULT_OFFSET_Y)
-                gap_x = st.session_state.get("gap_x", DEFAULT_GAP_X)
-                gap_y = st.session_state.get("gap_y", DEFAULT_GAP_Y)
+                # Hardcoded gaps are now used instead of UI inputs
+                gap_x = DEFAULT_GAP_X
+                gap_y = DEFAULT_GAP_Y
+                # Retrieve dynamic gaps from session state
+                dyn_gap_x = st.session_state.get("dyn_gap_x", DYNAMIC_GAP_X)
+                dyn_gap_y = st.session_state.get("dyn_gap_y", DYNAMIC_GAP_Y)
 
                 # DYNAMIC CALCULATION of Active Panel Dimensions
-                # Logic: Active_Dim = Total_Frame - (2 * Offset) - Gap
-                p_width = float(FRAME_WIDTH) - (2 * off_x) - gap_x
-                p_height = float(FRAME_HEIGHT) - (2 * off_y) - gap_y
+                # Logic: Active_Dim = Total_Frame - 2*(Offset + DynamicGap) - Gap
+                p_width = float(FRAME_WIDTH) - 2 * (off_x + dyn_gap_x) - gap_x
+                p_height = float(FRAME_HEIGHT) - 2 * (off_y + dyn_gap_y) - gap_y
 
                 # Load Data (This will now hit the cache if arguments are same)
                 # Pass dynamically calculated width/height

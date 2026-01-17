@@ -16,15 +16,18 @@ DEFAULT_OFFSET_Y = 13.5
 DEFAULT_GAP_X = 3
 DEFAULT_GAP_Y = 3
 
+DYNAMIC_GAP_X = 3.5
+DYNAMIC_GAP_Y = 5
+
 DEFAULT_PANEL_ROWS = 6
 DEFAULT_PANEL_COLS = 6
 INTER_UNIT_GAP = 0.25
 
 # Active Panel Dimensions (Calculated Defaults)
 # These act as fallback constants if dynamic calculation isn't used.
-# Logic: Active = Total - (2 * Offset) - Gap
-PANEL_WIDTH = FRAME_WIDTH - (2*DEFAULT_OFFSET_X) - DEFAULT_GAP_X  # 480
-PANEL_HEIGHT = FRAME_HEIGHT - (2*DEFAULT_OFFSET_Y) - DEFAULT_GAP_Y # 482
+# Logic: Active = Total - 2*(Offset + DynamicGap) - Gap
+PANEL_WIDTH = FRAME_WIDTH - 2*(DEFAULT_OFFSET_X + DYNAMIC_GAP_X) - DEFAULT_GAP_X
+PANEL_HEIGHT = FRAME_HEIGHT - 2*(DEFAULT_OFFSET_Y + DYNAMIC_GAP_Y) - DEFAULT_GAP_Y
 
 # Legacy Gap Constant (for backward compatibility)
 GAP_SIZE = DEFAULT_GAP_X
