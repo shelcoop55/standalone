@@ -7,15 +7,16 @@ including color themes and the method for loading defect-specific styles.
 
 # --- Physical Constants (in mm) ---
 # Hardcoded Total Frame Dimensions as per user request
-FRAME_WIDTH = 600
-FRAME_HEIGHT = 606
+FRAME_WIDTH = 510
+FRAME_HEIGHT = 515
 
 # Default Configuration Values (Copper Grid Panel Spec)
-DEFAULT_OFFSET_X = 18.5
-DEFAULT_OFFSET_Y = 18.5
+DEFAULT_OFFSET_X = 15
+DEFAULT_OFFSET_Y = 13.5
 DEFAULT_GAP_X = 3
 DEFAULT_GAP_Y = 3
-
+ADJSTABLE_GAP_X = 3.5
+ADJSTABLE_GAP_X = 5
 DEFAULT_PANEL_ROWS = 6
 DEFAULT_PANEL_COLS = 6
 INTER_UNIT_GAP = 0.25
@@ -23,8 +24,8 @@ INTER_UNIT_GAP = 0.25
 # Active Panel Dimensions (Calculated Defaults)
 # These act as fallback constants if dynamic calculation isn't used.
 # Logic: Active = Total - (2 * Offset) - Gap
-PANEL_WIDTH = FRAME_WIDTH - (2*DEFAULT_OFFSET_X) - DEFAULT_GAP_X  # 480
-PANEL_HEIGHT = FRAME_HEIGHT - (2*DEFAULT_OFFSET_Y) - DEFAULT_GAP_Y # 482
+PANEL_WIDTH = FRAME_WIDTH - 2*(DEFAULT_OFFSET_X+ADJSTABLE_GAP_X) - DEFAULT_GAP_X  # 480
+PANEL_HEIGHT = FRAME_HEIGHT - (2*DEFAULT_OFFSET_Y+ADJSTABLE_GAP_Y) - DEFAULT_GAP_Y # 482
 
 # Legacy Gap Constant (for backward compatibility)
 GAP_SIZE = DEFAULT_GAP_X
