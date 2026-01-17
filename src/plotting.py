@@ -59,7 +59,7 @@ def _draw_border_and_gaps(ox: float = 0.0, oy: float = 0.0, gap_x: float = GAP_S
     y_end = oy + panel_height + 8* gap_y
 
     # Corner Radius
-    radius = 20 # Match quadrant radius
+    radius = 25 # Match quadrant radius
 
     # Draw One Big Rounded Rectangle
     path = _get_rounded_rect_path(x_start, y_start, x_end, y_end, radius)
