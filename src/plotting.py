@@ -24,36 +24,69 @@ from src.enums import Quadrant
 # --- Private Helper Functions for Grid Creation ---
 # ==============================================================================
 
+def _get_rounded_rect_path(x0: float, y0: float, x1: float, y1: float, r: float) -> str:
+    """Generates an SVG path string for a rounded rectangle."""
+    # Ensure radius doesn't exceed dimensions
+    width = x1 - x0
+    height = y1 - y0
+    r = min(r, width / 2, height / 2)
+
+    return (
+        f"M {x0+r} {y0} "
+        f"L {x1-r} {y0} "
+        f"Q {x1} {y0} {x1} {y0+r} "
+        f"L {x1} {y1-r} "
+        f"Q {x1} {y1} {x1-r} {y1} "
+        f"L {x0+r} {y1} "
+        f"Q {x0} {y1} {x0} {y1-r} "
+        f"L {x0} {y0+r} "
+        f"Q {x0} {y0} {x0+r} {y0} "
+        "Z"
+    )
+
 def _draw_border_and_gaps(ox: float = 0.0, oy: float = 0.0, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT) -> List[Dict[str, Any]]:
     """Creates the shapes for the outer border and inner gaps of the panel."""
     shapes = []
     # Main Panel Background (Copper) is used for outer border and major gaps
     gap_color = PANEL_BACKGROUND_COLOR
-    total_width_with_gap = panel_width + gap_x
-    total_height_with_gap = panel_height + gap_y
 
-    quad_width = panel_width / 2
-    quad_height = panel_height / 2
+    # Calculate Full Panel Extents (including the visual border around units)
+    # Left Border starts at: ox - gap_x
+    # Right Border ends at: ox + panel_width + 2*gap_x (because panel_width excludes the outer gap/border usually? No.)
+    # Let's trace back:
+    # Q1 starts at 0. Q1 width is panel_width/2.
+    # Q2 starts at width/2 + gap.
+    # Total unit width = panel_width. Total gap width inside = gap.
+    # The "Border" rectangles in old logic:
+    # Left: -gap to 0. Right: Total+gap to Total+2*gap.
+    # So the full visual width is: (panel_width + gap) + 2*gap = panel_width + 3*gap?
+    # Old logic:
+    # Right Border: x1 = total_width_with_gap + gap_x + ox.
+    # total_width_with_gap = panel_width + gap_x.
+    # So x1 = panel_width + 2*gap_x + ox.
+    # Left Border: x0 = -gap_x + ox.
+    # Total Width Span = (panel_width + 2*gap_x) - (-gap_x) = panel_width + 3*gap_x.
 
-    # Outer border frame (Shifted by ox, oy)
-    shapes.extend([
-        # Bottom Border
-        dict(type="rect", x0=0+ox, y0=total_height_with_gap+oy, x1=total_width_with_gap+ox, y1=total_height_with_gap + gap_y+oy, fillcolor=gap_color, line_width=0, layer='below'),
-        # Top Border
-        dict(type="rect", x0=0+ox, y0=-gap_y+oy, x1=total_width_with_gap+ox, y1=0+oy, fillcolor=gap_color, line_width=0, layer='below'),
-        # Left Border
-        dict(type="rect", x0=-gap_x+ox, y0=-gap_y+oy, x1=0+ox, y1=total_height_with_gap + gap_y+oy, fillcolor=gap_color, line_width=0, layer='below'),
-        # Right Border
-        dict(type="rect", x0=total_width_with_gap+ox, y0=-gap_y+oy, x1=total_width_with_gap + gap_x+ox, y1=total_height_with_gap + gap_y+oy, fillcolor=gap_color, line_width=0, layer='below')
-    ])
+    x_start = ox - gap_x
+    x_end = ox + panel_width + 2 * gap_x
 
-    # Inner gaps
-    shapes.extend([
-        # Vertical Gap (separating Q1/Q3 from Q2/Q4) -> uses gap_x
-        dict(type="rect", x0=quad_width+ox, y0=0+oy, x1=quad_width + gap_x+ox, y1=total_height_with_gap+oy, fillcolor=gap_color, line_width=0, layer='below'),
-        # Horizontal Gap (separating Q1/Q2 from Q3/Q4) -> uses gap_y
-        dict(type="rect", x0=0+ox, y0=quad_height+oy, x1=total_width_with_gap+ox, y1=quad_height + gap_y+oy, fillcolor=gap_color, line_width=0, layer='below')
-    ])
+    y_start = oy - gap_y
+    y_end = oy + panel_height + 2 * gap_y
+
+    # Corner Radius
+    radius = 10.0 # 10mm radius
+
+    # Draw One Big Rounded Rectangle
+    path = _get_rounded_rect_path(x_start, y_start, x_end, y_end, radius)
+
+    shapes.append(dict(
+        type="path",
+        path=path,
+        fillcolor=gap_color,
+        line_width=0,
+        layer='below'
+    ))
+
     return shapes
 
 def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int, fill: bool = True, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT) -> List[Dict[str, Any]]:
@@ -70,6 +103,11 @@ def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int
     for x_start, y_start in origins_to_draw.values():
         if fill:
             # 1. Draw the Background Copper Rect for the whole quadrant
+            # REPLACED by the single large rounded rect in _draw_border_and_gaps for 'All' view.
+            # But for single quadrant view, we might still want this?
+            # Or we can leave it; it will just be a sharp square inside the rounded rect.
+            # To ensure it doesn't cover the rounded corners (it shouldn't, as it is strictly smaller),
+            # we can keep it.
             shapes.append(dict(
                 type="rect", x0=x_start, y0=y_start, x1=x_start + quad_width, y1=y_start + quad_height,
                 line=dict(width=0), fillcolor=PANEL_BACKGROUND_COLOR, layer='below'
