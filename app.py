@@ -161,6 +161,11 @@ def main() -> None:
                 else:
                     store.selected_layer = None
 
+                # Calculate TOTAL OFFSET for Plotting
+                # The plotting grid must start at (Offset + DynamicGap), not just Offset.
+                total_off_x = off_x + dyn_gap_x
+                total_off_y = off_y + dyn_gap_y
+
                 store.analysis_params = {
                     "panel_rows": rows,
                     "panel_cols": cols,
@@ -171,8 +176,14 @@ def main() -> None:
                     "gap_size": gap_x, # Backwards compatibility
                     "lot_number": lot,
                     "process_comment": comment,
-                    "offset_x": off_x,
-                    "offset_y": off_y
+                    # IMPORTANT: Store the TOTAL offset for plotting functions
+                    "offset_x": total_off_x,
+                    "offset_y": total_off_y,
+                    # Keep original values if needed for UI restoration (handled by session_state keys)
+                    "raw_offset_x": off_x,
+                    "raw_offset_y": off_y,
+                    "dyn_gap_x": dyn_gap_x,
+                    "dyn_gap_y": dyn_gap_y
                 }
                 store.report_bytes = None
 
