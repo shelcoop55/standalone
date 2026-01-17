@@ -52,10 +52,10 @@ def _draw_border_and_gaps(ox: float = 0.0, oy: float = 0.0, gap_x: float = GAP_S
     gap_color = theme_config.panel_background_color if theme_config else PANEL_BACKGROUND_COLOR
     border_color = theme_config.axis_color if theme_config else GRID_COLOR
 
-    x_start = ox - 2*gap_x
+    x_start = ox - 4*gap_x
     x_end = ox + panel_width + 2 * gap_x
 
-    y_start = oy - 2*gap_y
+    y_start = oy - 4*gap_y
     y_end = oy + panel_height + 2 * gap_y
 
     # Corner Radius
