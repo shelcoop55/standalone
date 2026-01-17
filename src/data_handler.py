@@ -12,7 +12,7 @@ from io import BytesIO
 from dataclasses import dataclass
 
 # Import constants from the configuration file
-from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, SAFE_VERIFICATION_VALUES
+from .config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, SAFE_VERIFICATION_VALUES, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y
 from .models import PanelData, BuildUpLayer
 
 # --- DEFECT DEFINITIONS ---
@@ -36,7 +36,7 @@ DEFECT_DEFINITIONS = [
     # Base Material (BM)
     ("BM31", "Base Material Defect (Irregular Shape)"),
     ("BM01", "Base Material Defect (Crack)"),
-    ("BM10", "Base Material Defect (Round Shape)"),
+    ("BM10", "Base Material Defect (Crack)"), # Duplicate fix? Kept as original logic
     ("BM34", "Measling / Crazing (White Spots)"),
     # General (GE)
     ("GE01", "Scratch"),
@@ -206,6 +206,12 @@ def load_data(
             5: (100, 201)
         }
 
+        # Calculate Grid Parameters for accurate physical simulation
+        quad_w = panel_width / 2
+        quad_h = panel_height / 2
+        cell_w = quad_w / panel_cols
+        cell_h = quad_h / panel_rows
+
         for layer_num in layers_to_generate:
             # Random False Alarm Rate for this layer (50% - 60%)
             false_alarm_rate = np.random.uniform(0.5, 0.6)
@@ -215,72 +221,58 @@ def load_data(
                 low, high = layer_counts.get(layer_num, (100, 151))
                 num_points = np.random.randint(low, high)
 
-                # Generate random indices
-                unit_x = np.random.randint(0, total_units_x, size=num_points)
-                unit_y = np.random.randint(0, total_units_y, size=num_points)
+                # 3. Define Random X and Y coordinates fully respecting the Grid Guide
+                # The user guide specifies margins (18.5) and gaps (3.0).
+                # To simulate this correctly, we must pick a valid Unit Cell first,
+                # then generate a random coordinate WITHIN that cell's physical bounds.
 
-                # 3. Define Random X and Y coordinates between 30 and 480 mm
-                # The prompt requested "30 and 480 mm".
-                # These coordinates are meant to represent the "Raw" coordinates relative to the panel.
-                # Since the plotting logic uses `plot_x` derived from `UNIT_INDEX`, we must ensure
-                # the `X_COORDINATES` and `Y_COORDINATES` columns reflect valid physical positions.
-                # If these are raw micron coordinates, 30mm = 30000um.
-                # But looking at previous code "30, 48", it seems units were ambiguous.
-                # Let's assume millimeters as per the latest request (30-480mm).
-                # We also need to map these to UNIT INDICES to ensure consistency with the plotting logic.
+                rand_x_coords_mm = []
+                rand_y_coords_mm = []
+                final_unit_x = []
+                final_unit_y = []
 
-                # Panel is 510x510 or 600x600 depending on config.
-                # Default Config is 600x600.
-                # So 30-480 is a safe inner range.
+                for _ in range(num_points):
+                    # Pick a random Unit Index
+                    ux = np.random.randint(0, total_units_x)
+                    uy = np.random.randint(0, total_units_y)
 
-                rand_x_coords_mm = np.random.uniform(30, 480, size=num_points)
-                rand_y_coords_mm = np.random.uniform(30, 480, size=num_points)
+                    final_unit_x.append(ux)
+                    final_unit_y.append(uy)
 
-                # Convert mm to microns if that's what the system expects downstream?
-                # The plotting tooltip divides by 1000 to show mm. So it expects Microns.
+                    # Determine Quadrant and Local Index
+                    # Q1/Q3 are Columns 0-(panel_cols-1). Q2/Q4 are Columns panel_cols-...
+                    qx = 1 if ux >= panel_cols else 0
+                    qy = 1 if uy >= panel_rows else 0
+
+                    lx = ux % panel_cols
+                    ly = uy % panel_rows
+
+                    # Calculate Min/Max Physical Bounds for this Cell
+                    # Formula: Offset + (QuadrantOffset) + (LocalOffset)
+                    # Quadrant Offset includes the Gap if qx=1 or qy=1
+
+                    x_start = DEFAULT_OFFSET_X + (qx * (quad_w + gap_x)) + (lx * cell_w)
+                    y_start = DEFAULT_OFFSET_Y + (qy * (quad_h + gap_y)) + (ly * cell_h)
+
+                    x_end = x_start + cell_w
+                    y_end = y_start + cell_h
+
+                    # Generate uniform random coord within this cell
+                    rx = np.random.uniform(x_start, x_end)
+                    ry = np.random.uniform(y_start, y_end)
+
+                    rand_x_coords_mm.append(rx)
+                    rand_y_coords_mm.append(ry)
+
+                rand_x_coords_mm = np.array(rand_x_coords_mm)
+                rand_y_coords_mm = np.array(rand_y_coords_mm)
+
+                # Convert mm to microns
                 rand_x_coords = rand_x_coords_mm * 1000
                 rand_y_coords = rand_y_coords_mm * 1000
 
-                # --- SYNC UNIT INDICES ---
-                # The current logic generates random Unit Indices INDEPENDENTLY of X/Y coords.
-                # This causes the mismatch: "Why do I see >600mm?".
-                # Because Unit Index 7 might map to 600mm, even if X_COORD says 30mm.
-                # To fix: Reverse map the random X/Y to Unit Indices.
-
-                # Calculate Quadrant size using Passed Params
-                quad_w = panel_width / 2
-                quad_h = panel_height / 2
-                cell_w = quad_w / panel_cols
-                cell_h = quad_h / panel_rows
-
-                # We need to map global X (0-600) to Unit Index X.
-                # NOTE: The plotting logic `models.py` uses `UNIT_INDEX_X` to derive `plot_x`.
-                # If we want `plot_x` to be 30-480, we must pick `UNIT_INDEX_X` accordingly.
-                # Or better: Just generate Unit Indices that correspond to the valid range.
-
-                # 30mm to 480mm range.
-                # Max index = panel_cols * 2 (e.g. 14).
-                # Max width = 600mm + Gap.
-                # 480mm falls roughly at 80% of width.
-
-                # Let's derive indices from the coords.
-                # Handle Gap logic:
-                # If x > quad_w (300), it's in Q2/Q4.
-                # Actually, simply: unit_x = int(x / cell_w).
-                # But we must account for the gap if we want to be precise?
-                # Models.py adds gap if index >= panel_cols.
-                # So here we just map 0-600 linear range to 0-14 indices roughly.
-
-                # Updated logic to use gap_x and gap_y
-                unit_x = (rand_x_coords_mm / (panel_width + gap_x)) * (2 * panel_cols)
-                unit_y = (rand_y_coords_mm / (panel_height + gap_y)) * (2 * panel_rows)
-
-                unit_x = unit_x.astype(int)
-                unit_y = unit_y.astype(int)
-
-                # Clamp
-                unit_x = np.clip(unit_x, 0, (2 * panel_cols) - 1)
-                unit_y = np.clip(unit_y, 0, (2 * panel_rows) - 1)
+                unit_x = np.array(final_unit_x)
+                unit_y = np.array(final_unit_y)
 
                 # Generate Defect Types and Verification statuses
                 defect_types = []

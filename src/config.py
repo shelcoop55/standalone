@@ -11,23 +11,24 @@ FRAME_WIDTH = 510
 FRAME_HEIGHT = 515
 
 # Default Configuration Values (Copper Grid Panel Spec)
-DEFAULT_OFFSET_X = 15
-DEFAULT_OFFSET_Y = 13.5
-DEFAULT_GAP_X = 3
-DEFAULT_GAP_Y = 3
+# Updated to align with specific user guide:
+# Margins 18.5mm, Gaps 3.0mm, Quadrants 235x235mm.
+DEFAULT_OFFSET_X = 18.5
+DEFAULT_OFFSET_Y = 18.5
+DEFAULT_GAP_X = 3.0
+DEFAULT_GAP_Y = 3.0
 
-DYNAMIC_GAP_X = 3.5
-DYNAMIC_GAP_Y = 5
+DYNAMIC_GAP_X = 0
+DYNAMIC_GAP_Y = 0
 
 DEFAULT_PANEL_ROWS = 6
 DEFAULT_PANEL_COLS = 6
 INTER_UNIT_GAP = 0.25
 
 # Active Panel Dimensions (Calculated Defaults)
-# These act as fallback constants if dynamic calculation isn't used.
-# Logic: Active = Total - 2*(Offset + DynamicGap) - Gap
-PANEL_WIDTH = FRAME_WIDTH - 2*(DEFAULT_OFFSET_X + DYNAMIC_GAP_X) - DEFAULT_GAP_X
-PANEL_HEIGHT = FRAME_HEIGHT - 2*(DEFAULT_OFFSET_Y + DYNAMIC_GAP_Y) - DEFAULT_GAP_Y
+# Derived from Quadrant Width 235mm * 2 = 470mm
+PANEL_WIDTH = 470
+PANEL_HEIGHT = 470
 
 # Legacy Gap Constant (for backward compatibility)
 GAP_SIZE = DEFAULT_GAP_X

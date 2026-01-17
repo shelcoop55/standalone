@@ -152,11 +152,24 @@ def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int
 # --- Public API Functions ---
 # ==============================================================================
 
-def apply_panel_theme(fig: go.Figure, title: str = "", height: int = 800) -> go.Figure:
+def apply_panel_theme(fig: go.Figure, title: str = "", height: int = 800, reverse_y: bool = False) -> go.Figure:
     """
     Applies the standard engineering styling to any figure.
     This centralized function replaces redundant layout code in specific plotting functions.
+
+    Args:
+        reverse_y (bool): If True, inverts the Y-axis (useful for physical maps where origin is Top-Left).
     """
+    yaxis_config = dict(
+        showgrid=False, zeroline=False, showline=True,
+        linewidth=2, linecolor=GRID_COLOR, mirror=True,
+        title_font=dict(color=AXIS_TEXT_COLOR), tickfont=dict(color=AXIS_TEXT_COLOR),
+        scaleanchor="x", scaleratio=1
+    )
+
+    if reverse_y:
+        yaxis_config['autorange'] = "reversed"
+
     fig.update_layout(
         title=dict(text=title, font=dict(color=TEXT_COLOR, size=18), x=0.5, xanchor='center'),
         plot_bgcolor=PLOT_AREA_COLOR,
@@ -169,12 +182,7 @@ def apply_panel_theme(fig: go.Figure, title: str = "", height: int = 800) -> go.
             linewidth=2, linecolor=GRID_COLOR, mirror=True,
             title_font=dict(color=AXIS_TEXT_COLOR), tickfont=dict(color=AXIS_TEXT_COLOR)
         ),
-        yaxis=dict(
-            showgrid=False, zeroline=False, showline=True,
-            linewidth=2, linecolor=GRID_COLOR, mirror=True,
-            title_font=dict(color=AXIS_TEXT_COLOR), tickfont=dict(color=AXIS_TEXT_COLOR),
-            scaleanchor="x", scaleratio=1
-        ),
+        yaxis=yaxis_config,
         legend=dict(
             title_font=dict(color=TEXT_COLOR), font=dict(color=TEXT_COLOR),
             bgcolor=BACKGROUND_COLOR, bordercolor=GRID_COLOR, borderwidth=1,
@@ -415,7 +423,7 @@ def create_multi_layer_defect_map(
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
 
-    apply_panel_theme(fig, "Multi-Layer Combined Defect Map (True Defects Only)")
+    apply_panel_theme(fig, "Multi-Layer Combined Defect Map (True Defects Only)", reverse_y=True)
 
     fig.update_layout(
         xaxis=dict(
@@ -473,7 +481,7 @@ def create_defect_map_figure(df: pd.DataFrame, panel_rows: int, panel_cols: int,
 
     final_title = title if title else f"Panel Defect Map - Quadrant: {quadrant_selection}"
 
-    apply_panel_theme(fig, final_title)
+    apply_panel_theme(fig, final_title, reverse_y=True)
 
     fig.update_layout(
         xaxis=dict(title="Unit Column Index", tickvals=x_tick_vals_q1 + x_tick_vals_q2 if show_ticks else [], ticktext=x_tick_text if show_ticks else [], range=x_axis_range, constrain='domain'),
@@ -683,7 +691,7 @@ def create_still_alive_figure(
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
 
-    apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)")
+    apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)", reverse_y=True)
 
     fig.update_layout(
         xaxis=dict(
@@ -895,7 +903,7 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int)
     total_global_cols = panel_cols * 2
     total_global_rows = panel_rows * 2
 
-    apply_panel_theme(fig, "1. Unit Grid Density (Yield Loss Map)", height=700)
+    apply_panel_theme(fig, "1. Unit Grid Density (Yield Loss Map)", height=700, reverse_y=True)
 
     fig.update_layout(
         xaxis=dict(
@@ -1163,7 +1171,7 @@ def create_density_contour_map(
         }
         x_axis_range, y_axis_range = ranges[quadrant_selection]
 
-    apply_panel_theme(fig, "Smooth Density Hotspot (Server-Side Aggregated)", height=700)
+    apply_panel_theme(fig, "Smooth Density Hotspot (Server-Side Aggregated)", height=700, reverse_y=True)
 
     fig.update_layout(
         xaxis=dict(
@@ -1373,7 +1381,7 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int,
             )
         )
 
-    apply_panel_theme(fig, "Cumulative Stress Map (Total Defects per Unit)", height=700)
+    apply_panel_theme(fig, "Cumulative Stress Map (Total Defects per Unit)", height=700, reverse_y=True)
     return fig
 
 def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_rows: int, panel_cols: int, view_mode: str = "Continuous", offset_x: float = 0.0, offset_y: float = 0.0, gap_size: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE) -> go.Figure:
@@ -1450,7 +1458,7 @@ def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_row
             )
         )
 
-    apply_panel_theme(fig, "Delta Stress Map (Group A - Group B)", height=700)
+    apply_panel_theme(fig, "Delta Stress Map (Group A - Group B)", height=700, reverse_y=True)
     return fig
 
 def create_cross_section_heatmap(
@@ -1488,7 +1496,7 @@ def create_cross_section_heatmap(
         colorbar=dict(title='Defects', title_font=dict(color=TEXT_COLOR), tickfont=dict(color=TEXT_COLOR))
     ))
 
-    apply_panel_theme(fig, f"Virtual Cross-Section: {slice_desc}", height=600)
+    apply_panel_theme(fig, f"Virtual Cross-Section: {slice_desc}", height=600, reverse_y=True)
 
     fig.update_layout(
         xaxis=dict(title="Unit Index (Slice Position)", dtick=1), # Force integer ticks (0, 1, 2...)
