@@ -76,18 +76,25 @@ def main() -> None:
                     key="process_comment"
                 )
 
+                # --- NEW: Coordinate Origin Inputs (User Facing) ---
+                # These default to 0,0 and only affect visual plotting, not structural calculation.
+                st.markdown("---")
+                st.markdown("##### Plot Origin Configuration")
+                c_origin1, c_origin2 = st.columns(2)
+                with c_origin1:
+                    st.number_input("X Origin (mm)", value=0.0, step=1.0, key="plot_origin_x", help="Shift the visual coordinate system X origin.")
+                with c_origin2:
+                    st.number_input("Y Origin (mm)", value=0.0, step=1.0, key="plot_origin_y", help="Shift the visual coordinate system Y origin.")
+
+
             with st.expander("⚙️ Advanced Configuration", expanded=False):
                 # 1. Panel Dimensions (UI Removed - Hardcoded Defaults)
                 # Used to be: c_dim1, c_dim2 inputs for Panel Width/Height
                 # Now using Frame Width/Height (510/515) internally for calculation.
 
-                # 2. Origins (Renamed from Offsets)
-                c_off1, c_off2 = st.columns(2)
-                with c_off1:
-                    # FIX: Explicitly cast value to float to avoid StreamlitMixedNumericTypesError
-                    st.number_input("X Origin (mm)", value=float(DEFAULT_OFFSET_X), step=1.0, key="offset_x", help="Shift origin X by this amount.")
-                with c_off2:
-                    st.number_input("Y Origin (mm)", value=float(DEFAULT_OFFSET_Y), step=1.0, key="offset_y", help="Shift origin Y by this amount.")
+                # 2. Origins (Structrual Margins) - REMOVED FROM UI
+                # We now use DEFAULT_OFFSET_X (13.5) and DEFAULT_OFFSET_Y (15.0) hardcoded in config.py
+                # This ensures the panel structure is fixed.
 
                 # 3. Dynamic Gaps
                 c_gap1, c_gap2 = st.columns(2)
@@ -108,8 +115,14 @@ def main() -> None:
                 comment = st.session_state.process_comment
 
                 # Retrieve Advanced Params
-                off_x = st.session_state.get("offset_x", DEFAULT_OFFSET_X)
-                off_y = st.session_state.get("offset_y", DEFAULT_OFFSET_Y)
+                # Use Hardcoded Defaults for Structural Calculation
+                off_x_struct = DEFAULT_OFFSET_X # 13.5
+                off_y_struct = DEFAULT_OFFSET_Y # 15.0
+
+                # Retrieve User Visual Origins
+                visual_origin_x = st.session_state.get("plot_origin_x", 0.0)
+                visual_origin_y = st.session_state.get("plot_origin_y", 0.0)
+
                 # Hardcoded gaps are now used instead of UI inputs
                 gap_x = DEFAULT_GAP_X
                 gap_y = DEFAULT_GAP_Y
@@ -118,9 +131,9 @@ def main() -> None:
                 dyn_gap_y = st.session_state.get("dyn_gap_y", DYNAMIC_GAP_Y)
 
                 # DYNAMIC CALCULATION of Active Panel Dimensions
-                # Logic: Active_Dim = Total_Frame - 2*(Offset + DynamicGap) - Gap
-                p_width = float(FRAME_WIDTH) - 2 * (off_x + dyn_gap_x) - gap_x
-                p_height = float(FRAME_HEIGHT) - 2 * (off_y + dyn_gap_y) - gap_y
+                # Logic: Active_Dim = Total_Frame - 2*(StructOffset + DynamicGap) - Gap
+                p_width = float(FRAME_WIDTH) - 2 * (off_x_struct + dyn_gap_x) - gap_x
+                p_height = float(FRAME_HEIGHT) - 2 * (off_y_struct + dyn_gap_y) - gap_y
 
                 # Load Data (This will now hit the cache if arguments are same)
                 # Pass dynamically calculated width/height
@@ -163,9 +176,32 @@ def main() -> None:
                     store.selected_layer = None
 
                 # Calculate TOTAL OFFSET for Plotting
-                # The plotting grid must start at (Offset + DynamicGap), not just Offset.
-                total_off_x = off_x + dyn_gap_x
-                total_off_y = off_y + dyn_gap_y
+                # The plotting grid structure starts at (StructOffset + DynamicGap) relative to FRAME (0,0).
+                # The User Visual Origin effectively SHIFTS the axis labels.
+                # If Visual Origin is (0,0), we plot as is.
+                # If Visual Origin is (10,10), it means the point (0,0) of the frame is now at (10,10) on the chart?
+                # OR does it mean the User's (0,0) is at Frame (0,0)?
+                # Requirement: "Origin input should just shift the coordinate system? (e.g. A point at physical 13.5mm becomes 0mm relative to the panel start)"
+                # This implies subtracting the origin from the coordinates.
+                # But wait, the user said "Origin that would take Frame corner".
+                # Standard plot logic: Plot is in Frame Coords (0 to 510).
+                # If user wants to see Frame Coords, Origin should be 0,0.
+                # If user wants to see Panel Relative Coords, Origin should be 13.5, 15.0.
+                # We will pass this visual_origin to the plotting functions, which will subtract it from the raw coords.
+
+                # However, existing plotting logic adds `offset_x` to jittered points to place them in the frame.
+                # We must separate Structural Offset (for placement) vs Visual Offset (for axis).
+                # Currently plotting functions take one `offset_x`.
+                # We need to act carefully.
+                # Current `offset_x` in plotting functions determines where the GRID is drawn.
+                # So we must pass the Structural Offset there.
+
+                # We will add `visual_origin_x` to `store.analysis_params` and handle the shifting in the axis/tooltip logic
+                # inside `src/plotting.py` if we were editing it, but here we are in app.py.
+                # Since we are not editing plotting.py yet (next step), we just store it here.
+
+                total_off_x_struct = off_x_struct + dyn_gap_x
+                total_off_y_struct = off_y_struct + dyn_gap_y
 
                 store.analysis_params = {
                     "panel_rows": rows,
@@ -177,12 +213,14 @@ def main() -> None:
                     "gap_size": gap_x, # Backwards compatibility
                     "lot_number": lot,
                     "process_comment": comment,
-                    # IMPORTANT: Store the TOTAL offset for plotting functions
-                    "offset_x": total_off_x,
-                    "offset_y": total_off_y,
-                    # Keep original values if needed for UI restoration (handled by session_state keys)
-                    "raw_offset_x": off_x,
-                    "raw_offset_y": off_y,
+                    # IMPORTANT: Use Structural Offset for drawing the grid in the Frame
+                    "offset_x": total_off_x_struct,
+                    "offset_y": total_off_y_struct,
+
+                    # Store Visual Origins for Axis Correction
+                    "visual_origin_x": visual_origin_x,
+                    "visual_origin_y": visual_origin_y,
+
                     "dyn_gap_x": dyn_gap_x,
                     "dyn_gap_y": dyn_gap_y
                 }

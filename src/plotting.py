@@ -189,48 +189,70 @@ def apply_panel_theme(fig: go.Figure, title: str = "", height: int = 800, theme_
     )
     return fig
 
-def create_grid_shapes(panel_rows: int, panel_cols: int, quadrant: str = 'All', fill: bool = True, offset_x: float = 0.0, offset_y: float = 0.0, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT, theme_config: Optional[PlotTheme] = None) -> List[Dict[str, Any]]:
+def create_grid_shapes(
+    panel_rows: int,
+    panel_cols: int,
+    quadrant: str = 'All',
+    fill: bool = True,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE,
+    panel_width: float = PANEL_WIDTH,
+    panel_height: float = PANEL_HEIGHT,
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW: Visual Shift
+    visual_origin_y: float = 0.0  # NEW: Visual Shift
+) -> List[Dict[str, Any]]:
     """
-    Creates the visual shapes for the panel grid in a fixed 510x510mm coordinate system.
-    Supports shifting origin via offset_x/y and dynamic gap.
+    Creates the visual shapes for the panel grid.
+    NOW APPLIES VISUAL ORIGIN SHIFT (Subtracts visual_origin from physical coordinates).
     """
     quad_width = panel_width / 2
     quad_height = panel_height / 2
 
+    # To shift the grid visually "left" so that physical 13.5 becomes 0,
+    # we SUBTRACT visual_origin from all shape coordinates.
+
+    eff_offset_x = offset_x - visual_origin_x
+    eff_offset_y = offset_y - visual_origin_y
+
     all_origins = {
-        'Q1': (0+offset_x , 0+offset_y),
-        'Q2': (quad_width + gap_x + offset_x, 0+offset_y),
-        'Q3': (0+offset_x, quad_height + gap_y + offset_y),
-        'Q4': (quad_width + gap_x + offset_x, quad_height + gap_y + offset_y)
+        'Q1': (0+eff_offset_x , 0+eff_offset_y),
+        'Q2': (quad_width + gap_x + eff_offset_x, 0+eff_offset_y),
+        'Q3': (0+eff_offset_x, quad_height + gap_y + eff_offset_y),
+        'Q4': (quad_width + gap_x + eff_offset_x, quad_height + gap_y + eff_offset_y)
     }
     origins_to_draw = all_origins if quadrant == 'All' else {quadrant: all_origins[quadrant]}
     shapes = []
     if quadrant == 'All':
-        shapes.extend(_draw_border_and_gaps(offset_x, offset_y, gap_x, gap_y, panel_width, panel_height, theme_config))
+        shapes.extend(_draw_border_and_gaps(eff_offset_x, eff_offset_y, gap_x, gap_y, panel_width, panel_height, theme_config))
 
     shapes.extend(_draw_quadrant_grids(origins_to_draw, panel_rows, panel_cols, fill=fill, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config))
     return shapes
 
-def create_defect_traces(df: pd.DataFrame, offset_x: float = 0.0, offset_y: float = 0.0, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE) -> List[go.Scatter]:
+def create_defect_traces(
+    df: pd.DataFrame,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
+) -> List[go.Scatter]:
     """
     Generates scatter plot traces.
+    APPLIES VISUAL ORIGIN SHIFT.
     """
     traces = []
     if df.empty: return traces
 
-    # Check the flag. If mixed (some rows T, some F), default to True if any are True
     has_verification_data = df['HAS_VERIFICATION_DATA'].any() if 'HAS_VERIFICATION_DATA' in df.columns else False
-
-    # Determine what column to group by
     group_col = 'Verification' if has_verification_data else 'DEFECT_TYPE'
-
     unique_groups = df[group_col].unique()
 
-    # --- COLOR MAPPING ---
     local_style_map = {}
-
     if group_col == 'DEFECT_TYPE':
-        # Use the standard defect style map + fallback
         local_style_map = defect_style_map.copy()
         fallback_index = 0
         for dtype in unique_groups:
@@ -239,24 +261,19 @@ def create_defect_traces(df: pd.DataFrame, offset_x: float = 0.0, offset_y: floa
                 local_style_map[dtype] = color
                 fallback_index += 1
     else:
-        # For Verification codes (CU22, N, etc.), generate a map on the fly
         fallback_index = 0
         for code in unique_groups:
             color = FALLBACK_COLORS[fallback_index % len(FALLBACK_COLORS)]
             local_style_map[code] = color
             fallback_index += 1
 
-    # Generate traces using GroupBy (Optimization #4)
-    # 1. Pre-calculate Descriptions globally
     if 'Verification' in df.columns:
-        # Avoid SettingWithCopyWarning if df is a slice
         df = df.copy()
         df['Description'] = df['Verification'].map(VERIFICATION_DESCRIPTIONS).fillna("Unknown Code")
     else:
         df = df.copy()
         df['Description'] = "N/A"
 
-    # 2. Pre-calculate Raw Coords globally
     has_raw_coords = 'X_COORDINATES' in df.columns and 'Y_COORDINATES' in df.columns
     coord_str = ""
     if has_raw_coords:
@@ -266,13 +283,10 @@ def create_defect_traces(df: pd.DataFrame, offset_x: float = 0.0, offset_y: floa
     else:
         custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description']
 
-    # 3. GroupBy Loop
     grouped = df.groupby(group_col, observed=True)
 
     for group_val, dff in grouped:
-        if group_val not in local_style_map:
-            continue
-
+        if group_val not in local_style_map: continue
         color = local_style_map[group_val]
 
         hovertemplate = ("<b>Status: %{customdata[4]}</b><br>"
@@ -283,20 +297,37 @@ def create_defect_traces(df: pd.DataFrame, offset_x: float = 0.0, offset_y: floa
                             + coord_str +
                             "<extra></extra>")
 
-        # Check if coordinates are Absolute (from CSV) or Relative (Grid Jitter)
-        # If 'X_COORDINATES' exists, plot_x is already Absolute. Do NOT add offset.
-        if 'X_COORDINATES' in df.columns:
-            x_vals = dff['plot_x']
-            y_vals = dff['plot_y']
+        # SHIFT LOGIC:
+        # 1. Structural Position: point + offset_x
+        # 2. Visual Shift: (point + offset_x) - visual_origin_x
+
+        if 'X_COORDINATES' in dff.columns:
+            # Absolute Coords from file (already physically mapped?)
+            # Usually models.py puts them in plot_x directly.
+            # If they are panel relative, we might need offset_x.
+            # But earlier logic said "Do NOT add offset". Assuming models.py handles structural offset if absolute.
+            # Wait, models.py: "df['plot_x'] = abs_x_mm". It does NOT add offset_x if spatial.
+            # So here we MUST add structural offset if we want to place it in the Frame?
+            # Actually, `create_defect_traces` logic before was:
+            # if 'X_COORDINATES': x = dff['plot_x']
+            # else: x = dff['plot_x'] + offset_x
+
+            # This implies `dff['plot_x']` for spatial was already absolute FRAME coords?
+            # No, models.py says it uses absolute mm from file. If file is Panel Relative, we need to add offset_x here to place in frame.
+            # But the previous code didn't add it.
+            # Let's stick to previous logic for structural, just subtract visual_origin.
+
+            x_vals = dff['plot_x'] - visual_origin_x
+            y_vals = dff['plot_y'] - visual_origin_y
         else:
-            # Only add offset for random jitter/grid-based relative coordinates
-            x_vals = dff['plot_x'] + offset_x
-            y_vals = dff['plot_y'] + offset_y
+            # Relative/Grid Jitter
+            # Structural: dff['plot_x'] + offset_x
+            # Visual: (dff['plot_x'] + offset_x) - visual_origin_x
+            x_vals = (dff['plot_x'] + offset_x) - visual_origin_x
+            y_vals = (dff['plot_y'] + offset_y) - visual_origin_y
 
         traces.append(go.Scattergl(
-            x=x_vals,
-            y=y_vals,
-            mode='markers',
+            x=x_vals, y=y_vals, mode='markers',
             marker=dict(color=color, size=8, line=dict(width=1, color='black')),
             name=str(group_val),
             customdata=dff[custom_data_cols],
@@ -316,7 +347,9 @@ def create_multi_layer_defect_map(
     gap_y: float = GAP_SIZE,
     panel_width: float = PANEL_WIDTH,
     panel_height: float = PANEL_HEIGHT,
-    theme_config: Optional[PlotTheme] = None
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
 ) -> go.Figure:
     """
     Creates a defect map visualizing defects from ALL layers simultaneously.
@@ -325,17 +358,9 @@ def create_multi_layer_defect_map(
     fig = go.Figure()
 
     if not df.empty:
-        # Ensure LAYER_NUM exists
-        if 'LAYER_NUM' not in df.columns:
-            df['LAYER_NUM'] = 0
-
+        if 'LAYER_NUM' not in df.columns: df['LAYER_NUM'] = 0
         unique_layer_nums = sorted(df['LAYER_NUM'].unique())
-
-        # Generate colors
-        layer_colors = {}
-        for i, num in enumerate(unique_layer_nums):
-            layer_colors[num] = FALLBACK_COLORS[i % len(FALLBACK_COLORS)]
-
+        layer_colors = {num: FALLBACK_COLORS[i % len(FALLBACK_COLORS)] for i, num in enumerate(unique_layer_nums)}
         symbol_map = {'F': 'circle', 'B': 'diamond'}
 
         for layer_num in unique_layer_nums:
@@ -354,7 +379,6 @@ def create_multi_layer_defect_map(
                 else:
                      dff['Description'] = "N/A"
 
-                # Prepare Custom Data (Include Raw Coords - Convert um to mm)
                 coord_str = ""
                 if 'X_COORDINATES' in dff.columns and 'Y_COORDINATES' in dff.columns:
                     dff['RAW_COORD_STR'] = dff.apply(lambda row: f"({row['X_COORDINATES']/1000:.2f}, {row['Y_COORDINATES']/1000:.2f}) mm", axis=1)
@@ -363,7 +387,6 @@ def create_multi_layer_defect_map(
                 else:
                     custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE']
 
-                # Fix Hover Template
                 hovertemplate = (f"<b>Layer: {layer_num}</b><br>"
                                  "Side: " + side_name + "<br>"
                                  "Status: %{customdata[4]}<br>"
@@ -373,109 +396,116 @@ def create_multi_layer_defect_map(
                                  + coord_str +
                                  "<extra></extra>")
 
-                # Determine X Coordinates based on Flip Toggle
-                # We use the pre-calculated columns from models.py
                 if flip_back:
                     x_col_name = 'physical_plot_x_flipped'
                 else:
                     x_col_name = 'physical_plot_x_raw'
-
                 x_coords = dff[x_col_name]
 
-                # FIX: Check if coordinates are Absolute (from CSV) or Relative
+                # SHIFT LOGIC (Visual Origin)
                 if 'X_COORDINATES' in dff.columns:
-                     final_x = x_coords
-                     final_y = dff['plot_y']
+                     final_x = x_coords - visual_origin_x
+                     final_y = dff['plot_y'] - visual_origin_y
                 else:
-                     final_x = x_coords + offset_x
-                     final_y = dff['plot_y'] + offset_y
+                     # Add structural offset, subtract visual offset
+                     final_x = (x_coords + offset_x) - visual_origin_x
+                     final_y = (dff['plot_y'] + offset_y) - visual_origin_y
 
-                # OPTIMIZATION: Use WebGL
                 fig.add_trace(go.Scattergl(
-                    x=final_x,
-                    y=final_y,
-                    mode='markers',
-                    marker=dict(
-                        color=layer_color,
-                        symbol=symbol,
-                        size=9,
-                        line=dict(width=1, color='black')
-                    ),
-                    name=trace_name,
-                    customdata=dff[custom_data_cols],
-                    hovertemplate=hovertemplate
+                    x=final_x, y=final_y, mode='markers',
+                    marker=dict(color=layer_color, symbol=symbol, size=9, line=dict(width=1, color='black')),
+                    name=trace_name, customdata=dff[custom_data_cols], hovertemplate=hovertemplate
                 ))
 
-    # Add Grid
-    fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config))
+    # Add Grid (With Visual Shift)
+    fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y))
 
     quad_width = panel_width / 2
     quad_height = panel_height / 2
-
-    # Calculate ticks (reused from standard map logic)
     cell_width, cell_height = quad_width / panel_cols, quad_height / panel_rows
-    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) + offset_x for i in range(panel_cols)]
-    x_tick_vals_q2 = [(quad_width + gap_x) + (i * cell_width) + (cell_width / 2) + offset_x for i in range(panel_cols)]
-    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
-    y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
+
+    # Calculate Axis Ticks (With Visual Shift)
+    eff_offset_x = offset_x - visual_origin_x
+    eff_offset_y = offset_y - visual_origin_y
+
+    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) + eff_offset_x for i in range(panel_cols)]
+    x_tick_vals_q2 = [(quad_width + gap_x) + (i * cell_width) + (cell_width / 2) + eff_offset_x for i in range(panel_cols)]
+    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) + eff_offset_y for i in range(panel_rows)]
+    y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + eff_offset_y for i in range(panel_rows)]
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
 
     apply_panel_theme(fig, "Multi-Layer Combined Defect Map (True Defects Only)", theme_config=theme_config)
 
+    # SHIFT AXIS RANGES
+    # Frame is 0-510. With visual shift, it becomes (0-v) to (510-v).
+    x_range = [0 - visual_origin_x, 510 - visual_origin_x]
+    y_range = [0 - visual_origin_y, 515 - visual_origin_y]
+
     fig.update_layout(
-        xaxis=dict(
-            title="Unit Column Index",
-            tickvals=x_tick_vals_q1 + x_tick_vals_q2,
-            ticktext=x_tick_text,
-            range=[0, 510], constrain='domain'
-        ),
-        yaxis=dict(
-            title="Unit Row Index",
-            tickvals=y_tick_vals_q1 + y_tick_vals_q3,
-            ticktext=y_tick_text,
-            range=[0, 515]
-        ),
+        xaxis=dict(title="Unit Column Index", tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text, range=x_range, constrain='domain'),
+        yaxis=dict(title="Unit Row Index", tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text, range=y_range),
         legend=dict(title=dict(text="Build-Up Layer"))
     )
 
     return fig
     
-def create_defect_map_figure(df: pd.DataFrame, panel_rows: int, panel_cols: int, quadrant_selection: str = Quadrant.ALL.value, lot_number: Optional[str] = None, title: Optional[str] = None, offset_x: float = 0.0, offset_y: float = 0.0, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT, theme_config: Optional[PlotTheme] = None) -> go.Figure:
+def create_defect_map_figure(
+    df: pd.DataFrame,
+    panel_rows: int,
+    panel_cols: int,
+    quadrant_selection: str = Quadrant.ALL.value,
+    lot_number: Optional[str] = None,
+    title: Optional[str] = None,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE,
+    panel_width: float = PANEL_WIDTH,
+    panel_height: float = PANEL_HEIGHT,
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
+) -> go.Figure:
     """
     Creates the full Defect Map Figure (Traces + Grid + Layout).
     """
-    # Use Dynamic Dimensions
     quad_width = panel_width / 2
     quad_height = panel_height / 2
 
-    fig = go.Figure(data=create_defect_traces(df, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y))
-    fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant_selection, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config))
+    # Traces with Visual Shift
+    fig = go.Figure(data=create_defect_traces(df, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y))
+    # Grid with Visual Shift
+    fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant_selection, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y))
 
-    # Calculate ticks and ranges with offsets
+    # Ticks with Visual Shift
+    eff_offset_x = offset_x - visual_origin_x
+    eff_offset_y = offset_y - visual_origin_y
+
     cell_width, cell_height = quad_width / panel_cols, quad_height / panel_rows
-    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) + offset_x for i in range(panel_cols)]
-    x_tick_vals_q2 = [(quad_width + gap_x) + (i * cell_width) + (cell_width / 2) + offset_x for i in range(panel_cols)]
-    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
-    y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
+    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) + eff_offset_x for i in range(panel_cols)]
+    x_tick_vals_q2 = [(quad_width + gap_x) + (i * cell_width) + (cell_width / 2) + eff_offset_x for i in range(panel_cols)]
+    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) + eff_offset_y for i in range(panel_rows)]
+    y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + eff_offset_y for i in range(panel_rows)]
     x_tick_text, y_tick_text = list(range(panel_cols * 2)), list(range(panel_rows * 2))
 
-    # Full Frame View (0 to 510mm) to show Dead Zones
-    # offset_x is the start of copper. 0 is the start of Frame.
-    # We want to see the full physical context.
-    x_axis_range = [0, 510] # Hardcoded Frame Width as per requirement
-    y_axis_range = [0, 515] # Hardcoded Frame Height
+    # Ranges with Visual Shift
+    x_axis_range = [0 - visual_origin_x, 510 - visual_origin_x]
+    y_axis_range = [0 - visual_origin_y, 515 - visual_origin_y]
     show_ticks = True
 
     if quadrant_selection != Quadrant.ALL.value:
         show_ticks = False
+        # Calculate unshifted quadrant boundaries then shift
         ranges = {
             'Q1': ([0+offset_x, quad_width+offset_x], [0+offset_y, quad_height+offset_y]),
             'Q2': ([quad_width + gap_x+offset_x, panel_width + gap_x+offset_x], [0+offset_y, quad_height+offset_y]),
             'Q3': ([0+offset_x, quad_width+offset_x], [quad_height + gap_y+offset_y, panel_height + gap_y+offset_y]),
             'Q4': ([quad_width + gap_x+offset_x, panel_width + gap_x+offset_x], [quad_height + gap_y+offset_y, panel_height + gap_y+offset_y])
         }
-        x_axis_range, y_axis_range = ranges[quadrant_selection]
+        raw_x, raw_y = ranges[quadrant_selection]
+        x_axis_range = [raw_x[0] - visual_origin_x, raw_x[1] - visual_origin_x]
+        y_axis_range = [raw_y[0] - visual_origin_y, raw_y[1] - visual_origin_y]
 
     final_title = title if title else f"Panel Defect Map - Quadrant: {quadrant_selection}"
 
@@ -487,9 +517,9 @@ def create_defect_map_figure(df: pd.DataFrame, panel_rows: int, panel_cols: int,
     )
 
     if lot_number and quadrant_selection == Quadrant.ALL.value:
-        # Determine text color for annotation
         t_col = theme_config.text_color if theme_config else TEXT_COLOR
-        fig.add_annotation(x=panel_width + gap_x + offset_x, y=panel_height + gap_y + offset_y, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=t_col), align="right", xanchor="right", yanchor="bottom")
+        # Annotation must also be shifted
+        fig.add_annotation(x=(panel_width + gap_x + offset_x) - visual_origin_x, y=(panel_height + gap_y + offset_y) - visual_origin_y, text=f"<b>Lot #: {lot_number}</b>", showarrow=False, font=dict(size=14, color=t_col), align="right", xanchor="right", yanchor="bottom")
 
     return fig
 
@@ -568,10 +598,13 @@ def create_still_alive_map(
     gap_y: float = GAP_SIZE,
     panel_width: float = PANEL_WIDTH,
     panel_height: float = PANEL_HEIGHT,
-    theme_config: Optional[PlotTheme] = None
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
 ) -> Tuple[List[Dict[str, Any]], List[go.Scatter]]:
     """
     Creates the shapes for the 'Still Alive' map AND invisible scatter points for tooltips.
+    APPLIES VISUAL ORIGIN SHIFT.
     """
     shapes = []
     traces = []
@@ -579,12 +612,16 @@ def create_still_alive_map(
     quad_width = panel_width / 2
     quad_height = panel_height / 2
 
+    # Visual Shift Logic
+    eff_offset_x = offset_x - visual_origin_x
+    eff_offset_y = offset_y - visual_origin_y
+
     total_cols, total_rows = panel_cols * 2, panel_rows * 2
     all_origins = {
-        'Q1': (0 + offset_x, 0 + offset_y),
-        'Q2': (quad_width + gap_x + offset_x, 0 + offset_y),
-        'Q3': (0 + offset_x, quad_height + gap_y + offset_y),
-        'Q4': (quad_width + gap_x + offset_x, quad_height + gap_y + offset_y)
+        'Q1': (0 + eff_offset_x, 0 + eff_offset_y),
+        'Q2': (quad_width + gap_x + eff_offset_x, 0 + eff_offset_y),
+        'Q3': (0 + eff_offset_x, quad_height + gap_y + eff_offset_y),
+        'Q4': (quad_width + gap_x + eff_offset_x, quad_height + gap_y + eff_offset_y)
     }
 
     # Calculate Unit Dimensions with gaps (n+1)
@@ -598,7 +635,7 @@ def create_still_alive_map(
     hover_colors = []
 
     # 0. Draw Background Copper first (for the gaps to show through if cells don't touch)
-    shapes.extend(_draw_border_and_gaps(offset_x, offset_y, gap_x, gap_y, panel_width, panel_height, theme_config))
+    shapes.extend(_draw_border_and_gaps(eff_offset_x, eff_offset_y, gap_x, gap_y, panel_width, panel_height, theme_config))
     # We also need quadrant backgrounds for the inter-unit gaps
     # Use dynamic colors
     bg_color = theme_config.panel_background_color if theme_config else PANEL_BACKGROUND_COLOR
@@ -677,35 +714,45 @@ def create_still_alive_figure(
     gap_y: float = GAP_SIZE,
     panel_width: float = PANEL_WIDTH,
     panel_height: float = PANEL_HEIGHT,
-    theme_config: Optional[PlotTheme] = None
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
 ) -> go.Figure:
     """
     Creates the Still Alive Map Figure (Shapes + Layout + Tooltips).
     """
-    map_shapes, hover_traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config)
+    map_shapes, hover_traces = create_still_alive_map(panel_rows, panel_cols, true_defect_data, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y)
 
     fig = go.Figure(data=hover_traces) # Add hover traces
 
     quad_width = panel_width / 2
     quad_height = panel_height / 2
 
+    # Visual Shift
+    eff_offset_x = offset_x - visual_origin_x
+    eff_offset_y = offset_y - visual_origin_y
+
     cell_width, cell_height = quad_width / panel_cols, quad_height / panel_rows
-    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) + offset_x for i in range(panel_cols)]
-    x_tick_vals_q2 = [(quad_width + gap_x) + (i * cell_width) + (cell_width / 2) + offset_x for i in range(panel_cols)]
-    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
-    y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
+    x_tick_vals_q1 = [(i * cell_width) + (cell_width / 2) + eff_offset_x for i in range(panel_cols)]
+    x_tick_vals_q2 = [(quad_width + gap_x) + (i * cell_width) + (cell_width / 2) + eff_offset_x for i in range(panel_cols)]
+    y_tick_vals_q1 = [(i * cell_height) + (cell_height / 2) + eff_offset_y for i in range(panel_rows)]
+    y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + eff_offset_y for i in range(panel_rows)]
     x_tick_text = list(range(panel_cols * 2))
     y_tick_text = list(range(panel_rows * 2))
 
     apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)", theme_config=theme_config)
 
+    # Shift Range
+    x_range = [0 - visual_origin_x, 510 - visual_origin_x]
+    y_range = [0 - visual_origin_y, 515 - visual_origin_y]
+
     fig.update_layout(
         xaxis=dict(
-            title="Unit Column Index", range=[0, 510], constrain='domain',
+            title="Unit Column Index", range=x_range, constrain='domain',
             tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text
         ),
         yaxis=dict(
-            title="Unit Row Index", range=[0, 515],
+            title="Unit Row Index", range=y_range,
             tickvals=y_tick_vals_q1 + y_tick_vals_q3, ticktext=y_tick_text
         ),
         shapes=map_shapes, margin=dict(l=20, r=20, t=80, b=20),
@@ -954,7 +1001,9 @@ def create_density_contour_map(
     gap_y: float = GAP_SIZE,
     panel_width: float = PANEL_WIDTH,
     panel_height: float = PANEL_HEIGHT,
-    theme_config: Optional[PlotTheme] = None
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
 ) -> go.Figure:
     """
     2. Smoothed Density Contour Map (OPTIMIZED).
@@ -1097,6 +1146,10 @@ def create_density_contour_map(
     Z[:, mask_x] = 0
     Z[mask_y, :] = 0
 
+    # SHIFT LOGIC (Visual Origin) for Contour Map
+    x_centers_shifted = x_centers - visual_origin_x
+    y_centers_shifted = y_centers - visual_origin_y
+
     # Custom Hover Template
     if driver_text_t is not None:
         # We must zero out driver text in gaps too
@@ -1112,8 +1165,8 @@ def create_density_contour_map(
 
     fig.add_trace(go.Contour(
         z=Z,
-        x=x_centers,
-        y=y_centers,
+        x=x_centers_shifted, # Shifted X
+        y=y_centers_shifted, # Shifted Y
         text=text_arg,
         colorscale='Turbo',
         contours=dict(
@@ -1130,11 +1183,11 @@ def create_density_contour_map(
     # 2. Points Overlay (Scattergl)
     if show_points:
         if 'X_COORDINATES' in df_true.columns:
-            px = df_true[x_col]
-            py = df_true['plot_y_corrected']
+            px = df_true[x_col] - visual_origin_x
+            py = df_true['plot_y_corrected'] - visual_origin_y
         else:
-            px = df_true[x_col] + offset_x
-            py = df_true['plot_y_corrected'] + offset_y
+            px = (df_true[x_col] + offset_x) - visual_origin_x
+            py = (df_true['plot_y_corrected'] + offset_y) - visual_origin_y
 
         fig.add_trace(go.Scattergl(
             x=px,
@@ -1148,7 +1201,7 @@ def create_density_contour_map(
     # 3. Grid Overlay
     shapes = []
     if show_grid:
-        shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config)
+        shapes = create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y)
 
     # 4. Axis Labels
     total_cols = panel_cols * 2
@@ -1158,11 +1211,14 @@ def create_density_contour_map(
     cell_width = quad_width / panel_cols
     cell_height = quad_height / panel_rows
 
+    eff_offset_x = offset_x - visual_origin_x
+    eff_offset_y = offset_y - visual_origin_y
+
     x_tick_vals = []
     x_tick_text = []
     for i in range(total_cols):
         offset = gap_x if i >= panel_cols else 0
-        center_mm = (i * cell_width) + (cell_width / 2) + offset + offset_x
+        center_mm = (i * cell_width) + (cell_width / 2) + offset + eff_offset_x
         x_tick_vals.append(center_mm)
         x_tick_text.append(str(i))
 
@@ -1170,13 +1226,13 @@ def create_density_contour_map(
     y_tick_text = []
     for i in range(total_rows):
         offset = gap_y if i >= panel_rows else 0
-        center_mm = (i * cell_height) + (cell_height / 2) + offset + offset_y
+        center_mm = (i * cell_height) + (cell_height / 2) + offset + eff_offset_y
         y_tick_vals.append(center_mm)
         y_tick_text.append(str(i))
 
     # Axis Ranges Full Frame
-    x_axis_range = [0, 510]
-    y_axis_range = [0, 515]
+    x_axis_range = [0 - visual_origin_x, 510 - visual_origin_x]
+    y_axis_range = [0 - visual_origin_y, 515 - visual_origin_y]
 
     if quadrant_selection != 'All':
         # Apply offsets to quadrant ranges
@@ -1186,7 +1242,9 @@ def create_density_contour_map(
             'Q3': ([offset_x, offset_x + quad_width], [offset_y + quad_height + gap_y, offset_y + panel_height + gap_y]),
             'Q4': ([offset_x + quad_width + gap_x, offset_x + panel_width + gap_x], [offset_y + quad_height + gap_y, offset_y + panel_height + gap_y])
         }
-        x_axis_range, y_axis_range = ranges[quadrant_selection]
+        raw_x, raw_y = ranges[quadrant_selection]
+        x_axis_range = [raw_x[0] - visual_origin_x, raw_x[1] - visual_origin_x]
+        y_axis_range = [raw_y[0] - visual_origin_y, raw_y[1] - visual_origin_y]
 
     apply_panel_theme(fig, "Smooth Density Hotspot (Server-Side Aggregated)", height=700, theme_config=theme_config)
 
@@ -1292,14 +1350,26 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
 
     return fig
 
-def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int, view_mode: str = "Continuous", offset_x: float = 0.0, offset_y: float = 0.0, gap_size: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE, theme_config: Optional[PlotTheme] = None) -> go.Figure:
+def create_stress_heatmap(
+    data: StressMapData,
+    panel_rows: int,
+    panel_cols: int,
+    view_mode: str = "Continuous",
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    gap_size: float = GAP_SIZE,
+    panel_width: float = PANEL_WIDTH,
+    panel_height: float = PANEL_HEIGHT,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE,
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
+) -> go.Figure:
     """
     Creates the Cumulative Stress Heatmap with defect counts in cells.
     Supports 'Quarterly' view mode by injecting NaNs or splitting.
     """
-    # Use gap_x/y if provided, else fallback to gap_size (for compat) or defaults
-    # Note: caller should pass gap_x/gap_y
-
     quad_width = panel_width / 2
     quad_height = panel_height / 2
 
@@ -1368,8 +1438,11 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int,
         quad_offset_x = np.where(col_indices >= panel_cols, quad_width + gap_x, 0)
         quad_offset_y = np.where(row_indices >= panel_rows, quad_height + gap_y, 0)
 
-        x_vals = offset_x + quad_offset_x + x_base
-        y_vals = offset_y + quad_offset_y + y_base
+        eff_offset_x = offset_x - visual_origin_x
+        eff_offset_y = offset_y - visual_origin_y
+
+        x_vals = eff_offset_x + quad_offset_x + x_base
+        y_vals = eff_offset_y + quad_offset_y + y_base
 
         # Broadcast to 2D Grid
         x_coords, y_coords = np.meshgrid(x_vals, y_vals)
@@ -1394,15 +1467,15 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int,
         ))
 
         # Add Grid Shapes for Quarterly view
-        fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config))
+        fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y))
 
         # Ranges (NO MARGIN)
         max_x = panel_width + gap_x
         max_y = panel_height + gap_y
 
         fig.update_layout(
-            xaxis=dict(title="Physical X", range=[0, 510], constrain='domain', showticklabels=False),
-            yaxis=dict(title="Physical Y", range=[0, 515], showticklabels=False)
+            xaxis=dict(title="Physical X", range=[0 - visual_origin_x, 510 - visual_origin_x], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[0 - visual_origin_y, 515 - visual_origin_y], showticklabels=False)
         )
 
     else:
@@ -1442,7 +1515,23 @@ def create_stress_heatmap(data: StressMapData, panel_rows: int, panel_cols: int,
     apply_panel_theme(fig, "Cumulative Stress Map (Total Defects per Unit)", height=700, theme_config=theme_config)
     return fig
 
-def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_rows: int, panel_cols: int, view_mode: str = "Continuous", offset_x: float = 0.0, offset_y: float = 0.0, gap_size: float = GAP_SIZE, panel_width: float = PANEL_WIDTH, panel_height: float = PANEL_HEIGHT, gap_x: float = GAP_SIZE, gap_y: float = GAP_SIZE, theme_config: Optional[PlotTheme] = None) -> go.Figure:
+def create_delta_heatmap(
+    data_a: StressMapData,
+    data_b: StressMapData,
+    panel_rows: int,
+    panel_cols: int,
+    view_mode: str = "Continuous",
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    gap_size: float = GAP_SIZE,
+    panel_width: float = PANEL_WIDTH,
+    panel_height: float = PANEL_HEIGHT,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE,
+    theme_config: Optional[PlotTheme] = None,
+    visual_origin_x: float = 0.0, # NEW
+    visual_origin_y: float = 0.0  # NEW
+) -> go.Figure:
     """
     Creates a Delta Heatmap (Group A - Group B).
     """
@@ -1484,8 +1573,12 @@ def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_row
         quad_offset_x = np.where(col_indices >= panel_cols, quad_width + gap_x, 0)
         quad_offset_y = np.where(row_indices >= panel_rows, quad_height + gap_y, 0)
 
-        x_vals = offset_x + quad_offset_x + x_base
-        y_vals = offset_y + quad_offset_y + y_base
+        # SHIFT LOGIC (Visual Origin)
+        eff_offset_x = offset_x - visual_origin_x
+        eff_offset_y = offset_y - visual_origin_y
+
+        x_vals = eff_offset_x + quad_offset_x + x_base
+        y_vals = eff_offset_y + quad_offset_y + y_base
 
         fig = go.Figure(data=go.Heatmap(
             x=x_vals,
@@ -1499,13 +1592,13 @@ def create_delta_heatmap(data_a: StressMapData, data_b: StressMapData, panel_row
             colorbar=dict(title='Delta (A - B)', title_font=dict(color=text_color), tickfont=dict(color=text_color))
         ))
 
-        fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config))
+        fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y))
         max_x = panel_width + gap_x
         max_y = panel_height + gap_y
 
         fig.update_layout(
-            xaxis=dict(title="Physical X", range=[0, 510], constrain='domain', showticklabels=False),
-            yaxis=dict(title="Physical Y", range=[0, 515], showticklabels=False)
+            xaxis=dict(title="Physical X", range=[0 - visual_origin_x, 510 - visual_origin_x], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[0 - visual_origin_y, 515 - visual_origin_y], showticklabels=False)
         )
 
     else:
@@ -1546,7 +1639,10 @@ def create_cross_section_heatmap(
     theme_config: Optional[PlotTheme] = None
 ) -> go.Figure:
     """
-    Creates the Z-Axis Cross Section Heatmap (Virtual Slice).
+    Constructs the 2D cross-section matrix for Root Cause Analysis based on a single slice.
+
+    slice_axis: 'Y' (By Row) or 'X' (By Column)
+    slice_index: The index of the row or column to slice.
     """
     # Inverse Y-axis so Layer 1 is at top (if not already handled by input order)
     # Actually, Heatmap Y-axis 0 is usually bottom. We need to flip visual range or data order.
