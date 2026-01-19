@@ -124,20 +124,28 @@ def main() -> None:
                 visual_origin_y = st.session_state.get("plot_origin_y", 0.0)
 
                 # Hardcoded gaps are now used instead of UI inputs
-                gap_x = DEFAULT_GAP_X
-                gap_y = DEFAULT_GAP_Y
+                gap_x_fixed = DEFAULT_GAP_X # 3.0
+                gap_y_fixed = DEFAULT_GAP_Y # 3.0
                 # Retrieve dynamic gaps from session state
                 dyn_gap_x = st.session_state.get("dyn_gap_x", DYNAMIC_GAP_X)
                 dyn_gap_y = st.session_state.get("dyn_gap_y", DYNAMIC_GAP_Y)
 
                 # DYNAMIC CALCULATION of Active Panel Dimensions
-                # Logic: Active_Dim = Total_Frame - 2*(StructOffset + DynamicGap) - Gap
-                p_width = float(FRAME_WIDTH) - 2 * (off_x_struct + dyn_gap_x) - gap_x
-                p_height = float(FRAME_HEIGHT) - 2 * (off_y_struct + dyn_gap_y) - gap_y
+                # Updated Logic per User Request:
+                # 4 Dynamic Gaps total (Left of Q1, Right of Q1, Left of Q2, Right of Q2)
+                # Active Width = Frame - 2*Offset - FixedGap - 4*DynGap
+                p_width = float(FRAME_WIDTH) - 2 * off_x_struct - gap_x_fixed - 4 * dyn_gap_x
+                p_height = float(FRAME_HEIGHT) - 2 * off_y_struct - gap_y_fixed - 4 * dyn_gap_y
+
+                # Calculate EFFECTIVE GAP for Plotting
+                # The visual gap between Q1 and Q2 includes the fixed gap (3mm) AND the dynamic gaps adjacent to the center.
+                # Center Space = DynGap(Right of Q1) + FixedGap(3mm) + DynGap(Left of Q2)
+                effective_gap_x = gap_x_fixed + 2 * dyn_gap_x
+                effective_gap_y = gap_y_fixed + 2 * dyn_gap_y
 
                 # Load Data (This will now hit the cache if arguments are same)
-                # Pass dynamically calculated width/height
-                data = load_data(files, rows, cols, p_width, p_height, gap_x, gap_y)
+                # Pass dynamically calculated width/height and EFFECTIVE GAPS
+                data = load_data(files, rows, cols, p_width, p_height, effective_gap_x, effective_gap_y)
                 if data:
                     # UPDATE: Store ID and Metadata, NOT the object
                     if not files:
@@ -176,30 +184,8 @@ def main() -> None:
                     store.selected_layer = None
 
                 # Calculate TOTAL OFFSET for Plotting
-                # The plotting grid structure starts at (StructOffset + DynamicGap) relative to FRAME (0,0).
-                # The User Visual Origin effectively SHIFTS the axis labels.
-                # If Visual Origin is (0,0), we plot as is.
-                # If Visual Origin is (10,10), it means the point (0,0) of the frame is now at (10,10) on the chart?
-                # OR does it mean the User's (0,0) is at Frame (0,0)?
-                # Requirement: "Origin input should just shift the coordinate system? (e.g. A point at physical 13.5mm becomes 0mm relative to the panel start)"
-                # This implies subtracting the origin from the coordinates.
-                # But wait, the user said "Origin that would take Frame corner".
-                # Standard plot logic: Plot is in Frame Coords (0 to 510).
-                # If user wants to see Frame Coords, Origin should be 0,0.
-                # If user wants to see Panel Relative Coords, Origin should be 13.5, 15.0.
-                # We will pass this visual_origin to the plotting functions, which will subtract it from the raw coords.
-
-                # However, existing plotting logic adds `offset_x` to jittered points to place them in the frame.
-                # We must separate Structural Offset (for placement) vs Visual Offset (for axis).
-                # Currently plotting functions take one `offset_x`.
-                # We need to act carefully.
-                # Current `offset_x` in plotting functions determines where the GRID is drawn.
-                # So we must pass the Structural Offset there.
-
-                # We will add `visual_origin_x` to `store.analysis_params` and handle the shifting in the axis/tooltip logic
-                # inside `src/plotting.py` if we were editing it, but here we are in app.py.
-                # Since we are not editing plotting.py yet (next step), we just store it here.
-
+                # We need to determine where Q1 starts relative to the Frame Origin (0,0).
+                # Start = FixedOffset(13.5) + DynGap(Left of Q1)
                 total_off_x_struct = off_x_struct + dyn_gap_x
                 total_off_y_struct = off_y_struct + dyn_gap_y
 
@@ -208,9 +194,9 @@ def main() -> None:
                     "panel_cols": cols,
                     "panel_width": p_width,
                     "panel_height": p_height,
-                    "gap_x": gap_x,
-                    "gap_y": gap_y,
-                    "gap_size": gap_x, # Backwards compatibility
+                    "gap_x": effective_gap_x, # Use effective gap for plotting logic
+                    "gap_y": effective_gap_y,
+                    "gap_size": effective_gap_x, # Backwards compatibility
                     "lot_number": lot,
                     "process_comment": comment,
                     # IMPORTANT: Use Structural Offset for drawing the grid in the Frame
