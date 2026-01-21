@@ -131,17 +131,16 @@ def main() -> None:
                 dyn_gap_y = st.session_state.get("dyn_gap_y", DYNAMIC_GAP_Y)
 
                 # DYNAMIC CALCULATION of Active Panel Dimensions
-                # Updated Logic:
+                # Updated Logic per User Request (Symmetrical):
                 # 4 Dynamic Gaps total (Left of Q1, Right of Q1, Left of Q2, Right of Q2)
                 # Active Width = Frame - 2*Offset - FixedGap - 4*DynGap
                 p_width = float(FRAME_WIDTH) - 2 * off_x_struct - gap_x_fixed - 4 * dyn_gap_x
                 p_height = float(FRAME_HEIGHT) - 2 * off_y_struct - gap_y_fixed - 4 * dyn_gap_y
 
                 # Calculate EFFECTIVE GAP for Plotting
-                # Updated Logic: User requested Center Gap to be FIXED at 3mm (gap_x_fixed).
-                # The dynamic gaps are pushed to the outer edges.
-                effective_gap_x = gap_x_fixed
-                effective_gap_y = gap_y_fixed
+                # Symmetrical Logic: Gap between Q1 and Q2 = FixedGap + DynGap(Right Q1) + DynGap(Left Q2)
+                effective_gap_x = gap_x_fixed + 2 * dyn_gap_x
+                effective_gap_y = gap_y_fixed + 2 * dyn_gap_y
 
                 # Load Data (This will now hit the cache if arguments are same)
                 # Pass dynamically calculated width/height and EFFECTIVE GAPS
@@ -184,22 +183,16 @@ def main() -> None:
                     store.selected_layer = None
 
                 # Calculate TOTAL OFFSET for Plotting
-                # Start Position of Q1 = FixedOffset(13.5) + 2 * DynGap (Left of Q1 + Right of Q1 space pushed to left??)
-                # No, User said: "add it to left of q1 when unit start so instaed of 5 it will be 10".
-                # User also said: "and also at the end of Q2".
-                # This implies the layout:
-                # [Offset] [DynGap*2] [Q1] [FixedGap] [Q2] [DynGap*2] [Offset]
-                # Total Width check: 13.5 + 10 + 230 + 3 + 230 + 10 + 13.5 = 510. Correct.
-
-                total_off_x_struct = off_x_struct + 2 * dyn_gap_x
-                total_off_y_struct = off_y_struct + 2 * dyn_gap_y
+                # Symmetrical Logic: Start Position of Q1 = FixedOffset + DynGap (Left of Q1)
+                total_off_x_struct = off_x_struct + dyn_gap_x
+                total_off_y_struct = off_y_struct + dyn_gap_y
 
                 store.analysis_params = {
                     "panel_rows": rows,
                     "panel_cols": cols,
                     "panel_width": p_width,
                     "panel_height": p_height,
-                    "gap_x": effective_gap_x, # Use effective gap for plotting logic (Fixed 3mm)
+                    "gap_x": effective_gap_x, # Use effective gap for plotting logic
                     "gap_y": effective_gap_y,
                     "gap_size": effective_gap_x, # Backwards compatibility
                     "lot_number": lot,
