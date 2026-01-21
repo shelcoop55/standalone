@@ -230,12 +230,15 @@ def create_grid_shapes(
             x1_inner = 510 - fixed_offset_x
             y1_inner = 515 - fixed_offset_y
 
+            # Get color from theme or default to black
+            fill_col = theme_config.inner_gap_color if theme_config and hasattr(theme_config, 'inner_gap_color') else "black"
+
             # Using basic rect for inner gap
             shapes.append(dict(
                 type="rect",
                 x0=x0_inner, y0=y0_inner,
                 x1=x1_inner, y1=y1_inner,
-                fillcolor="black",
+                fillcolor=fill_col,
                 line=dict(width=0),
                 layer='below'
             ))
@@ -651,11 +654,15 @@ def create_still_alive_map(
         y0_inner = fixed_offset_y
         x1_inner = 510 - fixed_offset_x
         y1_inner = 515 - fixed_offset_y
+
+        # Get color from theme or default to black
+        fill_col = theme_config.inner_gap_color if theme_config and hasattr(theme_config, 'inner_gap_color') else "black"
+
         shapes.append(dict(
             type="rect",
             x0=x0_inner, y0=y0_inner,
             x1=x1_inner, y1=y1_inner,
-            fillcolor="black",
+            fillcolor=fill_col,
             line=dict(width=0),
             layer='below'
         ))
