@@ -1470,3 +1470,83 @@ def create_density_contour_map(
     return fig
 
 # ... (Previous create_cross_section_heatmap) ...
+
+
+def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] = None) -> go.Figure:
+    """
+    Creates a Sunburst chart showing the hierarchy:
+    Total -> Defect Type -> Verification Status.
+    """
+    if df.empty:
+        return go.Figure()
+
+    # Determine colors
+    if theme_config:
+        bg_color = theme_config.background_color
+    else:
+        bg_color = BACKGROUND_COLOR
+
+    # 1. Prepare Data
+    ids = []
+    labels = []
+    parents = []
+    colors = []
+    values = []
+
+    # Root
+    total_count = len(df)
+    ids.append("Total")
+    labels.append(f"Total<br>({total_count})")
+    parents.append("")
+    values.append(total_count)
+    colors.append(bg_color)
+
+    # Level 1: Defect Type
+    if 'DEFECT_TYPE' in df.columns:
+        type_counts = df['DEFECT_TYPE'].value_counts()
+        for dtype, count in type_counts.items():
+            ids.append(dtype)
+            labels.append(f"{dtype}<br>({count})")
+            parents.append("Total")
+            values.append(count)
+
+            # Color for Defect Type
+            if dtype in defect_style_map:
+                colors.append(defect_style_map[dtype])
+            else:
+                # Use fallback
+                idx = abs(hash(dtype)) % len(FALLBACK_COLORS)
+                colors.append(FALLBACK_COLORS[idx])
+
+        # Level 2: Verification
+        if 'Verification' in df.columns:
+            # Group by [DEFECT_TYPE, Verification]
+            verif_counts = df.groupby(['DEFECT_TYPE', 'Verification']).size()
+
+            for (dtype, verif), count in verif_counts.items():
+                node_id = f"{dtype}-{verif}"
+                ids.append(node_id)
+                labels.append(f"{verif}<br>({count})")
+                parents.append(dtype)
+                values.append(count)
+
+                # Color logic for Verification
+                # Check if safe
+                if str(verif).upper() in [v.upper() for v in SAFE_VERIFICATION_VALUES]:
+                    colors.append(VERIFICATION_COLOR_SAFE)
+                else:
+                    colors.append(VERIFICATION_COLOR_DEFECT)
+
+    fig = go.Figure(go.Sunburst(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues="total",
+        marker=dict(colors=colors),
+        hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Parent: %{parent}<extra></extra>'
+    ))
+
+    apply_panel_theme(fig, "Defect Hierarchy (Type -> Verification)", height=700, theme_config=theme_config)
+
+    return fig
