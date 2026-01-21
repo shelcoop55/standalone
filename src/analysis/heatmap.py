@@ -102,6 +102,12 @@ class HeatmapTool(AnalysisTool):
         gap_y = params.get("gap_y", GAP_SIZE)
         gap_size = gap_x # Local alias for compatibility with click logic
 
+        # New Params for Visual Shift & Inner Border
+        visual_origin_x = params.get("visual_origin_x", 0.0)
+        visual_origin_y = params.get("visual_origin_y", 0.0)
+        fixed_offset_x = params.get("fixed_offset_x", 0.0)
+        fixed_offset_y = params.get("fixed_offset_y", 0.0)
+
         # Dynamic Panel Size
         panel_width = params.get("panel_width", PANEL_WIDTH)
         panel_height = params.get("panel_height", PANEL_HEIGHT)
@@ -139,7 +145,11 @@ class HeatmapTool(AnalysisTool):
                 gap_x=gap_x,
                 gap_y=gap_y,
                 panel_width=panel_width,
-                panel_height=panel_height
+                panel_height=panel_height,
+                visual_origin_x=visual_origin_x,
+                visual_origin_y=visual_origin_y,
+                fixed_offset_x=fixed_offset_x,
+                fixed_offset_y=fixed_offset_y
             )
 
             # --- INTERACTIVITY: CLICK TO ZOOM ---
@@ -160,7 +170,20 @@ class HeatmapTool(AnalysisTool):
 
                         # Logic matches create_grid_shapes / config.py
                         # Adjusted for Dynamic Offsets and Gap
+                        # And Visual Shift!
+                        # The click coordinate is already shifted visually if the plot is shifted.
+                        # We need to map it back to structure?
+                        # Grid shape logic uses `offset_x` (structural).
+                        # But grid shape drawing does NOT shift.
+                        # Wait, my previous step said "Visual Origin does NOT affect the grid".
+                        # So the Grid is physically located at 0-510.
+                        # The axis is 0-510.
+                        # So `click_x` is relative to the Frame (0-510).
+                        # So we compare against structural `offset_x`.
 
+                        # `offset_x` is Structural Start of Q1.
+
+                        # Correct logic:
                         is_left = (click_x >= offset_x) and (click_x < offset_x + quad_width)
                         is_right = (click_x > offset_x + quad_width + gap_size)
 
