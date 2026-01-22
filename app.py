@@ -206,7 +206,11 @@ def main() -> None:
                     "visual_origin_y": visual_origin_y,
 
                     "dyn_gap_x": dyn_gap_x,
-                    "dyn_gap_y": dyn_gap_y
+                    "dyn_gap_y": dyn_gap_y,
+
+                    # Store Structural Fixed Offsets for Inner Border Drawing
+                    "fixed_offset_x": off_x_struct,
+                    "fixed_offset_y": off_y_struct
                 }
                 store.report_bytes = None
 
@@ -243,6 +247,7 @@ def main() -> None:
             axis_color = st.color_picker("Axis Color", value=DEFAULT_THEME.axis_color, key="style_axis")
             text_color = st.color_picker("Text Color", value=DEFAULT_THEME.text_color, key="style_text")
             unit_color = st.color_picker("Unit Color", value=DEFAULT_THEME.unit_face_color, key="style_unit")
+            gap_color = st.color_picker("Gap Color", value=DEFAULT_THEME.inner_gap_color, key="style_gap")
 
             # Construct Theme Object
             current_theme = PlotTheme(
@@ -253,7 +258,8 @@ def main() -> None:
                 text_color=text_color,
                 # Use user selection
                 unit_face_color=unit_color,
-                unit_edge_color=axis_color # Match axis for grid edges
+                unit_edge_color=axis_color, # Match axis for grid edges
+                inner_gap_color=gap_color
             )
 
             # Store in session state for Views to access
