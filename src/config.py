@@ -52,13 +52,17 @@ class PlotTheme:
     unit_face_color: str = '#F4B486' # Light Copper/Peach
     unit_edge_color: str = '#8B4513' # Saddle Brown
 
+    # Inner Border/Gap Color
+    inner_gap_color: str = '#000000'
+
 # Default Theme (Dark Mode / Copper)
 DEFAULT_THEME = PlotTheme(
     background_color='#2C3E50',       # Dark Blue-Grey
     plot_area_color='#333333',        # Dark Grey
     panel_background_color='#C87533', # Rich Copper
     axis_color='#8B4513',             # Saddle Brown
-    text_color='#FFFFFF'              # White
+    text_color='#FFFFFF',             # White
+    inner_gap_color='#000000'         # Default Black
 )
 
 # --- Legacy Constants (Backward Compatibility) ---
