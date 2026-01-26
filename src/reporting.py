@@ -13,11 +13,12 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Union
 import zipfile
 import json
-from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES, PLOT_AREA_COLOR, BACKGROUND_COLOR, PlotTheme, LIGHT_THEME
+from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES, PLOT_AREA_COLOR, BACKGROUND_COLOR, PlotTheme, LIGHT_THEME, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT
 from src.plotting import (
     create_defect_traces, create_defect_sankey, create_defect_sunburst,
     create_grid_shapes, create_still_alive_figure, create_defect_map_figure,
-    create_pareto_figure, create_density_contour_map, create_cross_section_heatmap
+    create_pareto_figure, create_density_contour_map, create_cross_section_heatmap,
+    create_stress_heatmap
 )
 from src.data_handler import aggregate_stress_data_from_df, get_cross_section_matrix, SAFE_VERIFICATION_VALUES
 from src.models import PanelData
@@ -290,7 +291,18 @@ def generate_zip_package(
     layer_data: Optional[Union[Dict, PanelData]] = None,
     process_comment: str = "",
     lot_number: str = "",
-    theme_config: Optional[PlotTheme] = None
+    theme_config: Optional[PlotTheme] = None,
+    # New Layout Parameters matching App logic
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    gap_x: float = GAP_SIZE,
+    gap_y: float = GAP_SIZE,
+    visual_origin_x: float = 0.0,
+    visual_origin_y: float = 0.0,
+    fixed_offset_x: float = 0.0,
+    fixed_offset_y: float = 0.0,
+    panel_width: float = PANEL_WIDTH,
+    panel_height: float = PANEL_HEIGHT
 ) -> bytes:
     """
     Generates a ZIP file containing selected report components.
@@ -308,9 +320,7 @@ def generate_zip_package(
     log(f"Options: PNG_Maps={include_png_all_layers}, PNG_Pareto={include_pareto_png}")
     log(f"New Options: Heatmap={include_heatmap_png}, Stress={include_stress_png}, RCA={include_root_cause_html}, Alive={include_still_alive_png}")
     log(f"Verification Selection: {verification_selection}")
-
-    # FORCE LIGHT THEME REMOVED (Issue 2 Fix)
-    # Uses passed theme_config or defaults.
+    log(f"Layout Params: Offset=({offset_x},{offset_y}), Gap=({gap_x},{gap_y}), FixedOffset=({fixed_offset_x},{fixed_offset_y})")
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
 
@@ -333,7 +343,12 @@ def generate_zip_package(
             fig = create_defect_map_figure(
                 full_df, panel_rows, panel_cols, quadrant_selection,
                 title=f"Panel Defect Map - {quadrant_selection}",
-                theme_config=theme_config
+                theme_config=theme_config,
+                offset_x=offset_x, offset_y=offset_y,
+                gap_x=gap_x, gap_y=gap_y,
+                visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
+                fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
+                panel_width=panel_width, panel_height=panel_height
             )
             html_content = fig.to_html(full_html=True, include_plotlyjs='cdn')
             zip_file.writestr("Defect_Map.html", html_content)
@@ -393,7 +408,12 @@ def generate_zip_package(
                             fig_map = create_defect_map_figure(
                                 filtered_df, panel_rows, panel_cols, Quadrant.ALL.value,
                                 title=f"Layer {layer_num} - {side_name} - Defect Map",
-                                theme_config=theme_config
+                                theme_config=theme_config,
+                                offset_x=offset_x, offset_y=offset_y,
+                                gap_x=gap_x, gap_y=gap_y,
+                                visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
+                                fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
+                                panel_width=panel_width, panel_height=panel_height
                             )
                             try:
                                 # Issue 1 Fix: Update margins and dimensions
@@ -430,7 +450,14 @@ def generate_zip_package(
         if include_still_alive_png or include_png_all_layers:
             if true_defect_coords:
                 log("Generating Still Alive Map PNG...")
-                fig_alive = create_still_alive_figure(panel_rows, panel_cols, true_defect_coords, theme_config=theme_config)
+                fig_alive = create_still_alive_figure(
+                    panel_rows, panel_cols, true_defect_coords, theme_config=theme_config,
+                    offset_x=offset_x, offset_y=offset_y,
+                    gap_x=gap_x, gap_y=gap_y,
+                    visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
+                    fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
+                    panel_width=panel_width, panel_height=panel_height
+                )
                 try:
                     # Issue 1 Fix: Update margins and dimensions
                     fig_alive.update_layout(margin=dict(l=50, r=200, t=100, b=50))
@@ -450,7 +477,14 @@ def generate_zip_package(
             log("Generating Heatmap PNG (Global)...")
             try:
                 # Issue 3: Use Smoothed Density Contour Map
-                fig_heat = create_density_contour_map(full_df, panel_rows, panel_cols, theme_config=theme_config)
+                fig_heat = create_density_contour_map(
+                    full_df, panel_rows, panel_cols, theme_config=theme_config,
+                    offset_x=offset_x, offset_y=offset_y,
+                    gap_x=gap_x, gap_y=gap_y,
+                    visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
+                    fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
+                    panel_width=panel_width, panel_height=panel_height
+                )
                 # Issue 1 Fix: Margins
                 fig_heat.update_layout(margin=dict(l=50, r=200, t=100, b=50))
                 img_bytes = fig_heat.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
@@ -464,7 +498,14 @@ def generate_zip_package(
             from src.plotting import create_stress_heatmap
             try:
                 stress_data = aggregate_stress_data_from_df(full_df, panel_rows, panel_cols)
-                fig_stress = create_stress_heatmap(stress_data, panel_rows, panel_cols, view_mode="Continuous", theme_config=theme_config)
+                fig_stress = create_stress_heatmap(
+                    stress_data, panel_rows, panel_cols, view_mode="Continuous", theme_config=theme_config,
+                    offset_x=offset_x, offset_y=offset_y,
+                    gap_x=gap_x, gap_y=gap_y,
+                    visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
+                    fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
+                    panel_width=panel_width, panel_height=panel_height
+                )
                 # Issue 1 Fix: Margins
                 fig_stress.update_layout(margin=dict(l=50, r=200, t=100, b=50))
                 img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
