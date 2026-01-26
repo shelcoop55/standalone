@@ -4,9 +4,9 @@ import sys
 import os
 
 # Add the project root to the path so we can import src
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.plotting import create_defect_sankey
+from src.plotting.renderers.charts import create_defect_sankey
 
 # Mock Data
 df = pd.DataFrame({

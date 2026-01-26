@@ -1,6 +1,12 @@
 
 import pandas as pd
-from src.plotting import create_defect_sunburst
+import sys
+import os
+
+# Add the project root to the path so we can import src
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.plotting.renderers.charts import create_defect_sunburst
 
 def test_sunburst_hierarchy():
     df = pd.DataFrame({
