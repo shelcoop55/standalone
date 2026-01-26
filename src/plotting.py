@@ -1452,21 +1452,10 @@ def create_density_contour_map(
 
     Z = H # Already transposed in helper
 
-    # Masking Gap (Shifted by offset)
-    quad_width = panel_width / 2
-    quad_height = panel_height / 2
-
-    gap_x_start = quad_width + offset_x
-    gap_x_end = quad_width + gap_x + offset_x
-    gap_y_start = quad_height + offset_y
-    gap_y_end = quad_height + gap_y + offset_y
-
-    mask_x = (x_centers > gap_x_start) & (x_centers < gap_x_end)
-    mask_y = (y_centers > gap_y_start) & (y_centers < gap_y_end)
-
-    Z[np.ix_(mask_y, mask_x)] = np.nan
-    Z[:, mask_x] = 0
-    Z[mask_y, :] = 0
+    # REMOVED: Explicit masking of gaps.
+    # This caused visual artifacts ("cut pictures") where the density would drop to zero
+    # inside the gap, creating a white cross that looked like incomplete data.
+    # We now let the natural interpolation/smoothing handle the gap regions.
 
     # No visual shift needed for grid centers, they are already in frame coords
     # x_centers and y_centers are derived from histogram edges which were derived from shifted data?
@@ -1477,11 +1466,6 @@ def create_density_contour_map(
 
     # Custom Hover Template
     if driver_text_t is not None:
-        # We must zero out driver text in gaps too
-        driver_text_t[np.ix_(mask_y, mask_x)] = ""
-        driver_text_t[:, mask_x] = ""
-        driver_text_t[mask_y, :] = ""
-
         hovertemplate = 'X: %{x:.1f}mm<br>Y: %{y:.1f}mm<br>Density: %{z:.0f}<br>Top Cause: %{text}<extra></extra>'
         text_arg = driver_text_t
     else:
