@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
-from src.plotting import create_density_contour_map
-from src.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT
+from src.plotting.renderers.maps import create_density_contour_map
+from src.core.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT
 
 @st.cache_data
 def get_filtered_heatmap_data(

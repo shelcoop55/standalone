@@ -13,15 +13,17 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Union
 import zipfile
 import json
-from src.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES, PLOT_AREA_COLOR, BACKGROUND_COLOR, PlotTheme, LIGHT_THEME, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT
-from src.plotting import (
-    create_defect_traces, create_defect_sankey, create_defect_sunburst,
-    create_grid_shapes, create_still_alive_figure, create_defect_map_figure,
-    create_pareto_figure, create_density_contour_map, create_cross_section_heatmap,
-    create_stress_heatmap
+from src.core.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES, PLOT_AREA_COLOR, BACKGROUND_COLOR, PlotTheme, LIGHT_THEME, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, SAFE_VERIFICATION_VALUES
+from src.plotting.renderers.maps import (
+    create_defect_map_figure, create_still_alive_figure, create_density_contour_map,
+    create_stress_heatmap, create_cross_section_heatmap
 )
-from src.data_handler import aggregate_stress_data_from_df, get_cross_section_matrix, SAFE_VERIFICATION_VALUES
-from src.models import PanelData
+from src.plotting.renderers.charts import (
+    create_pareto_figure, create_defect_sankey, create_defect_sunburst
+)
+from src.analytics.stress import aggregate_stress_data_from_df
+from src.analytics.yield_analysis import get_cross_section_matrix, get_true_defect_coordinates
+from src.core.models import PanelData
 from src.enums import Quadrant
 
 # ==============================================================================
@@ -487,7 +489,7 @@ def generate_zip_package(
 
         if include_stress_png:
             log("Generating Stress Map PNG (Cumulative)...")
-            from src.plotting import create_stress_heatmap
+            from src.plotting.renderers.maps import create_stress_heatmap
             try:
                 stress_data = aggregate_stress_data_from_df(full_df, panel_rows, panel_cols)
                 fig_stress = create_stress_heatmap(

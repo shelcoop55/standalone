@@ -10,7 +10,7 @@ from src.views.layer_view import render_layer_view
 from src.documentation import render_documentation
 from src.analysis import get_analysis_tool
 from src.reporting import generate_zip_package
-from src.data_handler import get_true_defect_coordinates
+from src.analytics.yield_analysis import get_true_defect_coordinates
 import streamlit.components.v1 as components
 
 class ViewManager:

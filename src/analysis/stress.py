@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
 from src.enums import ViewMode
-from src.plotting import create_stress_heatmap, create_delta_heatmap
-from src.data_handler import aggregate_stress_data
-from src.config import GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT
+from src.plotting.renderers.maps import create_stress_heatmap, create_delta_heatmap
+from src.analytics.stress import aggregate_stress_data
+from src.core.config import GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT
 
 class StressMapTool(AnalysisTool):
     @property

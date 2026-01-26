@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
-from src.plotting import create_defect_sunburst, create_defect_sankey
+from src.plotting.renderers.charts import create_defect_sunburst, create_defect_sankey
 
 class InsightsTool(AnalysisTool):
     @property

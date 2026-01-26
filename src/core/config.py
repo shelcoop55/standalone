@@ -156,7 +156,7 @@ def load_defect_styles() -> Dict[str, str]:
     Returns:
         Dict[str, str]: A dictionary mapping defect types to their corresponding colors.
     """
-    style_path = Path(__file__).parent.parent / "assets/defect_styles.json"
+    style_path = Path(__file__).parent.parent.parent / "assets/defect_styles.json"
     try:
         with open(style_path, 'r') as f:
             return json.load(f)

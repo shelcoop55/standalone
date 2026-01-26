@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from src.state import SessionStore
-from src.plotting import create_still_alive_figure
-from src.data_handler import get_true_defect_coordinates
-from src.config import GAP_SIZE
+from src.plotting.renderers.maps import create_still_alive_figure
+from src.analytics.yield_analysis import get_true_defect_coordinates
+from src.core.config import GAP_SIZE
 
 def render_still_alive_sidebar(store: SessionStore):
     """

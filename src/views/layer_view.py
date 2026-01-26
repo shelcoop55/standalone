@@ -3,8 +3,9 @@ import pandas as pd
 import matplotlib.colors as mcolors
 from src.state import SessionStore
 from src.enums import ViewMode, Quadrant
-from src.plotting import create_defect_map_figure, create_pareto_figure
-from src.config import SAFE_VERIFICATION_VALUES, PLOT_AREA_COLOR, PANEL_COLOR, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, PlotTheme
+from src.plotting.renderers.maps import create_defect_map_figure
+from src.plotting.renderers.charts import create_pareto_figure
+from src.core.config import SAFE_VERIFICATION_VALUES, PLOT_AREA_COLOR, PANEL_COLOR, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, PlotTheme
 
 def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: str, verification_selection: any, theme_config: PlotTheme = None):
     params = store.analysis_params

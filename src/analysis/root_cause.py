@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
-from src.plotting import create_cross_section_heatmap
-from src.data_handler import calculate_yield_killers, get_cross_section_matrix
+from src.plotting.renderers.maps import create_cross_section_heatmap
+from src.analytics.yield_analysis import calculate_yield_killers, get_cross_section_matrix
 
 class RootCauseTool(AnalysisTool):
     @property

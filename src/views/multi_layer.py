@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 from src.state import SessionStore
-from src.data_handler import prepare_multi_layer_data
-from src.plotting import create_multi_layer_defect_map
-from src.config import GAP_SIZE
+from src.analytics.yield_analysis import prepare_multi_layer_data
+from src.plotting.renderers.maps import create_multi_layer_defect_map
+from src.core.config import GAP_SIZE
 
 def render_multi_layer_view(store: SessionStore, selected_layers: list, selected_sides: list, theme_config=None):
     # Header removed to save space
@@ -14,22 +14,11 @@ def render_multi_layer_view(store: SessionStore, selected_layers: list, selected
     panel_rows, panel_cols = params.get("panel_rows", 7), params.get("panel_cols", 7)
     panel_uid = store.layer_data.id
 
-    combined_df = prepare_multi_layer_data(store.layer_data, panel_uid)
+    combined_df = prepare_multi_layer_data(store.layer_data)
 
     # --- Unified Filter Adaptation ---
     # selected_layers is passed from manager.py (store.multi_layer_selection)
     # selected_sides logic in manager.py provides: Front, Back, Both.
-    # The signature expects `selected_sides` as a LIST ['F', 'B'].
-    # But manager.py might pass... wait, manager.py calls this function.
-    # Let's check the call in manager.py:
-    # render_multi_layer_view(self.store, self.store.multi_layer_selection, self.store.multi_side_selection)
-
-    # ISSUE: In unified manager, I update `analysis_side_select` (Radio), but I might NOT be updating `multi_side_selection` (List).
-    # I need to ensure `multi_side_selection` is derived from the Radio state inside manager.py or here.
-    # Actually, manager.py call uses `self.store.multi_side_selection`.
-    # But the Radio updates `analysis_side_select`.
-    # I should update manager.py to sync them OR handle it here.
-    # Updating here is safer if I can read session state.
 
     # Updated: Now using `analysis_side_pills` which is a LIST of strings ["Front", "Back"]
     side_pills = st.session_state.get("analysis_side_pills", ["Front", "Back"])

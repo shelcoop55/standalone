@@ -1,95 +1,87 @@
-# Panel Defect Analysis Dashboard
+# Panel Defect Analysis - Engineering Manual
 
-This is a professional, interactive web application built with Streamlit for visualizing and analyzing semiconductor panel defect data. The dashboard is designed for engineers and technicians to easily upload multi-layer build-up data, identify trends, and generate insightful reports.
+## 📘 Overview
+This document serves as the "Technical Bible" for the Panel Defect Analysis application. It details the architectural decisions, mathematical formulas, and system assumptions that drive the software.
 
-The application is architected for robustness and flexibility, featuring a modular Python backend located in the `src/` directory, which makes the code clean, maintainable, and easy to extend.
+## 🏗️ Architecture
+The application follows a Domain-Driven Design (DDD) inspired structure:
 
-![App Screenshot](assets/screenshot.png)
-*(Please replace `assets/screenshot.png` with an actual screenshot of the application.)*
+*   **`src/core`**: The domain heart. Contains the `GeometryEngine` (physical layout logic) and `PanelData` models.
+*   **`src/io`**: Data ingress and egress. Handles Excel parsing (`ingestion.py`) and strict schema enforcement (`validation.py`).
+*   **`src/analytics`**: Pure business logic. Vectorized calculation of Yield, Stress Maps, and Root Cause matrices.
+*   **`src/plotting`**: Visualization layer. Decoupled into `generators` (data prep) and `renderers` (Plotly object creation).
+*   **`src/state`**: State management. Encapsulates `st.session_state` mutations in a `SessionStore`.
 
-## Key Features
+---
 
-- **Multi-Layer Defect Analysis**: Upload and analyze data from multiple build-up (BU) layers simultaneously (e.g., `BU-01.xlsx`, `BU-02.xlsx`).
-- **Interactive Defect Map**: Visualize the spatial distribution of defects on a true-to-scale 2x2 panel grid.
-- **"Still Alive" Yield Map**: A powerful view that aggregates "True" defects across all layers to show a final yield map of which panel units are still defect-free.
-- **Dynamic Defect Coloring**: New, unknown defect types from an uploaded file are automatically assigned a unique color and plotted, requiring no manual configuration.
-- **Pareto Analysis**: Instantly identify the most frequent defect types, with views for individual quadrants or a stacked bar chart for the entire panel.
-- **Statistical Summary**: View key performance indicators (KPIs) like defect density, true defective cell counts, and estimated yield, with breakdowns per quadrant.
-- **Flexible Configuration**: Interactively configure the panel's row and column dimensions to match the physical layout of your product.
-- **Data Filtering**: Isolate and analyze data by quadrant (Q1-Q4) or by verification status (True, False, Acceptable).
-- **Professional Theming**: A polished, dark-themed UI designed for a professional manufacturing environment.
-- **Comprehensive Reporting**: Generate a multi-sheet, presentation-ready Excel report with a single click. The report includes a summary, themed charts, top defect lists, and a full raw data dump with conditional formatting for critical defects.
+## 🧮 The Mathematical Engine
 
-## How to Use the Dashboard
+### 1. Coordinate System & Yield Calculation
+The application operates on two coordinate systems:
+*   **Logical Grid (`UNIT_INDEX_X`, `UNIT_INDEX_Y`)**: Integer indices of the units. Used for aggregation.
+*   **Physical Layout (mm)**: Floating point coordinates for visualization.
 
-1.  **Launch the application.** It will start with sample data for three layers.
-2.  **Upload Your Data**:
-    - In the sidebar, under the "Data Source & Configuration" expander, click **Browse files**.
-    - Select one or more Excel files. The application expects filenames to start with `BU-XX` (e.g., `BU-01-MyData.xlsx`), where `XX` is the layer number.
-    - The Excel file must contain a sheet named `Defects` with the columns: `DEFECT_TYPE`, `UNIT_INDEX_X`, and `UNIT_INDEX_Y`.
-3.  **Configure Panel Size**: Set the `Panel Rows` and `Panel Columns` to match the dimensions of a single quadrant on your physical panel.
-4.  **Run Analysis**: Click the **"Run Analysis"** button to process the data.
-5.  **Navigate Views**:
-    - Use the buttons at the top of the main view to switch between different build-up layers or the "Still Alive" map.
-    - Use the "Analysis Controls" in the sidebar to switch between the `Defect Map`, `Pareto`, and `Summary` views for the selected layer.
-6.  **Download Reports**:
-    - In the layer views, you can generate and download a comprehensive Excel report for the currently selected filters.
-    - In the "Still Alive" view, you can download a simple coordinate list of all defective cells.
+**Yield Logic:**
+A unit is considered "Alive" (Yielding) if and only if:
+1.  It exists in the grid (within `rows` x `cols`).
+2.  It has **zero** "True Defects" across **all** active layers.
 
-## Developer Setup and Installation
+**True Defect Definition:**
+A defect is "True" if its `Verification` status is **NOT** in the `SAFE_VERIFICATION_VALUES` list (e.g., 'False Alarm', 'N', 'Safe').
 
-Follow these instructions to set up the development environment and run the application locally.
+### 2. Stress Map Aggregation
+The Stress Map (`src/analytics/stress.py`) computes a 2D histogram of defect density.
+*   **Formula**: $H_{x,y} = \sum_{l \in Layers} \mathbb{1}(Defect_{l,x,y} \text{ is True})$
+*   **Delta Mode**: $H_{Delta} = H_{GroupA} - H_{GroupB}$.
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <your-repository-url>
-    cd <repository-directory>
-    ```
-2.  **Install Python Version**: This project uses `pyenv` to manage Python versions. Ensure you have the version specified in the `.python-version` file installed.
-    ```bash
-    # This will automatically read the version from the .python-version file
-    pyenv install
-    ```
-3.  **Install Dependencies**: The project uses two requirements files. `requirements.txt` for the core application and `requirements-dev.txt` for testing and development.
-    ```bash
-    # Install application dependencies
-    pip install -r requirements.txt
+### 3. Zonal Yield
+Yield is calculated per concentric zone (Ring) from the edge:
+*   **Edge (Ring 0)**: The outermost perimeter (1 unit thick).
+*   **Middle (Ring 1-2)**: The next 2 layers inward.
+*   **Center (Ring 3+)**: The remaining core.
 
-    # Install development dependencies
-    pip install -r requirements-dev.txt
-    ```
+---
 
-4.  **Run the Streamlit App**:
-    ```bash
-    streamlit run app.py
-    ```
-The application will open in your default web browser.
+## 📐 The Geometry Registry
 
-## Configuration
+The `GeometryEngine` (`src/core/geometry.py`) is the single source of truth for all layout dimensions.
 
-### Defect Colors
-You can customize the colors used for each defect type in the plots.
+| Constant | Default Value | Description |
+| :--- | :--- | :--- |
+| `FRAME_WIDTH` | 510 mm | Total physical width of the panel frame. |
+| `FRAME_HEIGHT` | 515 mm | Total physical height of the panel frame. |
+| `DEFAULT_OFFSET_X` | 13.5 mm | Structural margin from Frame Left to Active Area. |
+| `DEFAULT_OFFSET_Y` | 15.0 mm | Structural margin from Frame Top to Active Area. |
+| `DEFAULT_GAP` | 3.0 mm | Fixed structural gap between quadrants. |
+| `DYNAMIC_GAP` | 5.0 / 3.5 mm | Additional dynamic gap configurable by user. |
 
-1.  Open the `assets/defect_styles.json` file.
-2.  This file contains a simple JSON object mapping defect names (strings) to hex color codes (strings).
-3.  You can change the hex color codes for existing defects or add new defect types to give them a specific color.
+**Unit Cell Calculation:**
+$$ CellWidth = \frac{QuadrantWidth - (Cols + 1) \times InterUnitGap}{Cols} $$
+*(Note: Uses (n+1) gaps to ensure separation from quadrant edges)*
 
-**Example `defect_styles.json`:**
-```json
-{
-    "Nick": "#9B59B6",
-    "Short": "#E74C3C",
-    "Missing Feature": "#2ECC71",
-    "Cut": "#1ABC9C"
-}
-```
-**Note**: If a defect type is found in an uploaded file but is *not* in this JSON file, it will be automatically assigned a color from a fallback palette defined in `src/config.py`.
+---
 
-## Testing
+## 🧭 The "Golden Path" Assumptions
 
-This project uses `pytest` for automated testing. To ensure code quality and prevent regressions, run the test suite after making any changes.
+1.  **File Naming**: Input files **MUST** follow the pattern `BU-{LayerNum}{Side}.xlsx` (e.g., `BU-01F.xlsx`).
+    *   *Why*: The parser relies on regex to extract Layer Number and Side (Front/Back) automatically.
+2.  **Data Schema**:
+    *   Required Columns: `DEFECT_TYPE`, `UNIT_INDEX_X`, `UNIT_INDEX_Y`.
+    *   Optional: `Verification` (defaults to 'Under Verification' if missing), `X_COORDINATES` (for precise plotting).
+    *   Data Types: Indices must be integers.
+3.  **Coordinate Alignment**:
+    *   **Front Side**: `Physical X` = `Unit Index X`.
+    *   **Back Side**: `Physical X` = `(Total Width - 1) - Unit Index X` (Mirrored horizontally for through-board alignment).
+4.  **Immutability**:
+    *   Once loaded, `PanelData` is cached and treated as immutable. Changing parameters (e.g., Rows/Cols) triggers a full reload/revalidation cycle.
 
-```bash
-pytest
-```
-The tests will run and provide a report on the status of the application's core logic.
+## 🚦 Tab Logic & View Modes
+
+*   **Still Alive**: The primary executive view. Aggregates everything to show net yield. Filters work as "Exclusions" (Remove layers/defects to see what survives).
+*   **Multi-Layer**: Visualizes alignment stack-up. Shows raw defects from selected layers/sides.
+*   **Root Cause**: Virtual Cross-Sectioning. Slices the panel (X or Y axis) to show defect depth through the stack.
+*   **Heatmap / Stress**: Density visualization. Heatmap uses Gaussian smoothing; Stress Map uses exact grid counting.
+
+---
+
+*Generated by Jules (AI Engineering Agent)*

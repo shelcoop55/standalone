@@ -6,7 +6,8 @@ import streamlit as st
 from dataclasses import dataclass
 from typing import Optional, Dict, List
 from src.enums import ViewMode, Quadrant
-from src.data_handler import load_data, PanelData  # Import load_data
+from src.io.ingestion import load_panel_data
+from src.core.models import PanelData
 
 @dataclass
 class SessionStore:
@@ -19,7 +20,7 @@ class SessionStore:
         """Initialize default state values if they don't exist."""
         defaults = {
             'report_bytes': None,
-            'dataset_id': None,  # CHANGED: Store ID instead of object
+            'dataset_id': None,
             'layer_data_metadata': {}, # Store lightweight metadata (keys only)
             'selected_layer': None,
             'selected_side': 'F',
@@ -49,53 +50,34 @@ class SessionStore:
         st.session_state.dataset_id = val
 
     @property
-    def layer_data(self) -> Optional[PanelData]: # Modified to retrieve via cache
+    def layer_data(self) -> Optional[PanelData]:
         """
-        Retrieves the heavy PanelData object from the global cache using the stored dataset_id.
+        Retrieves the heavy PanelData object from the global cache (cache_resource) using current inputs.
         """
         if not self.dataset_id:
             return None
 
-        # We need to retrieve the arguments that created this dataset.
-        # Since we don't store the raw files in session state (too big),
-        # we rely on the fact that load_data is cached.
-        # However, load_data requires arguments.
-        # Strategy: The ID itself should be sufficient to 'find' it if we had a lookup,
-        # but st.cache_data works by arguments.
-
-        # REFACTOR: We need to store the *arguments* or a way to re-call load_data?
-        # No, we cannot re-upload files.
-        # The correct pattern for file uploads + caching:
-        # load_data(files) -> returns object.
-        # We need to hold the object in memory SOMEWHERE if not in session state.
-        # BUT st.cache_data holds it in memory.
-        # So we just need to call load_data again with the SAME file objects?
-        # File objects from st.file_uploader are seekable, but might be reset.
-
-        # ALTERNATIVE: Use a custom singleton or resource cache for "Current Active Dataset" mapped by ID.
-        # Or simply trust st.cache_data if we pass the same file list reference?
-        # Streamlit file uploader returns new objects on rerun? No, they are preserved in session state widget.
-
-        # Let's check app.py. The files are in `st.session_state[uploader_key]`.
-        # So we can just call load_data(files, ...) again.
-
         current_uploader_key = f"uploaded_files_{st.session_state.get('uploader_key', 0)}"
         files = st.session_state.get(current_uploader_key, [])
-        rows = self.analysis_params.get("panel_rows", 7)
-        cols = self.analysis_params.get("panel_cols", 7)
+
+        # Retrieve geometric params from analysis_params
+        # Defaults matching config.py if not present
+        params = self.analysis_params
+        rows = params.get("panel_rows", 7)
+        cols = params.get("panel_cols", 7)
+        width = params.get("panel_width", 470)
+        height = params.get("panel_height", 470)
+        gap_x = params.get("gap_x", 3.0)
+        gap_y = params.get("gap_y", 3.0)
 
         # Safety Check: If we expect Real Data (ID set) but files are lost/empty, return None.
-        # This prevents falling back to random Sample Data generation in load_data.
         is_sample = self.dataset_id and str(self.dataset_id).startswith("sample")
 
         if not files and not is_sample:
              return None
 
-        # Call load_data. If inputs haven't changed, it hits cache.
-        return load_data(files, rows, cols)
-
-    # We don't implement a setter for layer_data anymore.
-    # Logic should update the input params (files) or trigger a reload.
+        # Call load_panel_data. If inputs haven't changed, it hits cache_resource.
+        return load_panel_data(files, rows, cols, width, height, gap_x, gap_y)
 
     @property
     def layer_data_keys(self) -> Dict:
@@ -200,6 +182,13 @@ class SessionStore:
     def clear_all(self):
         """Resets the entire session state."""
         st.session_state.clear()
+
+    def reset_data_source(self):
+        """Resets the file uploader and data state, triggering a clean restart."""
+        # We need to preserve the uploader key increment logic
+        current_key_val = st.session_state.get('uploader_key', 0)
+        self.clear_all()
+        st.session_state['uploader_key'] = current_key_val + 1
 
     def set_layer_view(self, layer_num: int, side: Optional[str] = None):
         """Helper to switch to a specific layer view."""
