@@ -2,7 +2,7 @@ import streamlit as st
 from typing import List, Optional
 import pandas as pd
 from src.state import SessionStore
-from src.utils import get_bu_name_from_filename
+from src.legacy_utils import get_bu_name_from_filename
 from src.enums import ViewMode, Quadrant
 from src.views.still_alive import render_still_alive_main
 from src.views.multi_layer import render_multi_layer_view
@@ -569,7 +569,7 @@ class ViewManager:
                 st.success("Package generated successfully!")
 
         if self.store.report_bytes:
-            from src.utils import generate_standard_filename
+            from src.legacy_utils import generate_standard_filename
 
             zip_filename = generate_standard_filename(
                 prefix="Defect_Analysis_Package",
