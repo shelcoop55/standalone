@@ -508,7 +508,7 @@ class ViewManager:
             st.markdown("##### Additional Analysis Charts")
             include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False)
             include_stress_png = st.checkbox("Stress Map (PNG)", value=False)
-            include_root_cause_png = st.checkbox("Root Cause (PNG)", value=False)
+            include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False)
             include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False)
 
         st.markdown("---")
@@ -538,7 +538,7 @@ class ViewManager:
                     include_pareto_png=include_pareto_png,
                     include_heatmap_png=include_heatmap_png,
                     include_stress_png=include_stress_png,
-                    include_root_cause_png=include_root_cause_png,
+                    include_root_cause_html=include_root_cause_html,
                     include_still_alive_png=include_still_alive_png,
                     layer_data=self.store.layer_data,
                     process_comment=self.store.analysis_params.get("process_comment", ""),
