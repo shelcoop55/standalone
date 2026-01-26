@@ -9,8 +9,9 @@ from src.views.multi_layer import render_multi_layer_view
 from src.views.layer_view import render_layer_view
 from src.documentation import render_documentation
 from src.analysis import get_analysis_tool
-from src.reporting import generate_zip_package
+from src.io.exporters.package import generate_zip_package
 from src.analytics.yield_analysis import get_true_defect_coordinates
+from src.core.geometry import GeometryEngine
 import streamlit.components.v1 as components
 
 class ViewManager:
@@ -516,7 +517,10 @@ class ViewManager:
         if st.button("📦 Generate Download Package", type="primary", use_container_width=True):
             with st.spinner("Generating Package..."):
                 full_df = self.store.layer_data.get_combined_dataframe()
-                true_defect_coords = get_true_defect_coordinates(self.store.layer_data)
+
+                # Get True Defect Coords (returns dict, convert keys to set)
+                td_result = get_true_defect_coordinates(self.store.layer_data)
+                true_defect_coords = set(td_result.keys()) if td_result else set()
 
                 # Fetch Theme for Reporting (Optional - for now using defaults/user choice in app state)
                 # Reporting might need to pass theme if PNGs are generated with it.
@@ -524,6 +528,19 @@ class ViewManager:
 
                 # Fetch Layout Parameters from Session Store (Calculated in app.py)
                 params = self.store.analysis_params
+
+                # Construct Geometry Context
+                ctx = GeometryEngine.calculate_layout(
+                    panel_rows=params.get('panel_rows', 7),
+                    panel_cols=params.get('panel_cols', 7),
+                    dyn_gap_x=params.get("gap_x", 3.0),
+                    dyn_gap_y=params.get("gap_y", 3.0),
+                    visual_origin_x=params.get("visual_origin_x", 0.0),
+                    visual_origin_y=params.get("visual_origin_y", 0.0)
+                    # Fixed offsets/gaps use defaults from config if not passed,
+                    # but if they are in params we should pass them.
+                    # Assuming they might be edited via UI later, let's pass them if present.
+                )
 
                 self.store.report_bytes = generate_zip_package(
                     full_df=full_df,
@@ -533,6 +550,7 @@ class ViewManager:
                     verification_selection=self.store.verification_selection,
                     source_filename="Multiple Files",
                     true_defect_coords=true_defect_coords,
+                    ctx=ctx,
                     include_excel=include_excel,
                     include_coords=include_coords,
                     include_map=include_map,
@@ -546,18 +564,7 @@ class ViewManager:
                     layer_data=self.store.layer_data,
                     process_comment=params.get("process_comment", ""),
                     lot_number=params.get("lot_number", ""),
-                    theme_config=current_theme,
-                    # Pass Layout Parameters for Consistent Plotting
-                    offset_x=params.get("offset_x", 0.0),
-                    offset_y=params.get("offset_y", 0.0),
-                    gap_x=params.get("gap_x", 3.0),
-                    gap_y=params.get("gap_y", 3.0),
-                    visual_origin_x=params.get("visual_origin_x", 0.0),
-                    visual_origin_y=params.get("visual_origin_y", 0.0),
-                    fixed_offset_x=params.get("fixed_offset_x", 0.0),
-                    fixed_offset_y=params.get("fixed_offset_y", 0.0),
-                    panel_width=params.get("panel_width", 470.0),
-                    panel_height=params.get("panel_height", 470.0)
+                    theme_config=current_theme
                 )
                 st.success("Package generated successfully!")
 

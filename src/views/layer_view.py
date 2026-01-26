@@ -6,6 +6,7 @@ from src.enums import ViewMode, Quadrant
 from src.plotting.renderers.maps import create_defect_map_figure
 from src.plotting.renderers.charts import create_pareto_figure
 from src.core.config import SAFE_VERIFICATION_VALUES, PLOT_AREA_COLOR, PANEL_COLOR, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, PlotTheme
+from src.views.utils import get_geometry_context
 
 def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: str, verification_selection: any, theme_config: PlotTheme = None):
     params = store.analysis_params
@@ -31,28 +32,11 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
             display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
 
             if view_mode == ViewMode.DEFECT.value:
-                # Retrieve layout params
-                offset_x = params.get("offset_x", 0.0)
-                offset_y = params.get("offset_y", 0.0)
-                gap_x = params.get("gap_x", GAP_SIZE)
-                gap_y = params.get("gap_y", GAP_SIZE)
-                panel_width = params.get("panel_width", PANEL_WIDTH)
-                panel_height = params.get("panel_height", PANEL_HEIGHT)
-                visual_origin_x = params.get("visual_origin_x", 0.0)
-                visual_origin_y = params.get("visual_origin_y", 0.0)
-                fixed_offset_x = params.get("fixed_offset_x", 0.0)
-                fixed_offset_y = params.get("fixed_offset_y", 0.0)
+                ctx = get_geometry_context(store)
 
                 fig = create_defect_map_figure(
-                    display_df, panel_rows, panel_cols, quadrant_selection, lot_number,
-                    offset_x=offset_x, offset_y=offset_y,
-                    gap_x=gap_x, gap_y=gap_y,
-                    panel_width=panel_width, panel_height=panel_height,
-                    theme_config=theme_config,
-                    visual_origin_x=visual_origin_x,
-                    visual_origin_y=visual_origin_y,
-                    fixed_offset_x=fixed_offset_x,
-                    fixed_offset_y=fixed_offset_y
+                    display_df, panel_rows, panel_cols, ctx, quadrant_selection, lot_number,
+                    theme_config=theme_config
                 )
                 st.plotly_chart(fig, use_container_width=True)
             elif view_mode == ViewMode.PARETO.value:

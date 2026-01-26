@@ -1,17 +1,13 @@
 import plotly.graph_objects as go
 import pandas as pd
 from typing import List, Optional
+from src.core.geometry import GeometryContext
 from src.core.config import defect_style_map, FALLBACK_COLORS, GAP_SIZE
 from src.documentation import VERIFICATION_DESCRIPTIONS
 
 def create_defect_traces(
     df: pd.DataFrame,
-    offset_x: float = 0.0,
-    offset_y: float = 0.0,
-    gap_x: float = GAP_SIZE,
-    gap_y: float = GAP_SIZE,
-    visual_origin_x: float = 0.0,
-    visual_origin_y: float = 0.0
+    ctx: GeometryContext
 ) -> List[go.Scatter]:
     """
     Generates scatter plot traces for defect visualization.
@@ -78,6 +74,12 @@ def create_defect_traces(
         # SHIFT LOGIC (Additive):
         # 1. Structural Position: point + offset_x
         # 2. Visual Offset: (point + offset_x) + visual_origin_x
+
+        # Use context values
+        offset_x = ctx.offset_x
+        offset_y = ctx.offset_y
+        visual_origin_x = ctx.visual_origin_x
+        visual_origin_y = ctx.visual_origin_y
 
         if 'X_COORDINATES' in dff.columns:
             # Absolute: already includes structure (if absolute frame coords) or needs shift.

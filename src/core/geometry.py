@@ -8,7 +8,7 @@ from src.core.config import (
 )
 
 @dataclass
-class LayoutContext:
+class GeometryContext:
     """Derived dimensions and coordinate systems for the panel."""
     # Active Panel Dimensions (Calculated)
     panel_width: float
@@ -59,7 +59,7 @@ class GeometryEngine:
         fixed_gap_y: float = DEFAULT_GAP_Y,
         visual_origin_x: float = 0.0,
         visual_origin_y: float = 0.0
-    ) -> LayoutContext:
+    ) -> GeometryContext:
         """
         Calculates the complete layout context based on configuration.
         """
@@ -105,7 +105,7 @@ class GeometryEngine:
             'Q4': q4_origin
         }
 
-        return LayoutContext(
+        return GeometryContext(
             panel_width=p_width,
             panel_height=p_height,
             quad_width=quad_width,

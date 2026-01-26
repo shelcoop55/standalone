@@ -5,6 +5,7 @@ from src.enums import ViewMode
 from src.plotting.renderers.maps import create_stress_heatmap, create_delta_heatmap
 from src.analytics.stress import aggregate_stress_data
 from src.core.config import GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT
+from src.views.utils import get_geometry_context
 
 class StressMapTool(AnalysisTool):
     @property
@@ -52,19 +53,7 @@ class StressMapTool(AnalysisTool):
                      keys.append((layer_num, side))
 
         # Layout Params
-        offset_x = params.get("offset_x", 0.0)
-        offset_y = params.get("offset_y", 0.0)
-        # Use dynamic gaps from params (set in app.py)
-        gap_x = params.get("gap_x", GAP_SIZE)
-        gap_y = params.get("gap_y", GAP_SIZE)
-
-        # Use panel dimensions from params
-        p_width = params.get("panel_width", PANEL_WIDTH)
-        p_height = params.get("panel_height", PANEL_HEIGHT)
-        visual_origin_x = params.get("visual_origin_x", 0.0)
-        visual_origin_y = params.get("visual_origin_y", 0.0)
-        fixed_offset_x = params.get("fixed_offset_x", 0.0)
-        fixed_offset_y = params.get("fixed_offset_y", 0.0)
+        ctx = get_geometry_context(self.store)
 
         fig = None
 
@@ -75,11 +64,7 @@ class StressMapTool(AnalysisTool):
                 quadrant_filter=selected_quadrant
             )
              fig = create_stress_heatmap(
-                 stress_data, panel_rows, panel_cols, view_mode=view_mode,
-                 offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y,
-                 panel_width=p_width, panel_height=p_height,
-                 visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                 fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y
+                 stress_data, panel_rows, panel_cols, ctx=ctx, view_mode=view_mode
              )
 
         elif mode_new == "Delta Difference":
@@ -100,11 +85,7 @@ class StressMapTool(AnalysisTool):
 
             st.info("Delta Difference Mode: Calculating (Front Side - Back Side) for selected layers.")
             fig = create_delta_heatmap(
-                stress_data_a, stress_data_b, panel_rows, panel_cols, view_mode=view_mode,
-                offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y,
-                panel_width=p_width, panel_height=p_height,
-                visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y
+                stress_data_a, stress_data_b, panel_rows, panel_cols, ctx=ctx, view_mode=view_mode
             )
 
         if fig:

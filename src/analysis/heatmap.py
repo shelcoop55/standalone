@@ -3,6 +3,7 @@ import pandas as pd
 from src.analysis.base import AnalysisTool
 from src.plotting.renderers.maps import create_density_contour_map
 from src.core.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT
+from src.views.utils import get_geometry_context
 
 @st.cache_data
 def get_filtered_heatmap_data(
@@ -96,24 +97,8 @@ class HeatmapTool(AnalysisTool):
         selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
 
         # 7. Layout Params
-        offset_x = params.get("offset_x", 0.0)
-        offset_y = params.get("offset_y", 0.0)
-        gap_x = params.get("gap_x", GAP_SIZE)
-        gap_y = params.get("gap_y", GAP_SIZE)
-        gap_size = gap_x # Local alias for compatibility with click logic
-
-        # New Params for Visual Shift & Inner Border
-        visual_origin_x = params.get("visual_origin_x", 0.0)
-        visual_origin_y = params.get("visual_origin_y", 0.0)
-        fixed_offset_x = params.get("fixed_offset_x", 0.0)
-        fixed_offset_y = params.get("fixed_offset_y", 0.0)
-
-        # Dynamic Panel Size
-        panel_width = params.get("panel_width", PANEL_WIDTH)
-        panel_height = params.get("panel_height", PANEL_HEIGHT)
-
-        quad_width = panel_width / 2
-        quad_height = panel_height / 2
+        ctx = get_geometry_context(self.store)
+        gap_size = ctx.effective_gap_x # Local alias for compatibility with click logic
 
         # --- DATA PREPARATION (CACHED) ---
         # We pass self.store.layer_data.id if available, else a dummy or we assume static.
@@ -133,23 +118,14 @@ class HeatmapTool(AnalysisTool):
             flip_back = st.session_state.get("flip_back_side", True)
             contour_fig = create_density_contour_map(
                 combined_heatmap_df, panel_rows, panel_cols,
+                ctx=ctx,
                 show_points=False,
                 smoothing_factor=smoothing * 5, # Scale slider 1-20 to meaningful param
                 saturation_cap=saturation,
                 show_grid=False,
                 view_mode=view_mode,
                 flip_back=flip_back,
-                quadrant_selection=selected_quadrant,
-                offset_x=offset_x,
-                offset_y=offset_y,
-                gap_x=gap_x,
-                gap_y=gap_y,
-                panel_width=panel_width,
-                panel_height=panel_height,
-                visual_origin_x=visual_origin_x,
-                visual_origin_y=visual_origin_y,
-                fixed_offset_x=fixed_offset_x,
-                fixed_offset_y=fixed_offset_y
+                quadrant_selection=selected_quadrant
             )
 
             # --- INTERACTIVITY: CLICK TO ZOOM ---
@@ -184,6 +160,9 @@ class HeatmapTool(AnalysisTool):
                         # `offset_x` is Structural Start of Q1.
 
                         # Correct logic:
+                        offset_x, offset_y = ctx.offset_x, ctx.offset_y
+                        quad_width, quad_height = ctx.quad_width, ctx.quad_height
+
                         is_left = (click_x >= offset_x) and (click_x < offset_x + quad_width)
                         is_right = (click_x > offset_x + quad_width + gap_size)
 

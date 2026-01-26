@@ -1,22 +1,25 @@
 import pandas as pd
 import numpy as np
+import streamlit as st
 from typing import List, Tuple, Optional
 from src.core.models import PanelData
 from src.core.config import SAFE_VERIFICATION_VALUES
 from src.analytics.models import StressMapData
 
+@st.cache_data
 def aggregate_stress_data(
-    panel_data: PanelData,
+    _panel_data: PanelData,
     selected_keys: List[Tuple[int, str]],
     panel_rows: int,
     panel_cols: int,
+    panel_data_id: str,
     verification_filter: Optional[List[str]] = None,
     quadrant_filter: str = "All"
 ) -> StressMapData:
     """
     Aggregates data for the Cumulative Stress Map using specific (Layer, Side) keys.
     """
-    if not panel_data:
+    if not _panel_data:
         return StressMapData(
             np.zeros((panel_rows*2, panel_cols*2), int),
             np.empty((panel_rows*2, panel_cols*2), object), 0, 0
@@ -25,7 +28,7 @@ def aggregate_stress_data(
     # OPTIMIZATION: Vectorized Aggregation
     dfs_to_agg = []
     for layer_num, side in selected_keys:
-        layer = panel_data.get_layer(layer_num, side)
+        layer = _panel_data.get_layer(layer_num, side)
         if layer and not layer.data.empty:
             dfs_to_agg.append(layer.data)
 
