@@ -8,30 +8,32 @@ from src.core.config import (
 )
 from src.core.geometry import GeometryEngine
 from src.state import SessionStore
+from pathlib import Path
 from src.views.manager import ViewManager
+from src.utils.logger import configure_logging
 
 def load_css(file_path: str) -> None:
     """Loads a CSS file and injects it into the Streamlit app."""
     try:
-        with open(file_path) as f:
-            css = f.read()
-            css_variables = f'''
-            <style>
-                :root {{
-                    --background-color: {BACKGROUND_COLOR};
-                    --text-color: {TEXT_COLOR};
-                    --panel-color: {PANEL_COLOR};
-                    --panel-hover-color: #d48c46;
-                }}
-                {css}
-            </style>
-            '''
-            st.markdown(css_variables, unsafe_allow_html=True)
+        css = Path(file_path).read_text()
+        css_variables = f'''
+        <style>
+            :root {{
+                --background-color: {BACKGROUND_COLOR};
+                --text-color: {TEXT_COLOR};
+                --panel-color: {PANEL_COLOR};
+                --panel-hover-color: #d48c46;
+            }}
+            {css}
+        </style>
+        '''
+        st.markdown(css_variables, unsafe_allow_html=True)
     except FileNotFoundError:
         pass
 
 def main() -> None:
     """Main function to configure and run the Streamlit application."""
+    configure_logging()
     st.set_page_config(layout="wide", page_title="Panel Defect Analysis", initial_sidebar_state="expanded")
     load_css("assets/styles.css")
 

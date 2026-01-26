@@ -127,6 +127,9 @@ FALLBACK_COLORS = NEON_PALETTE + [
 # --- Reporting Constants ---
 CRITICAL_DEFECT_TYPES = ["Short", "Cut/Short"]
 
+# --- Input Validation Constants ---
+FILENAME_PATTERN = r"BU-(\d{2})\s*([FB])"
+
 # --- Verification Logic ---
 # Values in the 'Verification' column that are considered "Safe" (Non-Defects).
 # Any value NOT in this list is treated as a "True Defect" that impacts yield.
@@ -142,6 +145,7 @@ SAFE_VERIFICATION_VALUES = [
 
 # --- Defect Styling (Loaded from JSON) ---
 import json
+import logging
 from pathlib import Path
 from typing import Dict
 
@@ -162,7 +166,7 @@ def load_defect_styles() -> Dict[str, str]:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         # Fallback to a default map if the file is missing or corrupt
-        print(f"Warning: Could not load 'defect_styles.json' ({e}). Using default colors.")
+        logging.warning(f"Warning: Could not load 'defect_styles.json' ({e}). Using default colors.")
         return {
             'Nick': '#9B59B6', 'Short': '#E74C3C', 'Missing Feature': '#2ECC71',
             'Cut': '#1ABC9C', 'Fine Short': '#BE90D4', 'Pad Violation': '#BDC3C7',

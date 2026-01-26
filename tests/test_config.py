@@ -1,7 +1,8 @@
 import pytest
-from src import config
+from src.core import config
 import json
 from unittest.mock import patch
+import builtins
 
 def test_load_defect_styles_success():
     """
@@ -18,6 +19,7 @@ def test_load_defect_styles_success():
     assert styles
 
     # Check for a known key-value pair from the actual file
+    # Adjust path for test execution context if needed, but assuming execution from root
     with open("assets/defect_styles.json", 'r') as f:
         expected_styles = json.load(f)
     assert styles == expected_styles
@@ -27,8 +29,16 @@ def test_load_defect_styles_fallback(monkeypatch):
     Tests that the fallback mechanism works when the JSON file is not found.
     """
     # Use monkeypatch to simulate a FileNotFoundError
-    def mock_open_raises_error(*args, **kwargs):
-        raise FileNotFoundError("File not found for testing")
+    # We need to mock open where it is used.
+    # Since config.py imports builtins or uses open directly, we mock builtins.open
+
+    real_open = builtins.open
+
+    def mock_open_raises_error(file, *args, **kwargs):
+        # Only raise error for the specific file we want to fail
+        if str(file).endswith("defect_styles.json"):
+            raise FileNotFoundError("File not found for testing")
+        return real_open(file, *args, **kwargs)
 
     monkeypatch.setattr("builtins.open", mock_open_raises_error)
 

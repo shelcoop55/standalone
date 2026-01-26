@@ -1,5 +1,8 @@
 import pandas as pd
+import logging
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = ['DEFECT_TYPE', 'UNIT_INDEX_X', 'UNIT_INDEX_Y']
 
@@ -27,7 +30,7 @@ def validate_schema(df: pd.DataFrame, filename: str) -> pd.DataFrame:
     df.dropna(subset=['UNIT_INDEX_X', 'UNIT_INDEX_Y'], inplace=True)
     dropped = initial_count - len(df)
     if dropped > 0:
-        print(f"Warning: Dropped {dropped} rows with missing/invalid coordinates in '{filename}'.")
+        logger.warning(f"Warning: Dropped {dropped} rows with missing/invalid coordinates in '{filename}'.")
 
     # 4. Clean String Columns
     df['DEFECT_TYPE'] = df['DEFECT_TYPE'].astype(str).str.strip().astype('category')

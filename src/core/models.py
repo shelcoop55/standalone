@@ -6,8 +6,11 @@ from dataclasses import dataclass
 import pandas as pd
 import numpy as np
 import uuid
+import logging
 from typing import Dict, List, Optional
 from src.core.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT, INTER_UNIT_GAP
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class BuildUpLayer:
@@ -121,7 +124,7 @@ class BuildUpLayer:
                 else:
                     use_spatial_coords = False
             except Exception as e:
-                print(f"Spatial mapping failed: {e}")
+                logger.warning(f"Spatial mapping failed: {e}")
                 use_spatial_coords = False
 
         if use_spatial_coords:
