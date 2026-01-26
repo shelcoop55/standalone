@@ -83,11 +83,13 @@ def _draw_quadrant_grids(origins_to_draw: Dict, panel_rows: int, panel_cols: int
 
     for x_start, y_start in origins_to_draw.values():
         if fill:
-            # 1. Draw the Background Copper Rect for the whole quadrant (ROUNDED)
-            path = _get_rounded_rect_path(x_start, y_start, x_start + quad_width, y_start + quad_height, 20.0)
+            # 1. Draw the Background Copper Rect for the whole quadrant (SQUARE per request)
             shapes.append(dict(
-                type="path",
-                path=path,
+                type="rect",
+                x0=x_start,
+                y0=y_start,
+                x1=x_start + quad_width,
+                y1=y_start + quad_height,
                 fillcolor=bg_color,
                 line=dict(color=border_color, width=3),
                 layer='below'
