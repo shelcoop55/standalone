@@ -973,6 +973,7 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
     labels = []
     parents = []
     values = []
+    node_colors = [] # Explicit colors to prevent black output in exports
 
     # Root
     total_count = grouped['Count'].sum()
@@ -980,6 +981,8 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
     labels.append(f"Total<br>{total_count}")
     parents.append("")
     values.append(total_count)
+    node_colors.append("#D3D3D3") # Light Grey for Total
+
     # Root needs hover text too (or defaults)
 
     # Prepare detailed hover info
@@ -990,12 +993,17 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
     custom_data.append(["Total", total_count, "100%", "100%"])
 
     # Level 1: Defect Type
-    for dtype in grouped['DEFECT_TYPE'].unique():
+    unique_dtypes = grouped['DEFECT_TYPE'].unique()
+    for i, dtype in enumerate(unique_dtypes):
         dtype_count = grouped[grouped['DEFECT_TYPE'] == dtype]['Count'].sum()
         ids.append(f"{dtype}")
         labels.append(dtype)
         parents.append("Total")
         values.append(dtype_count)
+
+        # Explicit Color for Defect Type
+        color = NEON_PALETTE[i % len(NEON_PALETTE)]
+        node_colors.append(color)
 
         pct_total = (dtype_count / total_count) * 100
         custom_data.append([dtype, dtype_count, f"{pct_total:.1f}%", f"{pct_total:.1f}%"])
@@ -1010,6 +1018,13 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
                 parents.append(f"{dtype}")
                 values.append(ver_count)
 
+                # Explicit Color for Verification Status
+                safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+                if ver.upper() in safe_values_upper:
+                    node_colors.append(VERIFICATION_COLOR_SAFE)
+                else:
+                    node_colors.append(VERIFICATION_COLOR_DEFECT)
+
                 pct_parent = (ver_count / dtype_count) * 100
                 pct_total_ver = (ver_count / total_count) * 100
                 custom_data.append([ver, ver_count, f"{pct_parent:.1f}%", f"{pct_total_ver:.1f}%"])
@@ -1021,6 +1036,7 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
         values=values,
         branchvalues="total",
         customdata=custom_data,
+        marker=dict(colors=node_colors), # Apply explicit colors
         hovertemplate="<b>%{customdata[0]}</b><br>Count: %{customdata[1]}<br>% of Layer: %{customdata[2]}<br>% of Total: %{customdata[3]}<extra></extra>"
     ))
 
