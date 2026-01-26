@@ -444,9 +444,9 @@ def create_multi_layer_defect_map(
 
     apply_panel_theme(fig, "Multi-Layer Combined Defect Map (True Defects Only)", theme_config=theme_config)
 
-    # FIXED AXIS RANGES (0-510) -> Expanded to avoid clipping border lines
-    x_range = [-5, 515]
-    y_range = [-5, 520]
+    # FIXED AXIS RANGES (0-510)
+    x_range = [0, 510]
+    y_range = [0, 515]
 
     fig.update_layout(
         xaxis=dict(title="Unit Column Index", tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text, range=x_range, constrain='domain'),
@@ -494,9 +494,9 @@ def create_defect_map_figure(
     y_tick_vals_q3 = [(quad_height + gap_y) + (i * cell_height) + (cell_height / 2) + offset_y for i in range(panel_rows)]
     x_tick_text, y_tick_text = list(range(panel_cols * 2)), list(range(panel_rows * 2))
 
-    # Ranges FIXED -> Expanded to avoid clipping border lines
-    x_axis_range = [-5, 515]
-    y_axis_range = [-5, 520]
+    # Ranges FIXED
+    x_axis_range = [0, 510]
+    y_axis_range = [0, 515]
     show_ticks = True
 
     if quadrant_selection != Quadrant.ALL.value:
@@ -790,9 +790,9 @@ def create_still_alive_figure(
 
     apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)", theme_config=theme_config)
 
-    # Fixed Ranges -> Expanded to avoid clipping border lines
-    x_range = [-5, 515]
-    y_range = [-5, 520]
+    # Fixed Ranges
+    x_range = [0, 510]
+    y_range = [0, 515]
 
     fig.update_layout(
         xaxis=dict(
@@ -1165,10 +1165,10 @@ def create_stress_heatmap(
         # Add Grid Shapes for Quarterly view (FIXED)
         fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=0, visual_origin_y=0, fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y))
 
-        # Ranges (FIXED) -> Expanded
+        # Ranges (FIXED)
         fig.update_layout(
-            xaxis=dict(title="Physical X", range=[-5, 515], constrain='domain', showticklabels=False),
-            yaxis=dict(title="Physical Y", range=[-5, 520], showticklabels=False)
+            xaxis=dict(title="Physical X", range=[0, 510], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[0, 515], showticklabels=False)
         )
 
     else:
@@ -1290,8 +1290,8 @@ def create_delta_heatmap(
         fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, quadrant='All', fill=False, offset_x=offset_x, offset_y=offset_y, gap_x=gap_x, gap_y=gap_y, panel_width=panel_width, panel_height=panel_height, theme_config=theme_config, visual_origin_x=0, visual_origin_y=0, fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y))
 
         fig.update_layout(
-            xaxis=dict(title="Physical X", range=[-5, 515], constrain='domain', showticklabels=False),
-            yaxis=dict(title="Physical Y", range=[-5, 520], showticklabels=False)
+            xaxis=dict(title="Physical X", range=[0, 510], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[0, 515], showticklabels=False)
         )
 
     else:
@@ -1555,9 +1555,9 @@ def create_density_contour_map(
         y_tick_vals.append(center_mm)
         y_tick_text.append(str(i))
 
-    # Axis Ranges Full Frame FIXED -> Expanded
-    x_axis_range = [-5, 515]
-    y_axis_range = [-5, 520]
+    # Axis Ranges Full Frame FIXED
+    x_axis_range = [0, 510]
+    y_axis_range = [0, 515]
 
     if quadrant_selection != 'All':
         # Apply offsets to quadrant ranges

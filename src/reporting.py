@@ -416,8 +416,6 @@ def generate_zip_package(
                                 panel_width=panel_width, panel_height=panel_height
                             )
                             try:
-                                # Issue 1 Fix: Update margins and dimensions
-                                fig_map.update_layout(margin=dict(l=50, r=200, t=100, b=50))
                                 img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                                 zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_DefectMap{img_suffix}.png", img_bytes)
                                 log("  Success.")
@@ -431,11 +429,9 @@ def generate_zip_package(
                             log("  Generating Pareto PNG...")
                             fig_pareto = create_pareto_figure(filtered_df, Quadrant.ALL.value, theme_config=theme_config)
                             fig_pareto.update_layout(
-                                title=f"Layer {layer_num} - {side_name} - Pareto",
-                                margin=dict(l=50, r=200, t=100, b=50) # Added margins
+                                title=f"Layer {layer_num} - {side_name} - Pareto"
                             )
                             try:
-                                # Issue 1 Fix: Update dimensions
                                 img_bytes = fig_pareto.to_image(format="png", engine="kaleido", scale=2, width=1200, height=800)
                                 zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_Pareto{img_suffix}.png", img_bytes)
                                 log("  Success.")
@@ -459,8 +455,6 @@ def generate_zip_package(
                     panel_width=panel_width, panel_height=panel_height
                 )
                 try:
-                    # Issue 1 Fix: Update margins and dimensions
-                    fig_alive.update_layout(margin=dict(l=50, r=200, t=100, b=50))
                     img_bytes = fig_alive.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                     zip_file.writestr("Images/Still_Alive_Map.png", img_bytes)
                     log("Success.")
@@ -485,8 +479,6 @@ def generate_zip_package(
                     fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
                     panel_width=panel_width, panel_height=panel_height
                 )
-                # Issue 1 Fix: Margins
-                fig_heat.update_layout(margin=dict(l=50, r=200, t=100, b=50))
                 img_bytes = fig_heat.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                 zip_file.writestr("Images/Analysis_Heatmap.png", img_bytes)
                 log("Success.")
@@ -506,8 +498,6 @@ def generate_zip_package(
                     fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
                     panel_width=panel_width, panel_height=panel_height
                 )
-                # Issue 1 Fix: Margins
-                fig_stress.update_layout(margin=dict(l=50, r=200, t=100, b=50))
                 img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                 zip_file.writestr("Images/Analysis_StressMap_Cumulative.png", img_bytes)
                 log("Success.")
