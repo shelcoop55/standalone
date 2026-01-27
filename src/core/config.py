@@ -146,8 +146,31 @@ SAFE_VERIFICATION_VALUES = [
 # --- Defect Styling (Loaded from JSON) ---
 import json
 import logging
+import plotly.colors as pcolors
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
+
+def get_extended_palette(n: int) -> List[str]:
+    """
+    Generates a list of n distinct colors.
+    Uses a combination of high-contrast qualitative palettes to ensure uniqueness.
+    """
+    # Combine robust palettes
+    base_palette = (
+        pcolors.qualitative.Plotly +
+        pcolors.qualitative.D3 +
+        pcolors.qualitative.G10 +
+        pcolors.qualitative.T10 +
+        pcolors.qualitative.Alphabet +
+        pcolors.qualitative.Dark24 +
+        pcolors.qualitative.Light24
+    )
+
+    if n <= len(base_palette):
+        return base_palette[:n]
+
+    # If we need more, cycle them
+    return [base_palette[i % len(base_palette)] for i in range(n)]
 
 def load_defect_styles() -> Dict[str, str]:
     """

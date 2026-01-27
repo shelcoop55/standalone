@@ -4,7 +4,7 @@ from typing import List, Optional
 from src.core.config import (
     PANEL_COLOR, TEXT_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR,
     VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT, NEON_PALETTE,
-    PlotTheme, SAFE_VERIFICATION_VALUES
+    PlotTheme, SAFE_VERIFICATION_VALUES, get_extended_palette
 )
 from src.enums import Quadrant
 from src.plotting.utils import apply_panel_theme, hex_to_rgba
@@ -251,6 +251,10 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
 
     # Level 1: Defect Type
     unique_dtypes = grouped['DEFECT_TYPE'].unique()
+
+    # Use extended palette for dynamic range
+    palette = get_extended_palette(len(unique_dtypes))
+
     for i, dtype in enumerate(unique_dtypes):
         dtype_count = grouped[grouped['DEFECT_TYPE'] == dtype]['Count'].sum()
         ids.append(f"{dtype}")
@@ -259,7 +263,7 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
         values.append(dtype_count)
 
         # Explicit Color for Defect Type
-        color = NEON_PALETTE[i % len(NEON_PALETTE)]
+        color = palette[i]
         node_colors.append(color)
 
         pct_total = (dtype_count / total_count) * 100

@@ -14,7 +14,8 @@ from src.enums import Quadrant
 from src.io.exporters.excel import generate_excel_report, generate_coordinate_list_report
 from src.plotting.renderers.maps import (
     create_defect_map_figure, create_still_alive_figure, create_density_contour_map,
-    create_stress_heatmap, create_cross_section_heatmap
+    create_stress_heatmap, create_cross_section_heatmap,
+    create_animated_cross_section_heatmap
 )
 from src.plotting.renderers.infographics import create_geometry_infographic
 from src.plotting.renderers.charts import (
@@ -343,14 +344,23 @@ def generate_zip_package(
                         panel_obj, slice_axis, slice_index, panel_rows, panel_cols
                     )
 
-                    # 3. Create Figure
-                    fig_rca = create_cross_section_heatmap(
-                        matrix, layer_labels, axis_labels,
-                        f"Root Cause Slice: Row {slice_index} (Worst Unit)",
+                    # 3. Create Figure (Animated)
+                    # We pass the full panel_obj to the animated generator
+                    fig_rca = create_animated_cross_section_heatmap(
+                        panel_obj,
+                        panel_rows,
+                        panel_cols,
+                        axis=slice_axis,
                         theme_config=theme_config
                     )
 
-                    html_content = fig_rca.to_html(full_html=True, include_plotlyjs='cdn')
+                    # For initial view, we might want to default to the worst slice, but Plotly frames start at 0.
+                    # Setting initial state might be complex with sliders.
+                    # The user can scrub to find issues.
+                    # Optionally, we could set 'active' in layout sliders to slice_index,
+                    # but for now let's just provide the full scanner starting from 0.
+
+                    html_content = fig_rca.to_html(full_html=True, include_plotlyjs='cdn', auto_play=False)
                     zip_file.writestr("Root_Cause_Analysis.html", html_content)
                     log("Success.")
                 else:
