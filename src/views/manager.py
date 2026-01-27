@@ -511,6 +511,18 @@ class ViewManager:
             include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False)
             include_stress_png = st.checkbox("Stress Map (PNG)", value=False)
             include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False)
+
+            rca_slice_axis = 'Y'
+            if include_root_cause_html:
+                rca_choice = st.radio(
+                    "RCA Slice Axis",
+                    ["Y (Row)", "X (Column)"],
+                    horizontal=True,
+                    key="rep_rca_axis",
+                    help="Select the slicing direction for the Root Cause Analysis animation."
+                )
+                rca_slice_axis = 'Y' if 'Y' in rca_choice else 'X'
+
             include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False)
 
         st.markdown("---")
@@ -571,6 +583,7 @@ class ViewManager:
                     include_stress_png=include_stress_png,
                     include_root_cause_html=include_root_cause_html,
                     include_still_alive_png=include_still_alive_png,
+                    rca_slice_axis=rca_slice_axis,
                     layer_data=self.store.layer_data,
                     process_comment=params.get("process_comment", ""),
                     lot_number=params.get("lot_number", ""),

@@ -238,7 +238,7 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
     labels.append(f"Total<br>{total_count}")
     parents.append("")
     values.append(total_count)
-    node_colors.append("#D3D3D3") # Light Grey for Total
+    node_colors.append("#000000") # Black for Total
 
     # Root needs hover text too (or defaults)
 
@@ -284,7 +284,8 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
                 if ver.upper() in safe_values_upper:
                     node_colors.append(VERIFICATION_COLOR_SAFE)
                 else:
-                    node_colors.append(VERIFICATION_COLOR_DEFECT)
+                    # Inherit color from parent (Defect Type)
+                    node_colors.append(color)
 
                 pct_parent = (ver_count / dtype_count) * 100
                 pct_total_ver = (ver_count / total_count) * 100

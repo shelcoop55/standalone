@@ -58,7 +58,8 @@ def generate_zip_package(
     fixed_offset_x: float = 0.0,
     fixed_offset_y: float = 0.0,
     panel_width: float = PANEL_WIDTH,
-    panel_height: float = PANEL_HEIGHT
+    panel_height: float = PANEL_HEIGHT,
+    rca_slice_axis: str = 'Y'
 ) -> bytes:
     """
     Generates a ZIP file containing selected report components.
@@ -311,60 +312,33 @@ def generate_zip_package(
                 log(f"ERROR Generating Stress Map: {e}")
 
         if include_root_cause_html:
-            log("Generating Root Cause HTML (Top Killer Unit Slice)...")
+            log(f"Generating Root Cause HTML (Axis: {rca_slice_axis})...")
             try:
-                # 1. Identify Worst Unit (True Defects Only)
-                safe_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
+                # Requires PanelData object. Wrap layer_data if it's a dict.
+                panel_obj = layer_data
+                if isinstance(layer_data, dict):
+                    panel_obj = PanelData()
+                    panel_obj._layers = layer_data
 
-                # Check if Verification column exists and normalize
-                if 'Verification' in full_df.columns:
-                    true_df = full_df[~full_df['Verification'].astype(str).str.upper().isin(safe_upper)]
-                else:
-                    true_df = full_df
+                # Create Figure (Animated)
+                # We pass the full panel_obj to the animated generator
+                fig_rca = create_animated_cross_section_heatmap(
+                    panel_obj,
+                    panel_rows,
+                    panel_cols,
+                    axis=rca_slice_axis,
+                    theme_config=theme_config
+                )
 
-                if not true_df.empty:
-                    # Find worst unit
-                    worst_coords = true_df.groupby(['UNIT_INDEX_X', 'UNIT_INDEX_Y']).size().idxmax()
-                    worst_x, worst_y = worst_coords
-                    log(f"Worst Unit found at X:{worst_x}, Y:{worst_y}")
+                # For initial view, we might want to default to the worst slice, but Plotly frames start at 0.
+                # Setting initial state might be complex with sliders.
+                # The user can scrub to find issues.
+                # Optionally, we could set 'active' in layout sliders to slice_index,
+                # but for now let's just provide the full scanner starting from 0.
 
-                    # 2. Generate Cross Section Matrix
-                    # Requires PanelData object. Wrap layer_data if it's a dict.
-                    panel_obj = layer_data
-                    if isinstance(layer_data, dict):
-                        panel_obj = PanelData()
-                        panel_obj._layers = layer_data
-
-                    # We slice by Y (Row) at the worst Y, to show the row of that unit.
-                    # Or slice by X? Usually seeing a Row cross-section is good.
-                    slice_axis = 'Y'
-                    slice_index = int(worst_y)
-
-                    matrix, layer_labels, axis_labels = get_cross_section_matrix(
-                        panel_obj, slice_axis, slice_index, panel_rows, panel_cols
-                    )
-
-                    # 3. Create Figure (Animated)
-                    # We pass the full panel_obj to the animated generator
-                    fig_rca = create_animated_cross_section_heatmap(
-                        panel_obj,
-                        panel_rows,
-                        panel_cols,
-                        axis=slice_axis,
-                        theme_config=theme_config
-                    )
-
-                    # For initial view, we might want to default to the worst slice, but Plotly frames start at 0.
-                    # Setting initial state might be complex with sliders.
-                    # The user can scrub to find issues.
-                    # Optionally, we could set 'active' in layout sliders to slice_index,
-                    # but for now let's just provide the full scanner starting from 0.
-
-                    html_content = fig_rca.to_html(full_html=True, include_plotlyjs='cdn', auto_play=False)
-                    zip_file.writestr("Root_Cause_Analysis.html", html_content)
-                    log("Success.")
-                else:
-                    log("Skipped Root Cause: No true defects found.")
+                html_content = fig_rca.to_html(full_html=True, include_plotlyjs='cdn', auto_play=False)
+                zip_file.writestr("Root_Cause_Analysis.html", html_content)
+                log("Success.")
 
             except Exception as e:
                 msg = f"Failed to generate Root Cause HTML: {e}"
