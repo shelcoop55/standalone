@@ -99,14 +99,9 @@ def generate_zip_package(
         # 3. Defect Map (Interactive HTML) - CURRENT VIEW
         if include_map:
             fig = create_defect_map_figure(
-                full_df, panel_rows, panel_cols, quadrant_selection,
+                full_df, panel_rows, panel_cols, ctx, quadrant_selection,
                 title=f"Panel Defect Map - {quadrant_selection}",
-                theme_config=theme_config,
-                offset_x=offset_x, offset_y=offset_y,
-                gap_x=gap_x, gap_y=gap_y,
-                visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
-                panel_width=panel_width, panel_height=panel_height
+                theme_config=theme_config
             )
             html_content = fig.to_html(full_html=True, include_plotlyjs='cdn')
             zip_file.writestr("Defect_Map.html", html_content)
@@ -162,14 +157,9 @@ def generate_zip_package(
                         if include_png_all_layers:
                             log("  Generating Defect Map PNG...")
                             fig_map = create_defect_map_figure(
-                                filtered_df, panel_rows, panel_cols, Quadrant.ALL.value,
+                                filtered_df, panel_rows, panel_cols, ctx, Quadrant.ALL.value,
                                 title=f"Layer {layer_num} - {side_name} - Defect Map",
-                                theme_config=theme_config,
-                                offset_x=offset_x, offset_y=offset_y,
-                                gap_x=gap_x, gap_y=gap_y,
-                                visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                                fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
-                                panel_width=panel_width, panel_height=panel_height
+                                theme_config=theme_config
                             )
                             try:
                                 img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
@@ -203,12 +193,7 @@ def generate_zip_package(
             if true_defect_coords:
                 log("Generating Still Alive Map PNG...")
                 fig_alive = create_still_alive_figure(
-                    panel_rows, panel_cols, true_defect_coords, theme_config=theme_config,
-                    offset_x=offset_x, offset_y=offset_y,
-                    gap_x=gap_x, gap_y=gap_y,
-                    visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                    fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
-                    panel_width=panel_width, panel_height=panel_height
+                    panel_rows, panel_cols, true_defect_coords, ctx, theme_config=theme_config
                 )
                 try:
                     img_bytes = fig_alive.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
@@ -228,12 +213,7 @@ def generate_zip_package(
             try:
                 # Issue 3: Use Smoothed Density Contour Map
                 fig_heat = create_density_contour_map(
-                    full_df, panel_rows, panel_cols, theme_config=theme_config,
-                    offset_x=offset_x, offset_y=offset_y,
-                    gap_x=gap_x, gap_y=gap_y,
-                    visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                    fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
-                    panel_width=panel_width, panel_height=panel_height
+                    full_df, panel_rows, panel_cols, ctx, theme_config=theme_config
                 )
                 img_bytes = fig_heat.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                 zip_file.writestr("Images/Analysis_Heatmap.png", img_bytes)
@@ -246,12 +226,7 @@ def generate_zip_package(
             try:
                 stress_data = aggregate_stress_data_from_df(full_df, panel_rows, panel_cols)
                 fig_stress = create_stress_heatmap(
-                    stress_data, panel_rows, panel_cols, view_mode="Continuous", theme_config=theme_config,
-                    offset_x=offset_x, offset_y=offset_y,
-                    gap_x=gap_x, gap_y=gap_y,
-                    visual_origin_x=visual_origin_x, visual_origin_y=visual_origin_y,
-                    fixed_offset_x=fixed_offset_x, fixed_offset_y=fixed_offset_y,
-                    panel_width=panel_width, panel_height=panel_height
+                    stress_data, panel_rows, panel_cols, ctx, view_mode="Continuous", theme_config=theme_config
                 )
                 img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                 zip_file.writestr("Images/Analysis_StressMap_Cumulative.png", img_bytes)
