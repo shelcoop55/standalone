@@ -31,8 +31,24 @@ def create_geometry_infographic(
     )
 
     # --- 2. Draw Quadrants ---
-    # Using origins from context
-    for q_name, (qx, qy) in ctx.quadrant_origins.items():
+    # Using origins from context, but SWAPPING LABELS as requested for visual representation
+    # Request: "top left is Q3", "Q1 is lower left"
+    # Mapping:
+    #   Old Q1 (Top-Left) -> New Label Q3
+    #   Old Q2 (Top-Right) -> New Label Q4 (Implied opposite)
+    #   Old Q3 (Bottom-Left) -> New Label Q1
+    #   Old Q4 (Bottom-Right) -> New Label Q2
+
+    label_map = {
+        'Q1': 'Q3',
+        'Q2': 'Q4',
+        'Q3': 'Q1',
+        'Q4': 'Q2'
+    }
+
+    for q_key, (qx, qy) in ctx.quadrant_origins.items():
+        display_label = label_map.get(q_key, q_key)
+
         fig.add_shape(type="rect",
             x0=qx, y0=qy,
             x1=qx + ctx.quad_width,
@@ -44,7 +60,7 @@ def create_geometry_infographic(
         # Label Quadrants
         fig.add_annotation(
             x=qx + ctx.quad_width/2, y=qy + ctx.quad_height/2,
-            text=f"<b>{q_name}</b><br>{ctx.quad_width:.1f} x {ctx.quad_height:.1f} mm",
+            text=f"<b>{display_label}</b><br>{ctx.quad_width:.1f} x {ctx.quad_height:.1f} mm",
             showarrow=False,
             font=dict(size=14, color=frame_color)
         )
@@ -101,6 +117,18 @@ def create_geometry_infographic(
     q1_end_y = ctx.offset_y + ctx.quad_height
     q3_start_y = q1_end_y + ctx.effective_gap_y
     add_dim_arrow(mid_q1_x, q1_end_y, mid_q1_x, q3_start_y, f"Gap Y<br>{ctx.effective_gap_y:.1f} mm")
+
+    # Right Margin (Total)
+    # Draw at Y = Q2 Center (which is same as Q1 Y for now, but general logic stands)
+    # Start: End of Q2. End: Frame Width.
+    q2_end_x = q2_start_x + ctx.quad_width
+    add_dim_arrow(q2_end_x, mid_q1_y, FRAME_WIDTH, mid_q1_y, f"Right Margin<br>{(FRAME_WIDTH - q2_end_x):.1f} mm")
+
+    # Bottom Margin (Total)
+    # Draw at X = Q3 Center (same as Q1 X)
+    # Start: End of Q3. End: Frame Height.
+    q3_end_y = q3_start_y + ctx.quad_height
+    add_dim_arrow(mid_q1_x, q3_end_y, mid_q1_x, FRAME_HEIGHT, f"Bottom Margin<br>{(FRAME_HEIGHT - q3_end_y):.1f} mm")
 
     # --- 4. Unit Cell Detail (Inset) ---
     # Draw a magnified unit cell in the center gap or empty space
