@@ -93,6 +93,8 @@ def test_full_workflow_package_generation():
 
         # Check Images
         assert "Images/Still_Alive_Map.png" in files
+        # Check for Geometry Infographic
+        assert "Geometry_Layout_Infographic.png" in files
         # Check for at least one layer map
         assert any("DefectMap" in f for f in files if f.startswith("Images/"))
 

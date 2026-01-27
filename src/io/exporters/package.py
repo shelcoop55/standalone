@@ -16,6 +16,7 @@ from src.plotting.renderers.maps import (
     create_defect_map_figure, create_still_alive_figure, create_density_contour_map,
     create_stress_heatmap, create_cross_section_heatmap
 )
+from src.plotting.renderers.infographics import create_geometry_infographic
 from src.plotting.renderers.charts import (
     create_pareto_figure, create_defect_sankey, create_defect_sunburst
 )
@@ -82,6 +83,34 @@ def generate_zip_package(
 
     # --- Detailed Geometry Logging ---
     if ctx:
+        # Generate Geometry Infographic (Professional Image)
+        log("Generating Geometry Layout Infographic...")
+        try:
+            fig_geo = create_geometry_infographic(
+                ctx, fixed_offset_x, fixed_offset_y, dyn_gap_x, dyn_gap_y
+            )
+            # Use kaleido for high-quality static image
+            img_bytes = fig_geo.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+            # Add to ZIP
+            # We put it in root or Images folder? Root is better for immediate visibility as requested.
+            # "so user can immediately see it"
+            # But let's keep Images organized.
+            # Actually, user said "an extra image should be downlod".
+            # putting it in Images/Geometry_Layout.png
+
+            # Or root? Let's put in Images folder to avoid clutter if they unzip.
+            # Actually, "download anything in reporting, an extra image".
+            # This implies alongside the report.
+            # Let's write to Images/Geometry_Infographic.png
+
+            # Wait, writing to zip buffer is done inside the 'with zipfile' block below.
+            # We are outside the block here.
+            # I need to move this logic INSIDE the block or store it.
+            # Let's just generate it inside the block.
+            pass
+        except Exception as e:
+            log(f"Error generating infographic: {e}")
+
         log("\n--- DETAILED GEOMETRY BREAKDOWN ---")
 
         # Horizontal
@@ -326,6 +355,21 @@ def generate_zip_package(
 
             except Exception as e:
                 msg = f"Failed to generate Root Cause HTML: {e}"
+                print(msg)
+                log(f"ERROR: {msg}")
+
+        # 8. Geometry Infographic
+        if ctx:
+            log("Generating Geometry Infographic...")
+            try:
+                fig_geo = create_geometry_infographic(
+                    ctx, fixed_offset_x, fixed_offset_y, dyn_gap_x, dyn_gap_y
+                )
+                img_bytes = fig_geo.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                zip_file.writestr("Geometry_Layout_Infographic.png", img_bytes)
+                log("Success.")
+            except Exception as e:
+                msg = f"Failed to generate Geometry Infographic: {e}"
                 print(msg)
                 log(f"ERROR: {msg}")
 
