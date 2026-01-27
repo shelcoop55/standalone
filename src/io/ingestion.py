@@ -59,6 +59,20 @@ def load_panel_data(
 
             df['HAS_VERIFICATION_DATA'] = has_verif
 
+            # --- OPTIMIZATION: Column Pruning ---
+            # Drop unnecessary columns to save memory.
+            # Keep only columns essential for logic and plotting.
+            allowed_cols = {
+                'DEFECT_TYPE', 'UNIT_INDEX_X', 'UNIT_INDEX_Y',
+                'Verification', 'X_COORDINATES', 'Y_COORDINATES',
+                'DEFECT_ID', 'SOURCE_FILE', 'SIDE', 'HAS_VERIFICATION_DATA',
+                # Ensure downstream compatibility and preserve useful metadata
+                'QUADRANT', 'Description', 'Comments', 'Remark'
+            }
+            # Intersect with existing columns to avoid KeyErrors
+            cols_to_keep = [c for c in df.columns if c in allowed_cols]
+            df = df[cols_to_keep]
+
             if layer_num not in temp_data: temp_data[layer_num] = {}
             if side not in temp_data[layer_num]: temp_data[layer_num][side] = []
             temp_data[layer_num][side].append(df)

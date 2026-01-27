@@ -284,8 +284,11 @@ def generate_zip_package(
             log("Generating Heatmap PNG (Global)...")
             try:
                 # Issue 3: Use Smoothed Density Contour Map
+                # Fix: Hide Grid for clean export
                 fig_heat = create_density_contour_map(
-                    full_df, panel_rows, panel_cols, ctx, theme_config=theme_config
+                    full_df, panel_rows, panel_cols, ctx,
+                    theme_config=theme_config,
+                    show_grid=False
                 )
                 img_bytes = fig_heat.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
                 zip_file.writestr("Images/Analysis_Heatmap.png", img_bytes)

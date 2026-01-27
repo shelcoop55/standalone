@@ -1,5 +1,8 @@
 import streamlit as st
 import pandas as pd
+# Enable Pandas Copy-on-Write for performance
+pd.options.mode.copy_on_write = True
+
 from src.core.config import (
     GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR,
     FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y,

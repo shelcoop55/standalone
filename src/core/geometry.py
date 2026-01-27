@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, Tuple
+import streamlit as st
 from src.core.config import (
     FRAME_WIDTH, FRAME_HEIGHT,
     DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y,
@@ -48,6 +49,7 @@ class GeometryEngine:
     """
 
     @staticmethod
+    @st.cache_data
     def calculate_layout(
         panel_rows: int,
         panel_cols: int,

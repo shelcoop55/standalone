@@ -53,6 +53,7 @@ class SessionStore:
     def layer_data(self) -> Optional[PanelData]:
         """
         Retrieves the heavy PanelData object from the global cache (cache_resource) using current inputs.
+        Optimized to use dataset_id check to avoid unnecessary cache lookups if no data is loaded.
         """
         if not self.dataset_id:
             return None

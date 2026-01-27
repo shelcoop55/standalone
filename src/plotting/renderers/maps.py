@@ -53,7 +53,11 @@ def create_multi_layer_defect_map(
 
                 coord_str = ""
                 if 'X_COORDINATES' in dff.columns and 'Y_COORDINATES' in dff.columns:
-                    dff['RAW_COORD_STR'] = dff.apply(lambda row: f"({row['X_COORDINATES']/1000:.2f}, {row['Y_COORDINATES']/1000:.2f}) mm", axis=1)
+                    # Vectorized String Formatting
+                    x_mm = (dff['X_COORDINATES'] / 1000).map('{:.2f}'.format)
+                    y_mm = (dff['Y_COORDINATES'] / 1000).map('{:.2f}'.format)
+                    dff['RAW_COORD_STR'] = "(" + x_mm + ", " + y_mm + ") mm"
+
                     custom_data_cols = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'DEFECT_ID', 'Verification', 'Description', 'SOURCE_FILE', 'RAW_COORD_STR']
                     coord_str = "<br>Raw Coords: %{customdata[7]}"
                 else:
@@ -944,19 +948,20 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int,
             paper_bgcolor=bg_color, plot_bgcolor=plot_color
         ))
 
-    # Map to Global Indices
-    global_indices = []
-    for _, row in df_true.iterrows():
-        # USE RAW COORDINATES (UNIT_INDEX_X) as per request (No Flip)
-        u_x = int(row['UNIT_INDEX_X'])
-        q = row['QUADRANT']
-        u_y = int(row['UNIT_INDEX_Y'])
+    # Map to Global Indices (Vectorized)
+    u_x = df_true['UNIT_INDEX_X'].astype(int)
+    u_y = df_true['UNIT_INDEX_Y'].astype(int)
 
-        g_x = u_x + (panel_cols if q in ['Q2', 'Q4'] else 0)
-        g_y = u_y + (panel_rows if q in ['Q3', 'Q4'] else 0)
-        global_indices.append((g_x, g_y))
+    # Calculate offsets based on Quadrant
+    # Q2/Q4 add col offset to X
+    x_offset = np.where(df_true['QUADRANT'].isin(['Q2', 'Q4']), panel_cols, 0)
+    # Q3/Q4 add row offset to Y
+    y_offset = np.where(df_true['QUADRANT'].isin(['Q3', 'Q4']), panel_rows, 0)
 
-    heatmap_df = pd.DataFrame(global_indices, columns=['Global_X', 'Global_Y'])
+    heatmap_df = pd.DataFrame({
+        'Global_X': u_x + x_offset,
+        'Global_Y': u_y + y_offset
+    })
     heatmap_data = heatmap_df.groupby(['Global_X', 'Global_Y']).size().reset_index(name='Count')
 
     # Create Heatmap
