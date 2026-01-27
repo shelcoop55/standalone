@@ -7,10 +7,15 @@ This document serves as the "Technical Bible" for the Panel Defect Analysis appl
 The application follows a Domain-Driven Design (DDD) inspired structure:
 
 *   **`src/core`**: The domain heart. Contains the `GeometryEngine` (physical layout logic) and `PanelData` models.
-*   **`src/io`**: Data ingress and egress. Handles Excel parsing (`ingestion.py`) and strict schema enforcement (`validation.py`).
+*   **`src/io`**: Data ingress and egress.
+    *   `ingestion.py`: Handles Excel parsing and loading.
+    *   `validation.py`: Enforces strict schema validation.
+    *   `sample_generator.py`: Generates geometrically accurate synthetic data for demonstration.
+    *   `naming.py`: Standardizes filename parsing and generation.
 *   **`src/analytics`**: Pure business logic. Vectorized calculation of Yield, Stress Maps, and Root Cause matrices.
 *   **`src/plotting`**: Visualization layer. Decoupled into `generators` (data prep) and `renderers` (Plotly object creation).
 *   **`src/state`**: State management. Encapsulates `st.session_state` mutations in a `SessionStore`.
+*   **`src/utils`**: Utility modules, including the centralized `Logger`.
 
 ---
 
@@ -44,7 +49,7 @@ Yield is calculated per concentric zone (Ring) from the edge:
 
 ## 📐 The Geometry Registry
 
-The `GeometryEngine` (`src/core/geometry.py`) is the single source of truth for all layout dimensions.
+The `GeometryEngine` (`src/core/geometry.py`) is the single source of truth for all layout dimensions. It ensures that both the Sample Data Generator and the Visualization Layer use the exact same logic to position units.
 
 | Constant | Default Value | Description |
 | :--- | :--- | :--- |
@@ -59,12 +64,19 @@ The `GeometryEngine` (`src/core/geometry.py`) is the single source of truth for 
 $$ CellWidth = \frac{QuadrantWidth - (Cols + 1) \times InterUnitGap}{Cols} $$
 *(Note: Uses (n+1) gaps to ensure separation from quadrant edges)*
 
+### Sample Data Generation
+When no files are uploaded, the application uses `src/io/sample_generator.py` to create synthetic data. This generator:
+1.  Respects the **Dynamic Gaps** and **Offsets** defined in the Geometry Engine.
+2.  Ensures defect coordinates fall strictly within valid unit boundaries (avoiding gaps).
+3.  Simulates realistic defect distributions across layers (Front/Back) and defect types.
+
 ---
 
 ## 🧭 The "Golden Path" Assumptions
 
 1.  **File Naming**: Input files **MUST** follow the pattern `BU-{LayerNum}{Side}.xlsx` (e.g., `BU-01F.xlsx`).
     *   *Why*: The parser relies on regex to extract Layer Number and Side (Front/Back) automatically.
+    *   *Configuration*: This pattern is defined in `src/core/config.py` as `FILENAME_PATTERN`.
 2.  **Data Schema**:
     *   Required Columns: `DEFECT_TYPE`, `UNIT_INDEX_X`, `UNIT_INDEX_Y`.
     *   Optional: `Verification` (defaults to 'Under Verification' if missing), `X_COORDINATES` (for precise plotting).
@@ -74,6 +86,12 @@ $$ CellWidth = \frac{QuadrantWidth - (Cols + 1) \times InterUnitGap}{Cols} $$
     *   **Back Side**: `Physical X` = `(Total Width - 1) - Unit Index X` (Mirrored horizontally for through-board alignment).
 4.  **Immutability**:
     *   Once loaded, `PanelData` is cached and treated as immutable. Changing parameters (e.g., Rows/Cols) triggers a full reload/revalidation cycle.
+
+## 🛠️ Logging & Debugging
+
+The application utilizes a centralized logging system (`src/utils/logger.py`) to track events and errors.
+*   **Configuration**: Logs are configured to output to `sys.stdout` (console) by default.
+*   **Usage**: Critical data loading steps, validation warnings, and export operations are logged. This replaces ad-hoc `print()` statements for better observability in production environments.
 
 ## 🚦 Tab Logic & View Modes
 
