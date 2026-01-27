@@ -15,7 +15,9 @@ from src.plotting.generators.shapes import create_grid_shapes, get_rounded_rect_
 from src.plotting.generators.traces import create_defect_traces
 from src.analytics.models import StressMapData
 from src.documentation import VERIFICATION_DESCRIPTIONS
+from src.utils.telemetry import track_performance
 
+@track_performance("Plot: Multi-Layer Map")
 def create_multi_layer_defect_map(
     df: pd.DataFrame,
     panel_rows: int,
@@ -130,6 +132,7 @@ def create_multi_layer_defect_map(
 
     return fig
 
+@track_performance("Plot: Defect Map")
 def create_defect_map_figure(
     df: pd.DataFrame,
     panel_rows: int,
@@ -611,6 +614,7 @@ def create_delta_heatmap(
     apply_panel_theme(fig, "Delta Stress Map (Group A - Group B)", height=700, theme_config=theme_config)
     return fig
 
+@track_performance("Plot: Density Contour (Heatmap)")
 def create_density_contour_map(
     df: pd.DataFrame,
     panel_rows: int,
@@ -797,7 +801,14 @@ def create_density_contour_map(
     # 3. Grid Overlay
     shapes = []
     if show_grid:
+        # Create full grid shapes
         shapes = create_grid_shapes(panel_rows, panel_cols, ctx, quadrant='All', fill=False, theme_config=theme_config)
+    else:
+        # Minimalist mode (e.g. for export): Only draw the panel outline/frame if needed, or nothing.
+        # Ideally, we still want the outer boundary but not the internal quadrant crossbars if "clean" is requested.
+        # But 'create_grid_shapes' does everything.
+        # If show_grid=False is passed (for export), we skip shapes entirely or add a simple frame.
+        pass
 
     # 4. Axis Labels
     total_cols = panel_cols * 2

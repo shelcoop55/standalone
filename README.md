@@ -93,6 +93,20 @@ The application utilizes a centralized logging system (`src/utils/logger.py`) to
 *   **Configuration**: Logs are configured to output to `sys.stdout` (console) by default.
 *   **Usage**: Critical data loading steps, validation warnings, and export operations are logged. This replaces ad-hoc `print()` statements for better observability in production environments.
 
+## ⏱️ Performance Monitoring
+
+The application includes a built-in telemetry system to track execution time and memory usage for optimization purposes.
+
+*   **Enabling Debug Mode**: In the sidebar, expand **"Advanced Configuration"** and check **"Show Debug Telemetry"**.
+*   **Metrics Displayed**: A table will appear at the bottom of the dashboard showing:
+    *   **Operation**: The function being tracked (e.g., `Data Ingestion`, `Geometry Calculation`).
+    *   **Duration (s)**: Execution time in seconds.
+    *   **Memory Delta (MB)**: Change in process memory usage during the operation.
+*   **Key Optimizations**:
+    *   **Column Pruning**: Input DataFrames are stripped of unused columns to save RAM.
+    *   **Vectorization**: Plotting logic uses Numpy/Pandas vector operations instead of loops.
+    *   **Caching**: Heavy geometry and layout calculations are cached using `st.cache_data`.
+
 ## 🚦 Tab Logic & View Modes
 
 *   **Still Alive**: The primary executive view. Aggregates everything to show net yield. Filters work as "Exclusions" (Remove layers/defects to see what survives).

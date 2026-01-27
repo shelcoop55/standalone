@@ -6,8 +6,10 @@ from src.core.models import PanelData, BuildUpLayer
 from src.core.config import FILENAME_PATTERN
 from src.io.validation import validate_schema
 from src.io.sample_generator import generate_sample_data
+from src.utils.telemetry import track_performance, PerformanceMonitor, get_dataframe_memory_usage
 
 @st.cache_resource(show_spinner="Loading Data...")
+@track_performance("Data Ingestion (Total)")
 def load_panel_data(
     uploaded_files: List[Any],
     panel_rows: int,
@@ -59,6 +61,9 @@ def load_panel_data(
 
             df['HAS_VERIFICATION_DATA'] = has_verif
 
+            # Measure pre-optimization memory
+            mem_before = get_dataframe_memory_usage(df)
+
             # --- OPTIMIZATION: Column Pruning ---
             # Drop unnecessary columns to save memory.
             # Keep only columns essential for logic and plotting.
@@ -72,6 +77,14 @@ def load_panel_data(
             # Intersect with existing columns to avoid KeyErrors
             cols_to_keep = [c for c in df.columns if c in allowed_cols]
             df = df[cols_to_keep]
+
+            # Measure post-optimization memory
+            mem_after = get_dataframe_memory_usage(df)
+            PerformanceMonitor.log_event(
+                f"Pruning ({file_name})",
+                0.0,
+                details=f"Reduced from {mem_before:.2f}MB to {mem_after:.2f}MB"
+            )
 
             if layer_num not in temp_data: temp_data[layer_num] = {}
             if side not in temp_data[layer_num]: temp_data[layer_num][side] = []

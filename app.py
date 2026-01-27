@@ -14,6 +14,7 @@ from src.state import SessionStore
 from pathlib import Path
 from src.views.manager import ViewManager
 from src.utils.logger import configure_logging
+from src.utils.telemetry import PerformanceMonitor
 
 def load_css(file_path: str) -> None:
     """Loads a CSS file and injects it into the Streamlit app."""
@@ -87,6 +88,8 @@ def main() -> None:
                     st.number_input("Dynamic Gap X (mm)", value=float(DYNAMIC_GAP_X), step=1.0, min_value=0.0, key="dgx_input")
                 with c_gap2:
                     st.number_input("Dynamic Gap Y (mm)", value=float(DYNAMIC_GAP_Y), step=1.0, min_value=0.0, key="dgy_input")
+
+                st.checkbox("Show Debug Telemetry", value=False, key="show_telemetry", help="Displays performance metrics at the bottom of the page.")
 
             # Submit Button
             submitted = st.form_submit_button("🚀 Run Analysis")
@@ -213,6 +216,20 @@ def main() -> None:
         view_manager.render_main_view()
 
     render_chart_area()
+
+    # --- Telemetry UI ---
+    if st.session_state.get("show_telemetry", False):
+        st.divider()
+        with st.expander("⏱️ Performance Metrics (Debug)", expanded=True):
+            logs = PerformanceMonitor.get_logs()
+            if logs:
+                st.dataframe(pd.DataFrame(logs), use_container_width=True)
+            else:
+                st.info("No logs captured yet.")
+
+            if st.button("Clear Logs"):
+                PerformanceMonitor.clear_logs()
+                st.rerun()
 
 if __name__ == '__main__':
     main()
