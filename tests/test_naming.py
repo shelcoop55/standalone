@@ -1,5 +1,5 @@
 import pytest
-from src.legacy_utils import get_bu_name_from_filename
+from src.io.naming import get_bu_name_from_filename
 
 def test_get_bu_name_from_filename():
     """Tests the extraction of BU names from filenames."""

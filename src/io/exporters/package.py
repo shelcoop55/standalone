@@ -30,6 +30,7 @@ def generate_zip_package(
     verification_selection: str,
     source_filename: str,
     true_defect_coords: set,
+    ctx: Any = None, # Added ctx argument to match call signature
     include_excel: bool = True,
     include_coords: bool = True,
     include_map: bool = True,
@@ -71,6 +72,12 @@ def generate_zip_package(
     log(f"Options: PNG_Maps={include_png_all_layers}, PNG_Pareto={include_pareto_png}")
     log(f"New Options: Heatmap={include_heatmap_png}, Stress={include_stress_png}, RCA={include_root_cause_html}, Alive={include_still_alive_png}")
     log(f"Verification Selection: {verification_selection}")
+    if ctx:
+        offset_x, offset_y = ctx.offset_x, ctx.offset_y
+        gap_x, gap_y = ctx.effective_gap_x, ctx.effective_gap_y
+        visual_origin_x, visual_origin_y = ctx.visual_origin_x, ctx.visual_origin_y
+        panel_width, panel_height = ctx.panel_width, ctx.panel_height
+
     log(f"Layout Params: Offset=({offset_x},{offset_y}), Gap=({gap_x},{gap_y}), FixedOffset=({fixed_offset_x},{fixed_offset_y})")
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:

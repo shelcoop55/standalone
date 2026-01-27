@@ -156,7 +156,7 @@ def render_still_alive_main(store: SessionStore, theme_config=None):
                     alive_units.append({'PHYSICAL_X': c, 'UNIT_INDEX_Y': r})
 
         if alive_units:
-            from src.legacy_utils import generate_standard_filename
+            from src.io.naming import generate_standard_filename
 
             # Smart determination of layer context
             target_layer = None
