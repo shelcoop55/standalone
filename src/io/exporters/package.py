@@ -49,6 +49,8 @@ def generate_zip_package(
     offset_y: float = 0.0,
     gap_x: float = GAP_SIZE,
     gap_y: float = GAP_SIZE,
+    dyn_gap_x: float = 0.0, # New argument
+    dyn_gap_y: float = 0.0, # New argument
     visual_origin_x: float = 0.0,
     visual_origin_y: float = 0.0,
     fixed_offset_x: float = 0.0,
@@ -90,11 +92,11 @@ def generate_zip_package(
         q2_width = ctx.quad_width
         right_margin = FRAME_WIDTH - (q2_start_x + q2_width)
 
-        log(f"Horizontal (X): Left Margin: {q1_start_x:.2f} mm")
+        log(f"Horizontal (X): Left Margin: {q1_start_x:.2f} mm ({fixed_offset_x} Fixed + {dyn_gap_x} Dynamic)")
         log(f"Horizontal (X): Q1 Width: {q1_width:.2f} mm")
-        log(f"Horizontal (X): Inter-Quadrant Gap: {inter_gap_x:.2f} mm")
+        log(f"Horizontal (X): Inter-Quadrant Gap: {inter_gap_x:.2f} mm ({dyn_gap_x} Dyn + 3.0 Fixed + {dyn_gap_x} Dyn)")
         log(f"Horizontal (X): Q2 Width: {q2_width:.2f} mm")
-        log(f"Horizontal (X): Right Margin: {right_margin:.2f} mm")
+        log(f"Horizontal (X): Right Margin: {right_margin:.2f} mm ({fixed_offset_x} Fixed + {dyn_gap_x} Dynamic)")
 
         # Vertical
         q1_start_y = ctx.offset_y
@@ -104,11 +106,11 @@ def generate_zip_package(
         q3_height = ctx.quad_height
         bottom_margin = FRAME_HEIGHT - (q3_start_y + q3_height)
 
-        log(f"Vertical (Y): Top Margin: {q1_start_y:.2f} mm")
+        log(f"Vertical (Y): Top Margin: {q1_start_y:.2f} mm ({fixed_offset_y} Fixed + {dyn_gap_y} Dynamic)")
         log(f"Vertical (Y): Q1 Height: {q1_height:.2f} mm")
-        log(f"Vertical (Y): Inter-Quadrant Gap: {inter_gap_y:.2f} mm")
+        log(f"Vertical (Y): Inter-Quadrant Gap: {inter_gap_y:.2f} mm ({dyn_gap_y} Dyn + 3.0 Fixed + {dyn_gap_y} Dyn)")
         log(f"Vertical (Y): Q3 Height: {q3_height:.2f} mm")
-        log(f"Vertical (Y): Bottom Margin: {bottom_margin:.2f} mm")
+        log(f"Vertical (Y): Bottom Margin: {bottom_margin:.2f} mm ({fixed_offset_y} Fixed + {dyn_gap_y} Dynamic)")
 
         # Unit
         log(f"Unit Dimensions: {ctx.cell_width:.4f} x {ctx.cell_height:.4f} mm")
