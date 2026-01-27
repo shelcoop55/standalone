@@ -456,7 +456,7 @@ def create_stress_heatmap(
             text=text_data,
             texttemplate="%{text}",
             textfont={"color": "white"},
-            colorscale='Magma',
+            colorscale='Inferno',
             xgap=2, ygap=2,
             hovertext=hover_text,
             hoverinfo="text",
@@ -482,7 +482,7 @@ def create_stress_heatmap(
             text=text_data,
             texttemplate="%{text}",
             textfont={"color": "white"}, # Or smart contrast if needed
-            colorscale='Magma',
+            colorscale='Inferno',
             xgap=2, ygap=2,
             hovertext=data.hover_text,
             hoverinfo="text",
@@ -769,7 +769,7 @@ def create_density_contour_map(
         x=x_centers, # Fixed
         y=y_centers, # Fixed
         text=text_arg,
-        colorscale='Turbo',
+        colorscale='Plasma',
         contours=dict(
             coloring='heatmap',
             showlabels=True, # Show density values
@@ -915,7 +915,7 @@ def create_cross_section_heatmap(
         text=text_data,
         texttemplate="%{text}",
         textfont={"color": "white"},
-        colorscale='Magma',
+        colorscale='Inferno',
         xgap=2, ygap=2,
         colorbar=dict(title='Defects', title_font=dict(color=text_color), tickfont=dict(color=text_color))
     ))
@@ -971,7 +971,7 @@ def create_animated_cross_section_heatmap(
             z=matrix_0,
             x=axis_labels,
             y=layer_labels,
-            colorscale='Magma',
+            colorscale='Inferno',
             xgap=2, ygap=2,
             zmin=0,
             colorbar=dict(title='Defects', title_font=dict(color=text_color), tickfont=dict(color=text_color))
@@ -1099,7 +1099,7 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int,
         x=heatmap_data['Global_X'],
         y=heatmap_data['Global_Y'],
         z=heatmap_data['Count'],
-        colorscale='Magma', # Darker theme
+        colorscale='Inferno', # Darker theme
         xgap=2, ygap=2,     # Clear separation
         colorbar=dict(title='Defects', title_font=dict(color=text_color), tickfont=dict(color=text_color)),
         hovertemplate='Global Unit: (%{x}, %{y})<br>Defects: %{z}<extra></extra>'
