@@ -16,6 +16,7 @@ from src.plotting.generators.traces import create_defect_traces
 from src.analytics.models import StressMapData
 from src.documentation import VERIFICATION_DESCRIPTIONS
 from src.utils.telemetry import track_performance
+from src.analytics.yield_analysis import get_cross_section_matrix
 
 @track_performance("Plot: Multi-Layer Map")
 def create_multi_layer_defect_map(
@@ -924,6 +925,123 @@ def create_cross_section_heatmap(
     fig.update_layout(
         xaxis=dict(title="Unit Index (Slice Position)", dtick=1), # Force integer ticks (0, 1, 2...)
         yaxis=dict(title="Layer Stack", autorange="reversed") # Ensure Layer 1 is at top
+    )
+
+    return fig
+
+@track_performance("Plot: Animated Cross Section")
+def create_animated_cross_section_heatmap(
+    panel_data: Any, # PanelData object
+    panel_rows: int,
+    panel_cols: int,
+    axis: str = 'Y', # 'X' or 'Y'
+    theme_config: Optional[PlotTheme] = None
+) -> go.Figure:
+    """
+    Creates an animated Root Cause Analysis heatmap with a slider to scrub through all slices.
+    """
+    # Determine colors from theme
+    if theme_config:
+        text_color = theme_config.text_color
+    else:
+        text_color = TEXT_COLOR
+
+    # Determine max index
+    # Note: Logic mirrors get_cross_section_matrix usage
+    # If Axis is Y (Row Slice), max index is panel_rows * 2 - 1
+    # If Axis is X (Col Slice), max index is panel_cols * 2 - 1
+
+    if axis == 'Y':
+        max_idx = (panel_rows * 2)
+        slice_name = "Row"
+    else:
+        max_idx = (panel_cols * 2)
+        slice_name = "Column"
+
+    frames = []
+    steps = []
+
+    # Pre-calculate common labels (assuming consistency across slices for axis 0/1 labels)
+    # We generate the first frame to get labels and initial data
+    matrix_0, layer_labels, axis_labels = get_cross_section_matrix(panel_data, axis, 0, panel_rows, panel_cols)
+
+    # Base Layout
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=matrix_0,
+            x=axis_labels,
+            y=layer_labels,
+            colorscale='Magma',
+            xgap=2, ygap=2,
+            zmin=0,
+            colorbar=dict(title='Defects', title_font=dict(color=text_color), tickfont=dict(color=text_color))
+        )
+    )
+
+    for i in range(max_idx):
+        matrix, _, _ = get_cross_section_matrix(panel_data, axis, i, panel_rows, panel_cols)
+
+        # Mask zeros for visual cleanliness
+        z_data = matrix.astype(float)
+        z_data[z_data == 0] = np.nan
+
+        text_data = matrix.astype(str)
+        text_data[matrix == 0] = ""
+
+        # Create Frame
+        frame = go.Frame(
+            data=[go.Heatmap(
+                z=z_data,
+                text=text_data,
+                texttemplate="%{text}",
+                textfont={"color": "white"}
+            )],
+            name=str(i),
+            layout=go.Layout(title_text=f"Root Cause - {slice_name} Slice: {i}")
+        )
+        frames.append(frame)
+
+        # Create Slider Step
+        step = dict(
+            method="animate",
+            args=[
+                [str(i)],
+                {"frame": {"duration": 0, "redraw": True},
+                 "mode": "immediate",
+                 "transition": {"duration": 0}}
+            ],
+            label=str(i)
+        )
+        steps.append(step)
+
+    fig.frames = frames
+
+    sliders = [dict(
+        active=0,
+        currentvalue={"prefix": f"{slice_name} Index: "},
+        pad={"t": 50},
+        steps=steps
+    )]
+
+    apply_panel_theme(fig, f"Root Cause Analysis - {slice_name} Scanner", height=700, theme_config=theme_config)
+
+    fig.update_layout(
+        sliders=sliders,
+        xaxis=dict(title="Unit Position", dtick=1),
+        yaxis=dict(title="Layer Stack", autorange="reversed"),
+        updatemenus=[dict(
+            type="buttons",
+            showactive=False,
+            buttons=[dict(
+                label="Play",
+                method="animate",
+                args=[None, {"frame": {"duration": 500, "redraw": True}, "fromcurrent": True}]
+            ), dict(
+                label="Pause",
+                method="animate",
+                args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}]
+            )]
+        )]
     )
 
     return fig
