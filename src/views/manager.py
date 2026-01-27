@@ -12,6 +12,7 @@ from src.analysis import get_analysis_tool
 from src.io.exporters.package import generate_zip_package
 from src.analytics.yield_analysis import get_true_defect_coordinates
 from src.core.geometry import GeometryEngine
+from src.core.config import DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y
 import streamlit.components.v1 as components
 
 class ViewManager:
@@ -531,16 +532,18 @@ class ViewManager:
                 params = self.store.analysis_params
 
                 # Construct Geometry Context
+                dyn_gap_x = params.get("gap_x", 3.0)
+                dyn_gap_y = params.get("gap_y", 3.0)
+                fixed_offset_x = params.get("fixed_offset_x", DEFAULT_OFFSET_X)
+                fixed_offset_y = params.get("fixed_offset_y", DEFAULT_OFFSET_Y)
+
                 ctx = GeometryEngine.calculate_layout(
                     panel_rows=params.get('panel_rows', 7),
                     panel_cols=params.get('panel_cols', 7),
-                    dyn_gap_x=params.get("gap_x", 3.0),
-                    dyn_gap_y=params.get("gap_y", 3.0),
+                    dyn_gap_x=dyn_gap_x,
+                    dyn_gap_y=dyn_gap_y,
                     visual_origin_x=params.get("visual_origin_x", 0.0),
                     visual_origin_y=params.get("visual_origin_y", 0.0)
-                    # Fixed offsets/gaps use defaults from config if not passed,
-                    # but if they are in params we should pass them.
-                    # Assuming they might be edited via UI later, let's pass them if present.
                 )
 
                 self.store.report_bytes = generate_zip_package(
@@ -552,6 +555,10 @@ class ViewManager:
                     source_filename="Multiple Files",
                     true_defect_data=true_defect_data,
                     ctx=ctx,
+                    dyn_gap_x=dyn_gap_x,
+                    dyn_gap_y=dyn_gap_y,
+                    fixed_offset_x=fixed_offset_x,
+                    fixed_offset_y=fixed_offset_y,
                     include_excel=include_excel,
                     include_coords=include_coords,
                     include_map=include_map,
