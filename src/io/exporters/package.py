@@ -8,7 +8,7 @@ import json
 from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 
-from src.core.config import GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, SAFE_VERIFICATION_VALUES, PlotTheme
+from src.core.config import GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, SAFE_VERIFICATION_VALUES, PlotTheme
 from src.core.models import PanelData
 from src.enums import Quadrant
 from src.io.exporters.excel import generate_excel_report, generate_coordinate_list_report
@@ -78,7 +78,45 @@ def generate_zip_package(
         visual_origin_x, visual_origin_y = ctx.visual_origin_x, ctx.visual_origin_y
         panel_width, panel_height = ctx.panel_width, ctx.panel_height
 
-    log(f"Layout Params: Offset=({offset_x},{offset_y}), Gap=({gap_x},{gap_y}), FixedOffset=({fixed_offset_x},{fixed_offset_y})")
+    # --- Detailed Geometry Logging ---
+    if ctx:
+        log("\n--- DETAILED GEOMETRY BREAKDOWN ---")
+
+        # Horizontal
+        q1_start_x = ctx.offset_x
+        q1_width = ctx.quad_width
+        inter_gap_x = ctx.effective_gap_x
+        q2_start_x = q1_start_x + q1_width + inter_gap_x
+        q2_width = ctx.quad_width
+        right_margin = FRAME_WIDTH - (q2_start_x + q2_width)
+
+        log(f"Horizontal (X): Left Margin: {q1_start_x:.2f} mm")
+        log(f"Horizontal (X): Q1 Width: {q1_width:.2f} mm")
+        log(f"Horizontal (X): Inter-Quadrant Gap: {inter_gap_x:.2f} mm")
+        log(f"Horizontal (X): Q2 Width: {q2_width:.2f} mm")
+        log(f"Horizontal (X): Right Margin: {right_margin:.2f} mm")
+
+        # Vertical
+        q1_start_y = ctx.offset_y
+        q1_height = ctx.quad_height
+        inter_gap_y = ctx.effective_gap_y
+        q3_start_y = q1_start_y + q1_height + inter_gap_y
+        q3_height = ctx.quad_height
+        bottom_margin = FRAME_HEIGHT - (q3_start_y + q3_height)
+
+        log(f"Vertical (Y): Top Margin: {q1_start_y:.2f} mm")
+        log(f"Vertical (Y): Q1 Height: {q1_height:.2f} mm")
+        log(f"Vertical (Y): Inter-Quadrant Gap: {inter_gap_y:.2f} mm")
+        log(f"Vertical (Y): Q3 Height: {q3_height:.2f} mm")
+        log(f"Vertical (Y): Bottom Margin: {bottom_margin:.2f} mm")
+
+        # Unit
+        log(f"Unit Dimensions: {ctx.cell_width:.4f} x {ctx.cell_height:.4f} mm")
+
+        log(f"Context Dump: {ctx}")
+        log("-----------------------------------\n")
+    else:
+        log(f"Layout Params: Offset=({offset_x},{offset_y}), Gap=({gap_x},{gap_y}), FixedOffset=({fixed_offset_x},{fixed_offset_y})")
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
 
