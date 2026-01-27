@@ -129,7 +129,7 @@ def create_grid_shapes(
         shapes.append(dict(
             type="path",
             path=path_frame,
-            fillcolor=gap_color,
+            fillcolor=gap_color if fill else "rgba(0,0,0,0)",
             line=dict(color=border_color, width=3),
             layer='below'
         ))

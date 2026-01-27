@@ -821,9 +821,14 @@ def create_density_contour_map(
         y_tick_vals.append(center_mm)
         y_tick_text.append(str(i))
 
-    # Axis Ranges Full Frame FIXED
-    x_axis_range = [0, 510]
-    y_axis_range = [0, 515]
+    # Axis Ranges (Dynamic Auto-Scale)
+    # Calculate the physical extent of the panel including gaps and offsets
+    # We add a small margin (e.g., 5mm) to ensure the edge units aren't cut off
+    max_extent_x = offset_x + panel_width + gap_x + 5.0
+    max_extent_y = offset_y + panel_height + gap_y + 5.0
+
+    x_axis_range = [0, max_extent_x]
+    y_axis_range = [0, max_extent_y]
 
     if quadrant_selection != 'All':
         # Apply offsets to quadrant ranges
