@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 from src.analysis.base import AnalysisTool
-from src.plotting.renderers.maps import create_density_contour_map, create_unit_grid_heatmap
-from src.core.config import PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, QUADRANT_WIDTH, QUADRANT_HEIGHT
+from src.plotting.renderers.maps import create_spatial_grid_heatmap
 from src.views.utils import get_geometry_context
 
 @st.cache_data
@@ -86,28 +85,19 @@ class HeatmapTool(AnalysisTool):
         # We need to filter by this.
         selected_verifs = st.session_state.get("multi_verification_selection", [])
 
-        # 4. Bin size (mm) and gradient (color scale) - from manager.py
-        bin_size_mm = float(st.session_state.get("heatmap_bin_size_mm", 15))
-        gradient_min = int(st.session_state.get("heatmap_gradient_min", 0))
-        gradient_max = int(st.session_state.get("heatmap_gradient_max", 0))  # 0 = Auto
-
-        # New: Toggle for Heatmap Type
-        heatmap_type = st.radio(
-            "Visualization Type",
-            ["Smoothed Contour", "Unit Grid"],
-            horizontal=True,
-            key="heatmap_viz_type_toggle"
+        # 4. Defect set, bin size, color scale - from manager.py
+        defect_set_choice = st.session_state.get("heatmap_defect_set", "Real defects only (verification rules)")
+        real_defects_only = defect_set_choice == "Real defects only (verification rules)"
+        bin_size_mm = float(st.session_state.get("heatmap_bin_size_mm", 10))
+        use_density = st.session_state.get("heatmap_color_scale", "Defects per mm²") == "Defects per mm²"
+        zmax_override = (
+            float(st.session_state.get("heatmap_zmax_density", 1.0))
+            if use_density
+            else float(st.session_state.get("heatmap_zmax_count", 10))
         )
 
-        # 5. View Mode
-        view_mode = "Continuous"
-
-        # 6. Quadrant Filter
+        # 5. Quadrant Filter
         selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
-
-        # 7. Layout Params
-        ctx = get_geometry_context(self.store)
-        gap_size = ctx.effective_gap_x # Local alias for compatibility with click logic
 
         # --- DATA PREPARATION (CACHED) ---
         # We pass self.store.layer_data.id if available, else a dummy or we assume static.
@@ -124,84 +114,18 @@ class HeatmapTool(AnalysisTool):
         )
 
         if not combined_heatmap_df.empty:
-            # Retrieve Theme
-            current_theme = st.session_state.get('plot_theme', None)
-
-            if heatmap_type == "Unit Grid":
-                # Render Unit Grid Heatmap (Uses 'Inferno')
-                fig = create_unit_grid_heatmap(
-                    combined_heatmap_df,
-                    panel_rows,
-                    panel_cols,
-                    theme_config=current_theme
-                )
-                selection = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
-            else:
-                # Render Smoothed Contour (Uses 'Plasma')
-                flip_back = st.session_state.get("flip_back_side", True)
-                fig = create_density_contour_map(
-                    combined_heatmap_df, panel_rows, panel_cols,
-                    ctx=ctx,
-                    show_points=False,
-                    bin_size_mm=bin_size_mm,
-                    zmin=gradient_min,
-                    zmax=gradient_max if gradient_max > 0 else None,
-                    show_grid=False,
-                    view_mode=view_mode,
-                    flip_back=flip_back,
-                    quadrant_selection=selected_quadrant,
-                    theme_config=current_theme
-                )
-
-                # --- INTERACTIVITY: CLICK TO ZOOM ---
-                # Enable selection events to capture clicks
-                selection = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
-
-            if selection and selection.selection and selection.selection["points"]:
-                # Only process if we are in "All" mode (Drill Down)
-                if selected_quadrant == "All":
-                    point = selection.selection["points"][0]
-                    # Get Physical Coordinates of the click
-                    click_x = point.get("x")
-                    click_y = point.get("y")
-
-                    if click_x is not None and click_y is not None:
-                        # Determine Quadrant
-                        clicked_quad = None
-
-                        # Logic matches create_grid_shapes / config.py
-                        # Adjusted for Dynamic Offsets and Gap
-                        # And Visual Shift!
-                        # The click coordinate is already shifted visually if the plot is shifted.
-                        # We need to map it back to structure?
-                        # Grid shape logic uses `offset_x` (structural).
-                        # But grid shape drawing does NOT shift.
-                        # Wait, my previous step said "Visual Origin does NOT affect the grid".
-                        # So the Grid is physically located at 0-510.
-                        # The axis is 0-510.
-                        # So `click_x` is relative to the Frame (0-510).
-                        # So we compare against structural `offset_x`.
-
-                        # `offset_x` is Structural Start of Q1.
-
-                        # Correct logic:
-                        offset_x, offset_y = ctx.offset_x, ctx.offset_y
-                        quad_width, quad_height = ctx.quad_width, ctx.quad_height
-
-                        is_left = (click_x >= offset_x) and (click_x < offset_x + quad_width)
-                        is_right = (click_x > offset_x + quad_width + gap_size)
-
-                        is_bottom = (click_y >= offset_y) and (click_y < offset_y + quad_height)
-                        is_top = (click_y > offset_y + quad_height + gap_size)
-
-                        if is_left and is_bottom: clicked_quad = "Q1"
-                        elif is_right and is_bottom: clicked_quad = "Q2"
-                        elif is_left and is_top: clicked_quad = "Q3"
-                        elif is_right and is_top: clicked_quad = "Q4"
-
-                        if clicked_quad:
-                            st.session_state["analysis_quadrant_selection"] = clicked_quad
-                            st.rerun()
+            current_theme = st.session_state.get("plot_theme", None)
+            ctx = get_geometry_context(self.store)
+            fig = create_spatial_grid_heatmap(
+                combined_heatmap_df,
+                ctx=ctx,
+                bin_size_mm=bin_size_mm,
+                real_defects_only=real_defects_only,
+                use_density=use_density,
+                theme_config=current_theme,
+                zmax_override=zmax_override,
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
         else:
             st.warning("No data available for the selected filters.")

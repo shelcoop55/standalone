@@ -452,34 +452,50 @@ class ViewManager:
 
         # --- ROW 3: CONTEXT FILTERS ---
         if current_tab_text == "Heatmap":
+             st.radio(
+                 "Defect set",
+                 options=["Real defects only (verification rules)", "All read defects"],
+                 index=0,
+                 key="heatmap_defect_set",
+                 help="Real defects: excludes safe codes (e.g. GE57, N, TA, FALSE). All read: every defect from coordinates.",
+             )
              st.slider(
                  "Bin size (mm)",
                  min_value=5,
                  max_value=50,
-                 value=15,
+                 value=10,
                  step=1,
                  key="heatmap_bin_size_mm",
-                 help="Physical size of each heatmap bin. Smaller = finer grid, larger = smoother.",
+                 help="Cell size in mm. Each cell = bin_size × bin_size mm².",
              )
-             st.slider(
-                 "Gradient min (count)",
-                 min_value=0,
-                 max_value=100,
-                 value=0,
-                 step=1,
-                 key="heatmap_gradient_min",
-                 help="Color scale minimum defect count. Bins below this use the lowest color.",
+             st.radio(
+                 "Color scale",
+                 options=["Count per bin", "Defects per mm²"],
+                 index=1,
+                 key="heatmap_color_scale",
+                 help="Count per bin: defects in each cell. Defects per mm²: density (count / cell area in mm²).",
              )
-             st.slider(
-                 "Gradient max (count)",
-                 min_value=0,
-                 max_value=500,
-                 value=0,
-                 step=5,
-                 key="heatmap_gradient_max",
-                 help="Color scale maximum. 0 = Auto (use data max). Set e.g. 20 to focus gradient on 0–20.",
-             )
-
+             heatmap_scale = st.session_state.get("heatmap_color_scale", "Defects per mm²")
+             if heatmap_scale == "Defects per mm²":
+                 st.slider(
+                     "Color scale max (Z)",
+                     min_value=0.0,
+                     max_value=1.0,
+                     value=1.0,
+                     step=0.1,
+                     key="heatmap_zmax_density",
+                     help="Max value for the color bar (defects per mm²).",
+                 )
+             else:
+                 st.slider(
+                     "Color scale max (Z)",
+                     min_value=0,
+                     max_value=10,
+                     value=10,
+                     step=1,
+                     key="heatmap_zmax_count",
+                     help="Max value for the color bar (count per bin).",
+                 )
         elif current_tab_text == "Stress Map":
              st.radio("Mode", ["Cumulative", "Delta Difference"], horizontal=True, key="stress_map_mode")
 

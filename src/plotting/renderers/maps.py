@@ -4,7 +4,7 @@ import numpy as np
 from typing import Dict, Tuple, Any, List, Optional
 from src.core.geometry import GeometryContext
 from src.core.config import (
-    PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE,
+    PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE, FRAME_WIDTH, FRAME_HEIGHT,
     ALIVE_CELL_COLOR, DEFECTIVE_CELL_COLOR, FALLBACK_COLORS,
     PlotTheme, TEXT_COLOR, SAFE_VERIFICATION_VALUES, UNIT_EDGE_COLOR, INTER_UNIT_GAP,
     GRID_COLOR, PANEL_BACKGROUND_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR
@@ -633,12 +633,12 @@ def create_density_contour_map(
     bin_size_mm: Optional[float] = None,
     zmin: Optional[float] = None,
     zmax: Optional[float] = None,
+    real_defects_only: bool = True,
 ) -> go.Figure:
     """
     2. Smoothed Density Contour Map (OPTIMIZED).
-    Binning: if bin_size_mm is set, bins are derived from panel span / bin_size_mm;
-    otherwise smoothing_factor is used for backward compatibility.
-    Gradient: zmin/zmax set the color scale range (defect count); zmax=None = auto.
+    Based on read defect coordinates (X/Y in µm → mm). Binning: bin_size_mm or smoothing_factor.
+    Gradient: zmin/zmax set the color scale range. real_defects_only: apply verification rules (exclude safe codes).
     """
     if df.empty:
         return go.Figure()
@@ -649,20 +649,21 @@ def create_density_contour_map(
     gap_x, gap_y = ctx.effective_gap_x, ctx.effective_gap_y
     panel_width, panel_height = ctx.panel_width, ctx.panel_height
 
-    # Filter for True Defects
-    df_true = filter_true_defects(df)
+    # Apply verification rules: real defects only vs all read defects
+    df_plot = filter_true_defects(df) if real_defects_only else df.copy()
 
-    if df_true.empty:
-        return go.Figure(layout=dict(title="No True Defects Found"))
+    if df_plot.empty:
+        msg = "No Real Defects Found (verification rules applied)" if real_defects_only else "No Read Defects Found"
+        return go.Figure(layout=dict(title=msg))
 
-    # Determine X Coordinates based on Toggle
-    if 'physical_plot_x_flipped' in df_true.columns:
+    # Determine X Coordinates based on Toggle (read defect coordinates when available)
+    if 'physical_plot_x_flipped' in df_plot.columns:
         x_col_name = 'physical_plot_x_flipped' if flip_back else 'physical_plot_x_raw'
     else:
         x_col_name = 'plot_x'
 
-    df_true['plot_x_corrected'] = df_true[x_col_name]
-    df_true['plot_y_corrected'] = df_true['plot_y']
+    df_plot['plot_x_corrected'] = df_plot[x_col_name]
+    df_plot['plot_y_corrected'] = df_plot['plot_y']
 
     x_col = 'plot_x_corrected'
 
@@ -754,7 +755,7 @@ def create_density_contour_map(
         return H.T, x_centers, y_centers, driver_text
 
     H, x_centers, y_centers, driver_text_t = aggregate_quadrant(
-        df_true,
+        df_plot,
         [x_min, x_max],
         [y_min, y_max]
     )
@@ -794,12 +795,12 @@ def create_density_contour_map(
 
     # 2. Points Overlay (Scattergl)
     if show_points:
-        if 'X_COORDINATES' in df_true.columns:
-            px = df_true[x_col] + ctx.visual_origin_x
-            py = df_true['plot_y_corrected'] + ctx.visual_origin_y
+        if 'X_COORDINATES' in df_plot.columns:
+            px = df_plot[x_col] + ctx.visual_origin_x
+            py = df_plot['plot_y_corrected'] + ctx.visual_origin_y
         else:
-            px = (df_true[x_col] + offset_x) + ctx.visual_origin_x
-            py = (df_true['plot_y_corrected'] + offset_y) + ctx.visual_origin_y
+            px = (df_plot[x_col] + offset_x) + ctx.visual_origin_x
+            py = (df_plot['plot_y_corrected'] + offset_y) + ctx.visual_origin_y
 
         fig.add_trace(go.Scattergl(
             x=px,
@@ -867,7 +868,10 @@ def create_density_contour_map(
         }
         x_axis_range, y_axis_range = ranges[quadrant_selection]
 
-    apply_panel_theme(fig, "Smooth Density Hotspot (Server-Side Aggregated)", height=700, theme_config=theme_config)
+    defect_label = "Real defects only (verification rules)" if real_defects_only else "All read defects"
+    apply_panel_theme(
+        fig, f"Density Heatmap — Read Defect Coordinates ({defect_label})", height=700, theme_config=theme_config
+    )
 
     fig.update_layout(
         xaxis=dict(
@@ -1057,16 +1061,127 @@ def create_animated_cross_section_heatmap(
 
     return fig
 
-def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int, theme_config: Optional[PlotTheme] = None) -> go.Figure:
+
+@track_performance("Plot: Spatial Grid Heatmap (mm)")
+def create_spatial_grid_heatmap(
+    df: pd.DataFrame,
+    ctx: GeometryContext,
+    bin_size_mm: float = 10.0,
+    real_defects_only: bool = True,
+    use_density: bool = False,
+    theme_config: Optional[PlotTheme] = None,
+    zmax_override: Optional[float] = None,
+) -> go.Figure:
     """
-    1. Grid Density Heatmap (Chessboard).
-    Filters for TRUE DEFECTS only.
+    Single grid heatmap over full frame (510×515 mm). Uses read defect coordinates (X/Y µm → mm).
+    Z = count per bin or defects per mm² if use_density=True. zmax_override sets color bar max (e.g. 10 for count, 1 for density).
     """
     if df.empty:
         return go.Figure()
 
-    # Filter for True Defects
-    df_true = filter_true_defects(df)
+    offset_x, offset_y = ctx.offset_x, ctx.offset_y
+
+    df_plot = filter_true_defects(df) if real_defects_only else df.copy()
+    if df_plot.empty:
+        if theme_config:
+            text_color = theme_config.text_color
+        else:
+            text_color = TEXT_COLOR
+        msg = "No Real Defects Found (verification rules)" if real_defects_only else "No Read Defects Found"
+        return go.Figure(layout=dict(title=dict(text=msg, font=dict(color=text_color))))
+
+    # Use raw (unflipped) coordinates so back side is not mirrored
+    if 'physical_plot_x_raw' in df_plot.columns:
+        x_col = 'physical_plot_x_raw'
+    elif 'physical_plot_x_flipped' in df_plot.columns:
+        x_col = 'physical_plot_x_flipped'
+    else:
+        x_col = 'plot_x'
+    df_plot = df_plot.copy()
+    df_plot['_x_mm'] = df_plot[x_col]
+    df_plot['_y_mm'] = df_plot['plot_y']
+
+    visual_origin_x = ctx.visual_origin_x
+    visual_origin_y = ctx.visual_origin_y
+
+    if 'X_COORDINATES' in df_plot.columns:
+        x_c = (df_plot['_x_mm'].values + visual_origin_x).astype(float)
+        y_c = (df_plot['_y_mm'].values + visual_origin_y).astype(float)
+    else:
+        x_c = (df_plot['_x_mm'].values + offset_x + visual_origin_x).astype(float)
+        y_c = (df_plot['_y_mm'].values + offset_y + visual_origin_y).astype(float)
+
+    x_min, x_max = 0.0, float(FRAME_WIDTH)
+    y_min, y_max = 0.0, float(FRAME_HEIGHT)
+
+    bins_x = max(8, int(FRAME_WIDTH / bin_size_mm))
+    bins_y = max(8, int(FRAME_HEIGHT / bin_size_mm))
+    H, x_edges, y_edges = np.histogram2d(y_c, x_c, bins=[bins_y, bins_x], range=[[y_min, y_max], [x_min, x_max]])
+
+    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+
+    bin_area_mm2 = bin_size_mm * bin_size_mm
+    if use_density:
+        Z = H / bin_area_mm2
+        z_label = "Defects / mm²"
+        hovertemplate = "X: %{x:.1f} mm<br>Y: %{y:.1f} mm<br>Density: %{z:.4f} / mm²<extra></extra>"
+    else:
+        Z = H
+        z_label = "Defects"
+        hovertemplate = "X: %{x:.1f} mm<br>Y: %{y:.1f} mm<br>Count: %{z:.0f}<extra></extra>"
+
+    if theme_config:
+        text_color = theme_config.text_color
+    else:
+        text_color = TEXT_COLOR
+
+    z_max = float(zmax_override) if zmax_override is not None else (1.0 if use_density else 10.0)
+    fig = go.Figure(data=go.Heatmap(
+        x=x_centers,
+        y=y_centers,
+        z=Z,
+        colorscale="Turbo",  # Very colorful (blue → green → yellow → red)
+        zmin=0,
+        zmax=z_max,
+        xgap=0,
+        ygap=0,
+        colorbar=dict(
+            title=z_label,
+            title_font=dict(color=text_color),
+            tickfont=dict(color=text_color),
+        ),
+        hovertemplate=hovertemplate,
+    ))
+
+    defect_label = "Real defects only" if real_defects_only else "All read defects"
+    z_suffix = " (per mm²)" if use_density else " (count per bin)"
+    title = f"Defect density — 510×515 mm — {defect_label}{z_suffix}"
+    apply_panel_theme(fig, title, height=700, theme_config=theme_config)
+    fig.update_layout(
+        xaxis=dict(title="X (mm)", range=[x_min, x_max], constrain="domain"),
+        yaxis=dict(title="Y (mm)", range=[y_min, y_max], constrain="domain", scaleanchor="x", scaleratio=1),
+        margin=dict(l=58, r=80, t=70, b=52),
+    )
+    return fig
+
+
+def create_unit_grid_heatmap(
+    df: pd.DataFrame,
+    panel_rows: int,
+    panel_cols: int,
+    theme_config: Optional[PlotTheme] = None,
+    real_defects_only: bool = True,
+) -> go.Figure:
+    """
+    Unit-grid density heatmap from read defect coordinates (unit indices).
+    real_defects_only: if True, apply verification rules (exclude safe codes); else use all read defects.
+    """
+    if df.empty:
+        return go.Figure()
+
+    # Apply verification rules: real defects only vs all read defects
+    df_plot = filter_true_defects(df) if real_defects_only else df.copy()
 
     # Determine colors from theme
     if theme_config:
@@ -1078,21 +1193,20 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int,
         plot_color = PLOT_AREA_COLOR
         text_color = TEXT_COLOR
 
-    if df_true.empty:
+    if df_plot.empty:
+        msg = "No Real Defects Found (verification rules)" if real_defects_only else "No Read Defects Found"
         return go.Figure(layout=dict(
-            title=dict(text="No True Defects Found for Heatmap", font=dict(color=text_color)),
+            title=dict(text=msg, font=dict(color=text_color)),
             paper_bgcolor=bg_color, plot_bgcolor=plot_color
         ))
 
-    # Map to Global Indices (Vectorized)
-    u_x = df_true['UNIT_INDEX_X'].astype(int)
-    u_y = df_true['UNIT_INDEX_Y'].astype(int)
+    # Map to Global Indices (Vectorized) from read defect data
+    u_x = df_plot['UNIT_INDEX_X'].astype(int)
+    u_y = df_plot['UNIT_INDEX_Y'].astype(int)
 
     # Calculate offsets based on Quadrant
-    # Q2/Q4 add col offset to X
-    x_offset = np.where(df_true['QUADRANT'].isin(['Q2', 'Q4']), panel_cols, 0)
-    # Q3/Q4 add row offset to Y
-    y_offset = np.where(df_true['QUADRANT'].isin(['Q3', 'Q4']), panel_rows, 0)
+    x_offset = np.where(df_plot['QUADRANT'].isin(['Q2', 'Q4']), panel_cols, 0)
+    y_offset = np.where(df_plot['QUADRANT'].isin(['Q3', 'Q4']), panel_rows, 0)
 
     heatmap_df = pd.DataFrame({
         'Global_X': u_x + x_offset,
@@ -1116,7 +1230,8 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int,
     total_global_cols = panel_cols * 2
     total_global_rows = panel_rows * 2
 
-    apply_panel_theme(fig, "1. Unit Grid Density (Yield Loss Map)", height=700, theme_config=theme_config)
+    defect_label = "Real defects only" if real_defects_only else "All read defects"
+    apply_panel_theme(fig, f"Unit Grid Density — Read Defect Coordinates ({defect_label})", height=700, theme_config=theme_config)
 
     fig.update_layout(
         xaxis=dict(
