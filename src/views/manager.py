@@ -453,6 +453,13 @@ class ViewManager:
         # --- ROW 3: CONTEXT FILTERS ---
         if current_tab_text == "Heatmap":
              st.radio(
+                 "View",
+                 options=["Aggregated", "Per layer"],
+                 index=0,
+                 key="heatmap_view_mode",
+                 help="Aggregated: one heatmap for all selected layers. Per layer: one heatmap per selected layer (stacked).",
+             )
+             st.radio(
                  "Defect set",
                  options=["Real defects only (verification rules)", "All read defects"],
                  index=0,

@@ -99,33 +99,61 @@ class HeatmapTool(AnalysisTool):
         # 5. Quadrant Filter
         selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
 
+        # 6. View mode: Aggregated (one heatmap) or Per layer (one heatmap per layer)
+        view_mode = st.session_state.get("heatmap_view_mode", "Aggregated")
+
         # --- DATA PREPARATION (CACHED) ---
-        # We pass self.store.layer_data.id if available, else a dummy or we assume static.
-        # PanelData in models.py has .id attribute.
         panel_id = getattr(self.store.layer_data, "id", "static")
+        current_theme = st.session_state.get("plot_theme", None)
+        ctx = get_geometry_context(self.store)
 
-        combined_heatmap_df = get_filtered_heatmap_data(
-            self.store.layer_data,
-            panel_id,
-            selected_layer_nums,
-            side_selection,
-            selected_verifs,
-            selected_quadrant
-        )
-
-        if not combined_heatmap_df.empty:
-            current_theme = st.session_state.get("plot_theme", None)
-            ctx = get_geometry_context(self.store)
-            fig = create_spatial_grid_heatmap(
-                combined_heatmap_df,
-                ctx=ctx,
-                bin_size_mm=bin_size_mm,
-                real_defects_only=real_defects_only,
-                use_density=use_density,
-                theme_config=current_theme,
-                zmax_override=zmax_override,
+        if view_mode == "Aggregated":
+            combined_heatmap_df = get_filtered_heatmap_data(
+                self.store.layer_data,
+                panel_id,
+                selected_layer_nums,
+                side_selection,
+                selected_verifs,
+                selected_quadrant
             )
-            st.plotly_chart(fig, use_container_width=True)
-
+            if not combined_heatmap_df.empty:
+                fig = create_spatial_grid_heatmap(
+                    combined_heatmap_df,
+                    ctx=ctx,
+                    bin_size_mm=bin_size_mm,
+                    real_defects_only=real_defects_only,
+                    use_density=use_density,
+                    theme_config=current_theme,
+                    zmax_override=zmax_override,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No data available for the selected filters.")
         else:
-            st.warning("No data available for the selected filters.")
+            # Per layer: one heatmap per selected layer (Option B)
+            any_shown = False
+            for layer_num in sorted(selected_layer_nums):
+                layer_df = get_filtered_heatmap_data(
+                    self.store.layer_data,
+                    panel_id,
+                    [layer_num],
+                    side_selection,
+                    selected_verifs,
+                    selected_quadrant
+                )
+                if layer_df.empty:
+                    continue
+                any_shown = True
+                st.subheader(f"Layer {layer_num}")
+                fig = create_spatial_grid_heatmap(
+                    layer_df,
+                    ctx=ctx,
+                    bin_size_mm=bin_size_mm,
+                    real_defects_only=real_defects_only,
+                    use_density=use_density,
+                    theme_config=current_theme,
+                    zmax_override=zmax_override,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            if not any_shown:
+                st.warning("No data available for the selected filters.")
