@@ -629,10 +629,16 @@ def create_density_contour_map(
     view_mode: str = "Continuous",
     flip_back: bool = False,
     quadrant_selection: str = 'All',
-    theme_config: Optional[PlotTheme] = None
+    theme_config: Optional[PlotTheme] = None,
+    bin_size_mm: Optional[float] = None,
+    zmin: Optional[float] = None,
+    zmax: Optional[float] = None,
 ) -> go.Figure:
     """
     2. Smoothed Density Contour Map (OPTIMIZED).
+    Binning: if bin_size_mm is set, bins are derived from panel span / bin_size_mm;
+    otherwise smoothing_factor is used for backward compatibility.
+    Gradient: zmin/zmax set the color scale range (defect count); zmax=None = auto.
     """
     if df.empty:
         return go.Figure()
@@ -663,11 +669,16 @@ def create_density_contour_map(
     fig = go.Figure()
 
     # --- SERVER-SIDE AGGREGATION CONFIG ---
-    scale_factor = 10.0 / max(1, smoothing_factor)
-
-    # Dynamic Binning
-    bins_x = max(10, int((panel_cols * 2) * 2 * scale_factor))
-    bins_y = max(10, int((panel_rows * 2) * 2 * scale_factor))
+    # Option B: bin size in mm -> bins_x, bins_y from physical panel span
+    if bin_size_mm is not None and bin_size_mm > 0:
+        x_span = panel_width + gap_x
+        y_span = panel_height + gap_y
+        bins_x = max(8, int(x_span / bin_size_mm))
+        bins_y = max(8, int(y_span / bin_size_mm))
+    else:
+        scale_factor = 10.0 / max(1, smoothing_factor)
+        bins_x = max(10, int((panel_cols * 2) * 2 * scale_factor))
+        bins_y = max(10, int((panel_rows * 2) * 2 * scale_factor))
 
     num_bins = [bins_y, bins_x]
 
@@ -761,19 +772,22 @@ def create_density_contour_map(
         hovertemplate = 'X: %{x:.1f}mm<br>Y: %{y:.1f}mm<br>Density: %{z:.0f}<extra></extra>'
         text_arg = None
 
+    contour_zmin = 0 if zmin is None else float(zmin)
+    contour_zmax = (saturation_cap if saturation_cap > 0 else None) if zmax is None else float(zmax)
+
     fig.add_trace(go.Contour(
         z=Z,
-        x=x_centers, # Fixed
-        y=y_centers, # Fixed
+        x=x_centers,
+        y=y_centers,
         text=text_arg,
         colorscale='Plasma',
         contours=dict(
             coloring='heatmap',
-            showlabels=True, # Show density values
+            showlabels=True,
             labelfont=dict(color='white')
         ),
-        zmin=0,
-        zmax=saturation_cap if saturation_cap > 0 else None,
+        zmin=contour_zmin,
+        zmax=contour_zmax,
         hoverinfo='x+y+z+text' if text_arg is not None else 'x+y+z',
         hovertemplate=hovertemplate
     ))

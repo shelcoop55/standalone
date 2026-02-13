@@ -452,7 +452,33 @@ class ViewManager:
 
         # --- ROW 3: CONTEXT FILTERS ---
         if current_tab_text == "Heatmap":
-             st.slider("Smoothing (Sigma)", min_value=1, max_value=20, value=5, key="heatmap_sigma")
+             st.slider(
+                 "Bin size (mm)",
+                 min_value=5,
+                 max_value=50,
+                 value=15,
+                 step=1,
+                 key="heatmap_bin_size_mm",
+                 help="Physical size of each heatmap bin. Smaller = finer grid, larger = smoother.",
+             )
+             st.slider(
+                 "Gradient min (count)",
+                 min_value=0,
+                 max_value=100,
+                 value=0,
+                 step=1,
+                 key="heatmap_gradient_min",
+                 help="Color scale minimum defect count. Bins below this use the lowest color.",
+             )
+             st.slider(
+                 "Gradient max (count)",
+                 min_value=0,
+                 max_value=500,
+                 value=0,
+                 step=5,
+                 key="heatmap_gradient_max",
+                 help="Color scale maximum. 0 = Auto (use data max). Set e.g. 20 to focus gradient on 0–20.",
+             )
 
         elif current_tab_text == "Stress Map":
              st.radio("Mode", ["Cumulative", "Delta Difference"], horizontal=True, key="stress_map_mode")

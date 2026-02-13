@@ -86,9 +86,10 @@ class HeatmapTool(AnalysisTool):
         # We need to filter by this.
         selected_verifs = st.session_state.get("multi_verification_selection", [])
 
-        # 4. Smoothing (Context Specific)
-        smoothing = st.session_state.get("heatmap_sigma", 5) # Slider from manager.py
-        saturation = 0 # Removed from context UI, default 0 or add if needed.
+        # 4. Bin size (mm) and gradient (color scale) - from manager.py
+        bin_size_mm = float(st.session_state.get("heatmap_bin_size_mm", 15))
+        gradient_min = int(st.session_state.get("heatmap_gradient_min", 0))
+        gradient_max = int(st.session_state.get("heatmap_gradient_max", 0))  # 0 = Auto
 
         # New: Toggle for Heatmap Type
         heatmap_type = st.radio(
@@ -142,8 +143,9 @@ class HeatmapTool(AnalysisTool):
                     combined_heatmap_df, panel_rows, panel_cols,
                     ctx=ctx,
                     show_points=False,
-                    smoothing_factor=smoothing * 5, # Scale slider 1-20 to meaningful param
-                    saturation_cap=saturation,
+                    bin_size_mm=bin_size_mm,
+                    zmin=gradient_min,
+                    zmax=gradient_max if gradient_max > 0 else None,
                     show_grid=False,
                     view_mode=view_mode,
                     flip_back=flip_back,
