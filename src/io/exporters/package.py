@@ -3,12 +3,19 @@ Package Export Logic.
 Handles the generation of the downloadable ZIP package containing reports and images.
 """
 import io
+import logging
 import zipfile
 import json
 from typing import Dict, Any, Optional, Union, List, Tuple
 from datetime import datetime
 
-from src.core.config import GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT, SAFE_VERIFICATION_VALUES, PlotTheme
+logger = logging.getLogger(__name__)
+
+from src.core.config import (
+    GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT,
+    SAFE_VERIFICATION_VALUES, PlotTheme,
+    PNG_EXPORT_SCALE, PNG_EXPORT_WIDTH, PNG_EXPORT_HEIGHT, PNG_EXPORT_HEIGHT_PARETO,
+)
 from src.core.models import PanelData
 from src.enums import Quadrant
 from src.io.exporters.excel import generate_excel_report, generate_coordinate_list_report
@@ -85,34 +92,6 @@ def generate_zip_package(
 
     # --- Detailed Geometry Logging ---
     if ctx:
-        # Generate Geometry Infographic (Professional Image)
-        log("Generating Geometry Layout Infographic...")
-        try:
-            fig_geo = create_geometry_infographic(
-                ctx, fixed_offset_x, fixed_offset_y, dyn_gap_x, dyn_gap_y
-            )
-            # Use kaleido for high-quality static image
-            img_bytes = fig_geo.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
-            # Add to ZIP
-            # We put it in root or Images folder? Root is better for immediate visibility as requested.
-            # "so user can immediately see it"
-            # But let's keep Images organized.
-            # Actually, user said "an extra image should be downlod".
-            # putting it in Images/Geometry_Layout.png
-
-            # Or root? Let's put in Images folder to avoid clutter if they unzip.
-            # Actually, "download anything in reporting, an extra image".
-            # This implies alongside the report.
-            # Let's write to Images/Geometry_Infographic.png
-
-            # Wait, writing to zip buffer is done inside the 'with zipfile' block below.
-            # We are outside the block here.
-            # I need to move this logic INSIDE the block or store it.
-            # Let's just generate it inside the block.
-            pass
-        except Exception as e:
-            log(f"Error generating infographic: {e}")
-
         log("\n--- DETAILED GEOMETRY BREAKDOWN ---")
 
         # Horizontal
@@ -236,12 +215,12 @@ def generate_zip_package(
                                 theme_config=theme_config
                             )
                             try:
-                                img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                                img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                                 zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_DefectMap{img_suffix}.png", img_bytes)
                                 log("  Success.")
                             except Exception as e:
                                 msg = f"Failed to generate map PNG for Layer {layer_num} {side}: {e}"
-                                print(msg)
+                                logger.warning(msg)
                                 log(f"  ERROR: {msg}")
 
                         # Generate Pareto PNG
@@ -252,12 +231,12 @@ def generate_zip_package(
                                 title=f"Layer {layer_num} - {side_name} - Pareto"
                             )
                             try:
-                                img_bytes = fig_pareto.to_image(format="png", engine="kaleido", scale=2, width=1200, height=800)
+                                img_bytes = fig_pareto.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT_PARETO)
                                 zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_Pareto{img_suffix}.png", img_bytes)
                                 log("  Success.")
                             except Exception as e:
                                 msg = f"Failed to generate pareto PNG for Layer {layer_num} {side}: {e}"
-                                print(msg)
+                                logger.warning(msg)
                                 log(f"  ERROR: {msg}")
             else:
                 log("WARNING: No layer_data provided!")
@@ -270,12 +249,12 @@ def generate_zip_package(
                     panel_rows, panel_cols, true_defect_data, ctx, theme_config=theme_config
                 )
                 try:
-                    img_bytes = fig_alive.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                    img_bytes = fig_alive.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                     zip_file.writestr("Images/Still_Alive_Map.png", img_bytes)
                     log("Success.")
                 except Exception as e:
                     msg = f"Failed to generate Still Alive Map PNG: {e}"
-                    print(msg)
+                    logger.warning(msg)
                     log(f"ERROR: {msg}")
             else:
                 log("Skipping Still Alive Map: No true defect data found.")
@@ -292,14 +271,14 @@ def generate_zip_package(
                     theme_config=theme_config,
                     show_grid=False
                 )
-                img_bytes_smooth = fig_heat_smooth.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                img_bytes_smooth = fig_heat_smooth.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                 zip_file.writestr("Images/Analysis_Heatmap_Smoothed.png", img_bytes_smooth)
 
                 # 2. Unit Grid Heatmap
                 fig_heat_grid = create_unit_grid_heatmap(
                     full_df, panel_rows, panel_cols, theme_config=theme_config
                 )
-                img_bytes_grid = fig_heat_grid.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                img_bytes_grid = fig_heat_grid.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                 zip_file.writestr("Images/Analysis_Heatmap_Grid.png", img_bytes_grid)
 
                 log("Success.")
@@ -313,7 +292,7 @@ def generate_zip_package(
                 fig_stress = create_stress_heatmap(
                     stress_data, panel_rows, panel_cols, ctx, view_mode="Continuous", theme_config=theme_config
                 )
-                img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                 zip_file.writestr("Images/Analysis_StressMap_Cumulative.png", img_bytes)
                 log("Success.")
             except Exception as e:
@@ -350,7 +329,7 @@ def generate_zip_package(
 
             except Exception as e:
                 msg = f"Failed to generate Root Cause HTML: {e}"
-                print(msg)
+                logger.warning(msg)
                 log(f"ERROR: {msg}")
 
         # 8. Geometry Infographic
@@ -360,12 +339,12 @@ def generate_zip_package(
                 fig_geo = create_geometry_infographic(
                     ctx, fixed_offset_x, fixed_offset_y, dyn_gap_x, dyn_gap_y
                 )
-                img_bytes = fig_geo.to_image(format="png", engine="kaleido", scale=2, width=1200, height=1200)
+                img_bytes = fig_geo.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                 zip_file.writestr("Geometry_Layout_Infographic.png", img_bytes)
                 log("Success.")
             except Exception as e:
                 msg = f"Failed to generate Geometry Infographic: {e}"
-                print(msg)
+                logger.warning(msg)
                 log(f"ERROR: {msg}")
 
         # Write Debug Log to ZIP

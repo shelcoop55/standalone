@@ -4,8 +4,9 @@ from typing import List, Optional
 from src.core.config import (
     PANEL_COLOR, TEXT_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR,
     VERIFICATION_COLOR_SAFE, VERIFICATION_COLOR_DEFECT, NEON_PALETTE,
-    PlotTheme, SAFE_VERIFICATION_VALUES, get_extended_palette
+    PlotTheme, get_extended_palette
 )
+from src.analytics.verification import is_true_defect_value
 from src.enums import Quadrant
 from src.plotting.utils import apply_panel_theme, hex_to_rgba
 
@@ -60,23 +61,6 @@ def create_pareto_figure(df: pd.DataFrame, quadrant_selection: str = Quadrant.AL
         yaxis=dict(showgrid=True) # Override to show grid on Pareto
     )
     return fig
-
-def create_verification_status_chart(df: pd.DataFrame) -> List[go.Bar]:
-    if df.empty: return []
-    grouped = df.groupby(['DEFECT_TYPE', 'QUADRANT', 'Verification'], observed=True).size().unstack(fill_value=0)
-    all_defect_types = df['DEFECT_TYPE'].unique()
-    all_quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
-    all_combinations = pd.MultiIndex.from_product([all_defect_types, all_quadrants], names=['DEFECT_TYPE', 'QUADRANT'])
-    grouped = grouped.reindex(all_combinations, fill_value=0)
-    for status in ['T', 'F', 'TA']:
-        if status not in grouped.columns: grouped[status] = 0
-    grouped = grouped.reset_index()
-    x_axis_data = [grouped['DEFECT_TYPE'], grouped['QUADRANT']]
-    status_map = {'T': {'name': 'True', 'color': '#FF0000'}, 'F': {'name': 'False', 'color': '#2ca02c'}, 'TA': {'name': 'Acceptable', 'color': '#FFBF00'}}
-    traces = []
-    for status_code, details in status_map.items():
-        traces.append(go.Bar(name=details['name'], x=x_axis_data, y=grouped[status_code], marker_color=details['color']))
-    return traces
 
 def create_defect_sankey(df: pd.DataFrame, theme_config: Optional[PlotTheme] = None) -> go.Sankey:
     """
@@ -142,10 +126,9 @@ def create_defect_sankey(df: pd.DataFrame, theme_config: Optional[PlotTheme] = N
         source_colors_hex.append(color)
 
     # Assign Status Colors to Target Nodes
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
     target_colors_hex = []
     for status in verification_statuses:
-        if status.upper() in safe_values_upper:
+        if not is_true_defect_value(status):
             target_colors_hex.append(VERIFICATION_COLOR_SAFE)
         else:
             target_colors_hex.append(VERIFICATION_COLOR_DEFECT)
@@ -280,8 +263,7 @@ def create_defect_sunburst(df: pd.DataFrame, theme_config: Optional[PlotTheme] =
                 values.append(ver_count)
 
                 # Explicit Color for Verification Status
-                safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-                if ver.upper() in safe_values_upper:
+                if not is_true_defect_value(ver):
                     node_colors.append(VERIFICATION_COLOR_SAFE)
                 else:
                     # Inherit color from parent (Defect Type)

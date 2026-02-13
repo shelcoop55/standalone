@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any
 from src.core.models import PanelData
-from src.core.config import SAFE_VERIFICATION_VALUES
 from src.analytics.models import YieldKillerMetrics
+from src.analytics.verification import is_true_defect_mask, filter_true_defects
 
 def get_true_defect_coordinates(
     panel_data: PanelData,
@@ -42,8 +42,7 @@ def get_true_defect_coordinates(
         mask &= ~all_layers_df['Verification'].isin(excluded_defect_types)
 
     # Filter for True Defects (Safe Values)
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-    mask &= ~all_layers_df['Verification'].isin(safe_values_upper)
+    mask &= is_true_defect_mask(all_layers_df['Verification'])
 
     true_defects_df = all_layers_df[mask].copy()
 
@@ -86,12 +85,8 @@ def calculate_yield_killers(panel_data: PanelData, panel_rows: int, panel_cols: 
     """
     if not panel_data: return None
 
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-
     def true_defect_filter(df):
-        if 'Verification' in df.columns:
-            return df[~df['Verification'].isin(safe_values_upper)]
-        return df
+        return filter_true_defects(df)
 
     combined_df = panel_data.get_combined_dataframe(filter_func=true_defect_filter)
 
@@ -138,14 +133,7 @@ def prepare_multi_layer_data(panel_data: PanelData) -> pd.DataFrame:
     if not panel_data:
         return pd.DataFrame()
 
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-
-    def true_defect_filter(df):
-        if 'Verification' in df.columns:
-            return df[~df['Verification'].isin(safe_values_upper)]
-        return df
-
-    return panel_data.get_combined_dataframe(filter_func=true_defect_filter)
+    return panel_data.get_combined_dataframe(filter_func=filter_true_defects)
 
 def get_cross_section_matrix(
     panel_data: PanelData,
@@ -175,8 +163,6 @@ def get_cross_section_matrix(
     matrix = np.zeros((num_layers, width_dim), dtype=int)
     layer_labels = [f"L{num}" for num in sorted_layers]
 
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-
     for i, layer_num in enumerate(sorted_layers):
         sides = panel_data._layers[layer_num] # Direct access to dict (via compatibility property?)
         # PanelData has _layers. And __getitem__ proxy.
@@ -196,11 +182,7 @@ def get_cross_section_matrix(
         for side, df in sides_map.items():
             if df.empty: continue
 
-            if 'Verification' in df.columns:
-                is_true = ~df['Verification'].isin(safe_values_upper)
-                df_copy = df[is_true].copy()
-            else:
-                df_copy = df.copy()
+            df_copy = filter_true_defects(df)
 
             if df_copy.empty: continue
 

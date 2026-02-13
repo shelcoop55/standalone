@@ -3,6 +3,9 @@ import pandas as pd
 # Enable Pandas Copy-on-Write for performance
 pd.options.mode.copy_on_write = True
 
+# Compatibility: st.fragment exists in Streamlit 1.33+; use no-op on older installs
+_fragment = getattr(st, "fragment", lambda f: f)
+
 from src.core.config import (
     GAP_SIZE, BACKGROUND_COLOR, TEXT_COLOR, PANEL_COLOR,
     FRAME_WIDTH, FRAME_HEIGHT, DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y,
@@ -37,6 +40,17 @@ def load_css(file_path: str) -> None:
 
 def main() -> None:
     """Main function to configure and run the Streamlit application."""
+    # #region agent log
+    try:
+        import json
+        _v = getattr(st, "__version__", "?")
+        _has_fragment = hasattr(st, "fragment")
+        open("/Users/prince/AOI-APP-1/.cursor/debug.log", "a").write(
+            json.dumps({"hypothesisId": "H1", "location": "app.py:main", "message": "streamlit env", "data": {"version": _v, "has_fragment": _has_fragment}, "timestamp": __import__("time").time() * 1000}) + "\n"
+        )
+    except Exception:
+        pass
+    # #endregion
     configure_logging()
     st.set_page_config(layout="wide", page_title="Panel Defect Analysis", initial_sidebar_state="expanded")
     load_css("assets/styles.css")
@@ -211,11 +225,20 @@ def main() -> None:
     # --- Main Content Area ---
     view_manager.render_navigation()
 
-    @st.fragment
+    @_fragment
     def render_chart_area():
         view_manager.render_main_view()
 
     render_chart_area()
+    # #region agent log
+    try:
+        import json as _json
+        open("/Users/prince/AOI-APP-1/.cursor/debug.log", "a").write(
+            _json.dumps({"runId": "post-fix", "hypothesisId": "H4", "location": "app.py:after_render_chart_area", "message": "past fragment", "timestamp": __import__("time").time() * 1000}) + "\n"
+        )
+    except Exception:
+        pass
+    # #endregion
 
     # --- Telemetry UI ---
     if st.session_state.get("show_telemetry", False):

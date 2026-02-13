@@ -3,7 +3,7 @@ import numpy as np
 import streamlit as st
 from typing import List, Tuple, Optional
 from src.core.models import PanelData
-from src.core.config import SAFE_VERIFICATION_VALUES
+from src.analytics.verification import filter_true_defects
 from src.analytics.models import StressMapData
 
 @st.cache_data
@@ -41,11 +41,7 @@ def aggregate_stress_data(
     combined_df = pd.concat(dfs_to_agg, ignore_index=True)
 
     # Filter True Defects (Standard)
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-    if 'Verification' in combined_df.columns:
-        # Verification is already normalized to upper in ingestion
-        is_true = ~combined_df['Verification'].astype(str).isin(safe_values_upper)
-        combined_df = combined_df[is_true]
+    combined_df = filter_true_defects(combined_df)
 
     # Filter by Specific Selection (if provided)
     if verification_filter and 'Verification' in combined_df.columns and not combined_df.empty:

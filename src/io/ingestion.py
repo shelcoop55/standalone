@@ -41,9 +41,13 @@ def load_panel_data(
         layer_num, side = int(match.group(1)), match.group(2).upper()
 
         try:
-            # OPTIMIZATION: Use calamine engine for faster loading
-            # Note: uploaded_file is a BytesIO-like object from Streamlit
-            df = pd.read_excel(uploaded_file, sheet_name='Defects', engine='calamine')
+            # Try calamine first (faster); fall back to openpyxl if engine unavailable
+            try:
+                df = pd.read_excel(uploaded_file, sheet_name='Defects', engine='calamine')
+            except Exception:
+                if hasattr(uploaded_file, 'seek'):
+                    uploaded_file.seek(0)
+                df = pd.read_excel(uploaded_file, sheet_name='Defects', engine='openpyxl')
 
             df.rename(columns={'VERIFICATION': 'Verification'}, inplace=True)
             df['SOURCE_FILE'] = file_name
@@ -90,8 +94,11 @@ def load_panel_data(
             if side not in temp_data[layer_num]: temp_data[layer_num][side] = []
             temp_data[layer_num][side].append(df)
 
-        except Exception as e:
+        except (ValueError, KeyError, AttributeError, TypeError, OSError) as e:
             st.error(f"Error loading '{file_name}': {e}")
+            continue
+        except Exception as e:
+            st.error(f"Unexpected error loading '{file_name}': {e}")
             continue
 
     # Build PanelData

@@ -15,6 +15,24 @@ from src.core.geometry import GeometryEngine
 from src.core.config import DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y
 import streamlit.components.v1 as components
 
+def _build_layer_labels(store: SessionStore, layer_nums: List[int]) -> List[dict]:
+    """Build list of {num, label} for layer dropdowns/buttons. Label uses BU name from SOURCE_FILE when available."""
+    process_comment = store.analysis_params.get("process_comment", "")
+    result = []
+    for num in layer_nums:
+        bu_name = ""
+        try:
+            first_side_key = next(iter(store.layer_data[num]))
+            source_file = store.layer_data[num][first_side_key]['SOURCE_FILE'].iloc[0]
+            bu_name = get_bu_name_from_filename(str(source_file))
+        except (IndexError, AttributeError, StopIteration, KeyError):
+            pass
+        base_label = bu_name if bu_name else f"Layer {num}"
+        label = f"{base_label} ({process_comment})" if process_comment else base_label
+        result.append({"num": num, "label": label})
+    return result
+
+
 class ViewManager:
     """
     Manages view routing and navigation components.
@@ -95,33 +113,9 @@ class ViewManager:
             return
 
         # Layer Options
-        layer_options = []
-        layer_option_map = {}
-        process_comment = self.store.analysis_params.get("process_comment", "")
-
-        for num in layer_keys:
-            # Try to get BU name
-            bu_name = ""
-            try:
-                # Accessing layer data
-                first_side_key = next(iter(self.store.layer_data[num]))
-                source_file = self.store.layer_data[num][first_side_key]['SOURCE_FILE'].iloc[0]
-                bu_name = get_bu_name_from_filename(str(source_file))
-            except (IndexError, AttributeError, StopIteration):
-                pass
-            # Use BU name if available (cleaner look), else fallback to Layer Num
-            base_label = bu_name if bu_name else f"Layer {num}"
-            label = f"{base_label} ({process_comment})" if process_comment else base_label
-            layer_options.append(label)
-            layer_option_map[label] = num
-
-        # Determine Current Layer Index
-        current_layer_idx = 0
-        if self.store.selected_layer:
-             for i, opt in enumerate(layer_options):
-                 if layer_option_map[opt] == self.store.selected_layer:
-                     current_layer_idx = i
-                     break
+        layer_buttons_data = _build_layer_labels(self.store, layer_keys)
+        layer_options = [d["label"] for d in layer_buttons_data]
+        layer_option_map = {d["label"]: d["num"] for d in layer_buttons_data}
 
         # Prepare Data for Side Toggle
         # Default options
@@ -357,21 +351,7 @@ class ViewManager:
             # Headers removed as per request to save space
 
             # Prepare Layer Buttons: [BU-XX (Comment)...]
-            layer_buttons_data = []
-            process_comment = self.store.analysis_params.get("process_comment", "")
-
-            # Logic to get BU Name or Layer Num
-            for num in all_layers:
-                bu_name = ""
-                try:
-                    first_side_key = next(iter(self.store.layer_data[num]))
-                    source_file = self.store.layer_data[num][first_side_key]['SOURCE_FILE'].iloc[0]
-                    bu_name = get_bu_name_from_filename(str(source_file))
-                except: pass
-
-                base_label = bu_name if bu_name else f"Layer {num}"
-                label = f"{base_label} ({process_comment})" if process_comment else base_label
-                layer_buttons_data.append({'num': num, 'label': label})
+            layer_buttons_data = _build_layer_labels(self.store, all_layers)
 
             # Render Layer Buttons Row
             if layer_buttons_data:

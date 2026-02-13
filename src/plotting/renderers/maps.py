@@ -9,6 +9,7 @@ from src.core.config import (
     PlotTheme, TEXT_COLOR, SAFE_VERIFICATION_VALUES, UNIT_EDGE_COLOR, INTER_UNIT_GAP,
     GRID_COLOR, PANEL_BACKGROUND_COLOR, BACKGROUND_COLOR, PLOT_AREA_COLOR
 )
+from src.analytics.verification import filter_true_defects
 from src.enums import Quadrant
 from src.plotting.utils import apply_panel_theme
 from src.plotting.generators.shapes import create_grid_shapes, get_rounded_rect_path
@@ -643,11 +644,7 @@ def create_density_contour_map(
     panel_width, panel_height = ctx.panel_width, ctx.panel_height
 
     # Filter for True Defects
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-    if 'Verification' in df.columns:
-        df_true = df[~df['Verification'].str.upper().isin(safe_values_upper)].copy()
-    else:
-        df_true = df.copy()
+    df_true = filter_true_defects(df)
 
     if df_true.empty:
         return go.Figure(layout=dict(title="No True Defects Found"))
@@ -1055,11 +1052,7 @@ def create_unit_grid_heatmap(df: pd.DataFrame, panel_rows: int, panel_cols: int,
         return go.Figure()
 
     # Filter for True Defects
-    safe_values_upper = {v.upper() for v in SAFE_VERIFICATION_VALUES}
-    if 'Verification' in df.columns:
-        df_true = df[~df['Verification'].str.upper().isin(safe_values_upper)].copy()
-    else:
-        df_true = df.copy()
+    df_true = filter_true_defects(df)
 
     # Determine colors from theme
     if theme_config:

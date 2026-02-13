@@ -87,6 +87,8 @@ class BuildUpLayer:
             (df['UNIT_INDEX_X'] < self.panel_cols) & (df['UNIT_INDEX_Y'] >= self.panel_rows),
             (df['UNIT_INDEX_X'] >= self.panel_cols) & (df['UNIT_INDEX_Y'] >= self.panel_rows)
         ]
+        # np.select requires numpy boolean ndarrays; pandas Int32 comparisons yield Series
+        conditions_raw = [np.asarray(c, dtype=bool) for c in conditions_raw]
         choices = ['Q1', 'Q2', 'Q3', 'Q4']
         df['QUADRANT'] = np.select(conditions_raw, choices, default='Other')
 
@@ -123,8 +125,11 @@ class BuildUpLayer:
                     use_spatial_coords = True
                 else:
                     use_spatial_coords = False
-            except Exception as e:
+            except (TypeError, ValueError, KeyError) as e:
                 logger.warning(f"Spatial mapping failed: {e}")
+                use_spatial_coords = False
+            except Exception as e:
+                logger.exception("Spatial mapping failed with unexpected error")
                 use_spatial_coords = False
 
         if use_spatial_coords:

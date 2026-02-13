@@ -127,6 +127,12 @@ FALLBACK_COLORS = NEON_PALETTE + [
 # --- Reporting Constants ---
 CRITICAL_DEFECT_TYPES = ["Short", "Cut/Short"]
 
+# --- PNG Export (Package / Reporting) ---
+PNG_EXPORT_SCALE = 2
+PNG_EXPORT_WIDTH = 1200
+PNG_EXPORT_HEIGHT = 1200
+PNG_EXPORT_HEIGHT_PARETO = 800
+
 # --- Input Validation Constants ---
 FILENAME_PATTERN = r"BU-(\d{2})\s*([FB])"
 
