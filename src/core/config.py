@@ -136,6 +136,14 @@ PNG_EXPORT_HEIGHT_PARETO = 800
 # --- Input Validation Constants ---
 FILENAME_PATTERN = r"BU-(\d{2})\s*([FB])"
 
+# Columns to silently drop during ingestion (case-insensitive).
+# Update this list if there are site-specific columns you always want ignored.
+INGESTION_IGNORED_COLUMNS = [
+    'EMBEDDED_EXCEL',
+    'EMBEDDED_OBJECT',
+    'OLE_OBJECT'
+]
+
 # --- Verification Logic ---
 # Values in the 'Verification' column that are considered "Safe" (Non-Defects).
 # Any value NOT in this list is treated as a "True Defect" that impacts yield.
