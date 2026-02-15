@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from typing import List, Any, Dict
 from src.core.models import PanelData, BuildUpLayer
-from src.core.config import FILENAME_PATTERN
+from src.core.config import FILENAME_PATTERN, INGESTION_IGNORED_COLUMNS
 from src.io.validation import validate_schema
 from src.io.sample_generator import generate_sample_data
 from src.utils.telemetry import track_performance, PerformanceMonitor, get_dataframe_memory_usage
@@ -52,6 +52,13 @@ def load_panel_data(
             df.rename(columns={'VERIFICATION': 'Verification'}, inplace=True)
             df['SOURCE_FILE'] = file_name
             df['SIDE'] = side
+
+            # --- Pre-validation: drop configured ignore-columns (case-insensitive)
+            ignore_set = {c.lower() for c in INGESTION_IGNORED_COLUMNS}
+            cols_to_drop = [c for c in df.columns if c.lower() in ignore_set]
+            if cols_to_drop:
+                df.drop(columns=cols_to_drop, inplace=True)
+                st.warning(f"Removed ignored columns before processing: {', '.join(cols_to_drop)}")
 
             # --- Validation Layer ---
             # This handles column check, type conversion, and dropping bad rows
