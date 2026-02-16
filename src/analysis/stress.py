@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from typing import List, Tuple, Optional
 from src.analysis.base import AnalysisTool
 from src.enums import ViewMode
 from src.plotting.renderers.maps import create_stress_heatmap, create_delta_heatmap
@@ -89,4 +90,4 @@ class StressMapTool(AnalysisTool):
             )
 
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")

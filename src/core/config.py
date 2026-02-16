@@ -136,6 +136,15 @@ PNG_EXPORT_HEIGHT_PARETO = 800
 # --- Input Validation Constants ---
 FILENAME_PATTERN = r"BU-(\d{2})\s*([FB])"
 
+# Columns to keep during ingestion (Pruning)
+ALLOWED_INGESTION_COLUMNS = {
+    'DEFECT_TYPE', 'UNIT_INDEX_X', 'UNIT_INDEX_Y',
+    'Verification', 'X_COORDINATES', 'Y_COORDINATES',
+    'DEFECT_ID', 'SOURCE_FILE', 'SIDE', 'HAS_VERIFICATION_DATA',
+    # Ensure downstream compatibility and preserve useful metadata
+    'QUADRANT', 'Description', 'Comments', 'Remark'
+}
+
 # --- Verification Logic ---
 # Values in the 'Verification' column that are considered "Safe" (Non-Defects).
 # Any value NOT in this list is treated as a "True Defect" that impacts yield.

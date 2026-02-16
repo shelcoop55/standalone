@@ -4,17 +4,25 @@ from typing import Dict, List, Optional, Tuple, Any
 from src.core.models import PanelData
 from src.analytics.models import YieldKillerMetrics
 from src.analytics.verification import is_true_defect_mask, filter_true_defects
+from src.core.layout import apply_layout_to_dataframe
+from src.views.utils import get_geometry_context
+from src.state import SessionStore # We might need a way to get context without store if possible, or pass it in. 
+# Actually, get_geometry_context needs a store. 
+# If we can't easily get store, we can default to standard layout if context is missing?
+# Or we just instantiate a dummy context? 
+from src.core.config import FRAME_WIDTH, FRAME_HEIGHT # For context defaults if needed
 
 def get_true_defect_coordinates(
     panel_data: PanelData,
     excluded_layers: Optional[List[int]] = None,
     excluded_defect_types: Optional[List[str]] = None,
-    included_sides: Optional[List[str]] = None
+    included_sides: Optional[List[str]] = None,
+    store: Optional[SessionStore] = None # Optional store to get context
 ) -> Dict[Tuple[int, int], Dict[str, Any]]:
     """
     Aggregates all "True" defects to find unique defective cell coordinates.
-    Optimized implementation using vectorized pandas operations.
-
+    Applies layout transformation to ensure Back side is flipped (Look-Through).
+    
     Returns:
         Dict mapping (physical_x, physical_y) -> {
             'first_killer_layer': int,
@@ -49,8 +57,33 @@ def get_true_defect_coordinates(
     if true_defects_df.empty:
         return {}
 
+    # Apply Layout to get correct PHYSICAL_X (Flipped for Back side)
+    # We need panel dims. 
+    # If store is provided, use it. Else default to 7x7 (or infer? models doesn't have dims).
+    # Ideally we pass dimensions or store.
+    # For now, let's assume 7x7 if not provided, or try to get from config.
+    # But wait, panel_data might not have dims.
+    # We will try to fetch context if store is passed.
+    
+    ctx = None
+    if store:
+        ctx = get_geometry_context(store)
+        panel_rows = store.analysis_params.get("panel_rows", 7)
+        panel_cols = store.analysis_params.get("panel_cols", 7)
+    else:
+        # Fallback/Hack if store not passed (e.g. from tests or old calls)
+        # We really should pass store or dimensions.
+        # Let's import default_context? 
+        # For now, create a default context
+        from src.core.geometry import GeometryContext
+        ctx = GeometryContext() # Defaults
+        panel_rows, panel_cols = 7, 7 # Defaults
+
+    true_defects_df = apply_layout_to_dataframe(true_defects_df, ctx, panel_rows, panel_cols)
+
     if 'PHYSICAL_X' not in true_defects_df.columns:
-        true_defects_df['PHYSICAL_X'] = true_defects_df['UNIT_INDEX_X']
+        # Should be there after apply_layout_to_dataframe, but as fallback:
+        true_defects_df['PHYSICAL_X'] = true_defects_df['PHYSICAL_X_FLIPPED'] if 'PHYSICAL_X_FLIPPED' in true_defects_df.columns else true_defects_df['UNIT_INDEX_X']
 
     # 2. Aggregation Logic (Vectorized)
 

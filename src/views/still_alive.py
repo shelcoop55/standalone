@@ -65,7 +65,8 @@ def render_still_alive_main(store: SessionStore, theme_config=None):
         store.layer_data,
         excluded_layers=excluded_layers,
         excluded_defect_types=excluded_defects,
-        included_sides=included_sides
+        included_sides=included_sides,
+        store=store
     )
 
     # If side_mode != Both, we might need to post-filter the true_defect_data?
@@ -85,7 +86,7 @@ def render_still_alive_main(store: SessionStore, theme_config=None):
             ctx=ctx,
             theme_config=theme_config
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with summary_col:
         total_cells = (panel_rows * 2) * (panel_cols * 2)

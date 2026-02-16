@@ -3,7 +3,7 @@ from src.core.geometry import GeometryContext
 from src.core.config import (
     PANEL_WIDTH, PANEL_HEIGHT, GAP_SIZE,
     PANEL_BACKGROUND_COLOR, GRID_COLOR, UNIT_EDGE_COLOR, UNIT_FACE_COLOR,
-    INTER_UNIT_GAP, PlotTheme
+    INTER_UNIT_GAP, PlotTheme, FRAME_WIDTH, FRAME_HEIGHT
 )
 
 def get_rounded_rect_path(x0: float, y0: float, x1: float, y1: float, r: float) -> str:
@@ -107,15 +107,15 @@ def create_grid_shapes(
     Visual Origin does NOT affect the grid (it is fixed).
 
     Includes:
-    1. Outer Copper Frame (0-510)
-    2. Inner Black Gap (FixedOffset to 510-FixedOffset)
+    1. Outer Copper Frame (0-FRAME_WIDTH)
+    2. Inner Black Gap (FixedOffset to FRAME_WIDTH-FixedOffset)
     3. Quadrants (Offset to ...)
     """
     quad_width = ctx.quad_width
     quad_height = ctx.quad_height
 
     # Visual Origin logic removed from GRID shape calculation to keep it fixed to frame.
-    # The grid is physically located at 0-510.
+    # The grid is physically located at 0-FRAME_WIDTH.
 
     # 1. Outer Copper Frame
     gap_color = theme_config.panel_background_color if theme_config else PANEL_BACKGROUND_COLOR
@@ -125,7 +125,7 @@ def create_grid_shapes(
 
     if quadrant == 'All':
         # Draw BIG Copper Frame
-        path_frame = get_rounded_rect_path(0, 0, 510, 515, 20.0)
+        path_frame = get_rounded_rect_path(0, 0, FRAME_WIDTH, FRAME_HEIGHT, 20.0)
         shapes.append(dict(
             type="path",
             path=path_frame,

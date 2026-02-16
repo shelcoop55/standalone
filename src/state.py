@@ -6,7 +6,6 @@ import streamlit as st
 from dataclasses import dataclass
 from typing import Optional, Dict, List
 from src.enums import ViewMode, Quadrant
-from src.io.ingestion import load_panel_data
 from src.core.models import PanelData
 
 @dataclass
@@ -21,6 +20,7 @@ class SessionStore:
         defaults = {
             'report_bytes': None,
             'dataset_id': None,
+            'layer_data': None, # Now explicit field
             'layer_data_metadata': {}, # Store lightweight metadata (keys only)
             'selected_layer': None,
             'selected_side': 'F',
@@ -52,33 +52,14 @@ class SessionStore:
     @property
     def layer_data(self) -> Optional[PanelData]:
         """
-        Retrieves the heavy PanelData object from the global cache (cache_resource) using current inputs.
-        Optimized to use dataset_id check to avoid unnecessary cache lookups if no data is loaded.
+        Retrieves the PanelData object from the session state.
+        Now decoupled from ingestion logic.
         """
-        if not self.dataset_id:
-            return None
+        return st.session_state.layer_data
 
-        current_uploader_key = f"uploaded_files_{st.session_state.get('uploader_key', 0)}"
-        files = st.session_state.get(current_uploader_key, [])
-
-        # Retrieve geometric params from analysis_params
-        # Defaults matching config.py if not present
-        params = self.analysis_params
-        rows = params.get("panel_rows", 7)
-        cols = params.get("panel_cols", 7)
-        width = params.get("panel_width", 470)
-        height = params.get("panel_height", 470)
-        gap_x = params.get("gap_x", 3.0)
-        gap_y = params.get("gap_y", 3.0)
-
-        # Safety Check: If we expect Real Data (ID set) but files are lost/empty, return None.
-        is_sample = self.dataset_id and str(self.dataset_id).startswith("sample")
-
-        if not files and not is_sample:
-             return None
-
-        # Call load_panel_data. If inputs haven't changed, it hits cache_resource.
-        return load_panel_data(files, rows, cols, width, height, gap_x, gap_y)
+    @layer_data.setter
+    def layer_data(self, data: Optional[PanelData]):
+        st.session_state.layer_data = data
 
     @property
     def layer_data_keys(self) -> Dict:
@@ -197,3 +178,4 @@ class SessionStore:
         self.selected_layer = layer_num
         if side:
             self.selected_side = side
+

@@ -8,6 +8,7 @@ from src.plotting.renderers.charts import create_pareto_figure
 from src.core.config import PLOT_AREA_COLOR, PANEL_COLOR, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, PlotTheme
 from src.analytics.verification import filter_true_defects
 from src.views.utils import get_geometry_context
+from src.core.layout import apply_layout_to_dataframe
 
 def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: str, verification_selection: any, theme_config: PlotTheme = None):
     params = store.analysis_params
@@ -20,6 +21,10 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
         side_df = layer_info.get(store.selected_side)
 
         if side_df is not None and not side_df.empty:
+            # Apply Layout to ensure QUADRANT and plotting coords exist
+            ctx = get_geometry_context(store)
+            side_df = apply_layout_to_dataframe(side_df, ctx, panel_rows, panel_cols, side=store.selected_side)
+
             # Handle list-based verification (from multiselect) or single string
             if isinstance(verification_selection, list):
                 if not verification_selection:
@@ -33,16 +38,15 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
             display_df = filtered_df[filtered_df['QUADRANT'] == quadrant_selection] if quadrant_selection != Quadrant.ALL.value else filtered_df
 
             if view_mode == ViewMode.DEFECT.value:
-                ctx = get_geometry_context(store)
-
+                # ctx already retrieved above needed for map
                 fig = create_defect_map_figure(
                     display_df, panel_rows, panel_cols, ctx, quadrant_selection, lot_number,
                     theme_config=theme_config
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             elif view_mode == ViewMode.PARETO.value:
                 fig = create_pareto_figure(display_df, quadrant_selection, theme_config=theme_config)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             elif view_mode == ViewMode.SUMMARY.value:
                 # Pass necessary context to the summary view
                 render_summary_view(
@@ -53,6 +57,7 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
                     layer_info=layer_info,
                     selected_layer_num=selected_layer_num,
                     filtered_df=filtered_df, # Passed for Quarterly breakdown logic
+                    ctx=ctx,
                     theme_config=theme_config
                 )
 
@@ -64,6 +69,7 @@ def render_summary_view(
     layer_info: dict,
     selected_layer_num: int,
     filtered_df: pd.DataFrame,
+    ctx: any = None,
     theme_config: PlotTheme = None
 ):
     """
@@ -156,6 +162,10 @@ def render_summary_view(
                 full_layer_dfs.append(val)
         full_layer_df = pd.concat(full_layer_dfs, ignore_index=True)
 
+        if not full_layer_df.empty and ctx:
+             # Apply layout to ensure QUADRANT info is available for yield calc
+             full_layer_df = apply_layout_to_dataframe(full_layer_df, ctx, panel_rows, panel_cols)
+             
         # Logic: True defect if NOT in safe list
         true_yield_defects = filter_true_defects(full_layer_df)
         combined_defective_cells = len(true_yield_defects[['UNIT_INDEX_X', 'UNIT_INDEX_Y']].drop_duplicates())
