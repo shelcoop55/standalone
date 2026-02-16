@@ -76,24 +76,24 @@ class ViewManager:
 
         # Layer Inspection Button
         is_layer = self.store.active_view == 'layer'
-        nav_cols[0].button("Layer Inspection", type="primary" if is_layer else "secondary", use_container_width=True, on_click=lambda: set_mode('layer'))
+        nav_cols[0].button("Layer Inspection", type="primary" if is_layer else "secondary", width="stretch", on_click=lambda: set_mode('layer'))
 
         # Analysis Page Button
         # Analysis includes subviews: dashboard, still_alive, multi_layer
         is_analysis = self.store.active_view in ['analysis_dashboard', 'multi_layer_defects']
-        nav_cols[1].button("Analysis Page", type="primary" if is_analysis else "secondary", use_container_width=True, on_click=lambda: set_mode('analysis'))
+        nav_cols[1].button("Analysis Page", type="primary" if is_analysis else "secondary", width="stretch", on_click=lambda: set_mode('analysis'))
 
         # Reporting Button (3rd)
         is_rep = self.store.active_view == 'reporting'
-        nav_cols[2].button("Reporting", type="primary" if is_rep else "secondary", use_container_width=True, on_click=lambda: set_mode('reporting'))
+        nav_cols[2].button("Reporting", type="primary" if is_rep else "secondary", width="stretch", on_click=lambda: set_mode('reporting'))
 
         # Documentation Button (4th)
         is_doc = self.store.active_view == 'documentation'
-        nav_cols[3].button("Documentation", type="primary" if is_doc else "secondary", use_container_width=True, on_click=lambda: set_mode('documentation'))
+        nav_cols[3].button("Documentation", type="primary" if is_doc else "secondary", width="stretch", on_click=lambda: set_mode('documentation'))
 
         # Sample Data Button (5th) - Colorful
         is_sample = self.store.active_view == 'sample_data'
-        nav_cols[4].button("🎨 Sample Data", type="primary" if is_sample else "secondary", use_container_width=True, on_click=lambda: set_mode('sample_data'))
+        nav_cols[4].button("🎨 Sample Data", type="primary" if is_sample else "secondary", width="stretch", on_click=lambda: set_mode('sample_data'))
 
 
         # st.divider() # Removed as per user request
@@ -207,7 +207,7 @@ class ViewManager:
                          label,
                          key=f"layer_btn_{i}",
                          type="primary" if is_active else "secondary",
-                         use_container_width=True,
+                         width="stretch",
                          on_click=on_layer_click(layer_num)
                      )
 
@@ -230,7 +230,7 @@ class ViewManager:
                         label,
                         key=f"side_btn_{i}",
                         type="primary" if is_active else "secondary",
-                        use_container_width=True,
+                        width="stretch",
                         on_click=on_side_click(code)
                     )
 
@@ -251,7 +251,7 @@ class ViewManager:
                         label,
                         key=f"quad_btn_{i}",
                         type="primary" if is_active else "secondary",
-                        use_container_width=True,
+                        width="stretch",
                         on_click=on_quad_click(label)
                     )
 
@@ -285,7 +285,7 @@ class ViewManager:
                 label,
                 key=f"view_mode_btn_{i}",
                 type="primary" if is_active else "secondary",
-                use_container_width=True,
+                width="stretch",
                 on_click=make_callback(mapped_val)
             )
 
@@ -380,7 +380,7 @@ class ViewManager:
                             else: new_sel.append(n)
                             self.store.multi_layer_selection = sorted(new_sel)
                         return cb
-                    l_cols[i].button(d['label'], key=f"an_btn_l_{num}", type="primary" if is_sel else "secondary", use_container_width=True, on_click=on_click_layer(num))
+                    l_cols[i].button(d['label'], key=f"an_btn_l_{num}", type="primary" if is_sel else "secondary", width="stretch", on_click=on_click_layer(num))
 
             # --- ROW 2: SIDE + QUADRANT (50% / 50%) ---
 
@@ -420,10 +420,10 @@ class ViewManager:
                     return cb
 
                 is_f = "Front" in current_sides
-                target_cols[0].button("Front", key="an_side_f", type="primary" if is_f else "secondary", use_container_width=True, on_click=toggle_side("Front"))
+                target_cols[0].button("Front", key="an_side_f", type="primary" if is_f else "secondary", width="stretch", on_click=toggle_side("Front"))
 
                 is_b = "Back" in current_sides
-                target_cols[1].button("Back", key="an_side_b", type="primary" if is_b else "secondary", use_container_width=True, on_click=toggle_side("Back"))
+                target_cols[1].button("Back", key="an_side_b", type="primary" if is_b else "secondary", width="stretch", on_click=toggle_side("Back"))
 
             # --- Quadrants Group ---
             if show_quadrant:
@@ -436,7 +436,7 @@ class ViewManager:
 
                     for i, q_label in enumerate(quad_opts):
                         is_active = (current_quad == q_label)
-                        q_cols[i].button(q_label, key=f"an_quad_{q_label}", type="primary" if is_active else "secondary", use_container_width=True, on_click=lambda q=q_label: set_quad(q))
+                        q_cols[i].button(q_label, key=f"an_quad_{q_label}", type="primary" if is_active else "secondary", width="stretch", on_click=lambda q=q_label: set_quad(q))
 
         # st.divider() # Removed as per user request
 
@@ -456,7 +456,7 @@ class ViewManager:
                          sub_map = {"Heatmap": ViewMode.HEATMAP.value, "Stress Map": ViewMode.STRESS.value, "Root Cause": ViewMode.ROOT_CAUSE.value, "Insights": ViewMode.INSIGHTS.value}
                          self.store.analysis_subview = sub_map[sel]
                 return cb
-            t_cols[i].button(label, key=f"an_tab_{i}", type="primary" if is_active else "secondary", use_container_width=True, on_click=on_tab(label))
+            t_cols[i].button(label, key=f"an_tab_{i}", type="primary" if is_active else "secondary", width="stretch", on_click=on_tab(label))
 
         st.divider()
 
@@ -603,7 +603,7 @@ class ViewManager:
 
         st.markdown("---")
 
-        if st.button("📦 Generate Download Package", type="primary", use_container_width=True):
+        if st.button("📦 Generate Download Package", type="primary", width="stretch"):
             with st.spinner("Generating Package..."):
                 full_df = self.store.layer_data.get_combined_dataframe()
                 
@@ -705,7 +705,7 @@ class ViewManager:
                 file_name=zip_filename,
                 mime="application/zip",
                 type="primary",
-                use_container_width=True
+                width="stretch"
             )
 
     def render_main_view(self):
@@ -784,7 +784,7 @@ class ViewManager:
                  loc_idx = display_df.columns.get_loc(target_col)
                  display_df = display_df.iloc[:, :loc_idx+1]
             
-            st.dataframe(display_df.head(100), use_container_width=True)
+            st.dataframe(display_df.head(100), width="stretch")
             st.caption(f"Showing first 100 rows of {len(display_df)} total records.")
         else:
             st.warning("No data loaded.")

@@ -44,10 +44,10 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
                     display_df, panel_rows, panel_cols, ctx, quadrant_selection, lot_number,
                     theme_config=theme_config
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             elif view_mode == ViewMode.PARETO.value:
                 fig = create_pareto_figure(display_df, quadrant_selection, theme_config=theme_config)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             elif view_mode == ViewMode.SUMMARY.value:
                 # Pass necessary context to the summary view
                 render_summary_view(
@@ -148,7 +148,7 @@ def render_summary_view(
         # FIX: Replace use_container_width with width='stretch'
         st.dataframe(
             top_offenders.style.format({'Percentage': '{:.2f}%'}).background_gradient(cmap=theme_cmap, subset=['Count']),
-            use_container_width=True
+            width="stretch"
         )
     else:
         st.markdown("### Panel-Wide KPIs (Filtered)")
@@ -230,9 +230,8 @@ def render_summary_view(
             # Gradient for 'Total Defects' and 'True Defects'
             st.dataframe(
                 kpi_df.style
-                .background_gradient(cmap='Reds', subset=['Total Defects', 'True Defects', 'Non-Detects (Safe)'])
                 .format({'Safe Ratio': '{:>8}', 'Yield': '{:>8}'}), # Alignment
-                use_container_width=True
+                width="stretch"
             )
         else:
             st.info("No data to display for the quarterly breakdown based on current filters.")

@@ -63,7 +63,7 @@ class InsightsTool(AnalysisTool):
                 c1, c2 = st.columns([2, 1], gap="medium")
 
                 with c1:
-                    st.plotly_chart(create_defect_sunburst(combined_df), use_container_width=True)
+                    st.plotly_chart(create_defect_sunburst(combined_df), width="stretch")
 
                 with c2:
                     st.markdown("##### Defect Statistics")
@@ -100,7 +100,7 @@ class InsightsTool(AnalysisTool):
                         st.dataframe(
                             stats_df,
                             hide_index=True,
-                            use_container_width=True,
+                            width="stretch",
                             column_config={
                                 "Defect Type": st.column_config.TextColumn("Type"),
                                 "Count": st.column_config.TextColumn("Count (% Total)"),
@@ -112,7 +112,7 @@ class InsightsTool(AnalysisTool):
 
                 sankey = create_defect_sankey(combined_df)
                 if sankey:
-                    st.plotly_chart(sankey, use_container_width=True)
+                    st.plotly_chart(sankey, width="stretch")
             else:
                 st.warning("No data after filtering.")
         else:
