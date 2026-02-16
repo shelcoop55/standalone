@@ -131,7 +131,7 @@ class HeatmapTool(AnalysisTool):
                     theme_config=current_theme,
                     zmax_override=zmax_override,
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
                 # --- Downloads that use the currently rendered figure ---
                 try:
@@ -188,7 +188,7 @@ class HeatmapTool(AnalysisTool):
                     theme_config=current_theme,
                     zmax_override=zmax_override,
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
                 # Per-layer downloads
                 try:

@@ -32,7 +32,19 @@ class SessionStore:
             'quadrant_selection': Quadrant.ALL.value,
             'verification_selection': 'All',
             'multi_layer_selection': [],
-            'multi_side_selection': []
+            'multi_side_selection': [],
+            # Reporting Flags
+            'rep_include_excel': True,
+            'rep_include_coords': True,
+            'rep_include_map': True,
+            'rep_include_insights': True,
+            'rep_include_png_all': False,
+            'rep_include_pareto': False,
+            'rep_include_heatmap_png': False,
+            'rep_include_stress_png': False,
+            'rep_include_rca_html': False,
+            'rep_include_still_alive_png': False,
+            'rep_rca_axis': 'Y'
         }
 
         for key, value in defaults.items():

@@ -90,4 +90,4 @@ class StressMapTool(AnalysisTool):
             )
 
         if fig:
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)

@@ -44,10 +44,10 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
                     display_df, panel_rows, panel_cols, ctx, quadrant_selection, lot_number,
                     theme_config=theme_config
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
             elif view_mode == ViewMode.PARETO.value:
                 fig = create_pareto_figure(display_df, quadrant_selection, theme_config=theme_config)
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
             elif view_mode == ViewMode.SUMMARY.value:
                 # Pass necessary context to the summary view
                 render_summary_view(

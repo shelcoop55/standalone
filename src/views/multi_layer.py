@@ -56,6 +56,6 @@ def render_multi_layer_view(store: SessionStore, selected_layers: list, selected
             flip_back=flip_back,
             theme_config=theme_config
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No data matches current filters.")

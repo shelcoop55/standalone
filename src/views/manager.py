@@ -569,24 +569,24 @@ class ViewManager:
 
         with col1:
             st.subheader("Report Content")
-            include_excel = st.checkbox("Excel Report", value=True, key="rep_include_excel", help="Includes summary stats, defect lists, and KPI tables.")
-            include_coords = st.checkbox("Coordinate List", value=True, key="rep_include_coords", help="Includes a list of defective cell coordinates.")
+            include_excel = st.checkbox("Excel Report", key="rep_include_excel", help="Includes summary stats, defect lists, and KPI tables.")
+            include_coords = st.checkbox("Coordinate List", key="rep_include_coords", help="Includes a list of defective cell coordinates.")
 
             st.subheader("Visualizations")
-            include_map = st.checkbox("Defect Map (HTML)", value=True, key="rep_include_map", help="Interactive HTML map of defects.")
-            include_insights = st.checkbox("Insights Charts", value=True, key="rep_include_insights", help="Interactive Sunburst and Sankey charts.")
+            include_map = st.checkbox("Defect Map (HTML)", key="rep_include_map", help="Interactive HTML map of defects.")
+            include_insights = st.checkbox("Insights Charts", key="rep_include_insights", help="Interactive Sunburst and Sankey charts.")
 
         with col2:
             st.subheader("Image Exports")
             st.markdown("*(Optional) Include static images for offline viewing.*")
-            include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", value=False, key="rep_include_png_all")
-            include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False, key="rep_include_pareto")
+            include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", key="rep_include_png_all")
+            include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", key="rep_include_pareto")
             st.markdown("##### Additional Analysis Charts")
-            include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False, key="rep_include_heatmap_png")
+            include_heatmap_png = st.checkbox("Heatmap (PNG)", key="rep_include_heatmap_png")
             # HTML Heatmap removed as per user request
             include_heatmap_html = False 
-            include_stress_png = st.checkbox("Stress Map (PNG)", value=False, key="rep_include_stress_png")
-            include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False, key="rep_include_rca_html")
+            include_stress_png = st.checkbox("Stress Map (PNG)", key="rep_include_stress_png")
+            include_root_cause_html = st.checkbox("Root Cause (HTML)", key="rep_include_rca_html")
 
             rca_slice_axis = 'Y'
             if include_root_cause_html:
@@ -599,7 +599,7 @@ class ViewManager:
                 )
                 rca_slice_axis = 'Y' if 'Y' in rca_choice else 'X'
 
-            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False, key="rep_include_still_alive_png")
+            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", key="rep_include_still_alive_png")
 
         st.markdown("---")
 
