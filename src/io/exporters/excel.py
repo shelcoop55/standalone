@@ -191,16 +191,16 @@ def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols
     q2_data = q_metrics.get('Q2', {'real': 0, 'false': 0, 'yield': 1.0})
     q1_data = q_metrics.get('Q1', {'real': 0, 'false': 0, 'yield': 1.0})
     
-    # Format: Q1 - Real Defects (False Alarm)
-    sheet.write(map_start_row + 2, 1, f"Q2\n{q2_data['real']} Real ({q2_data['false']} False)", get_fmt(q2_data['yield']))
-    sheet.write(map_start_row + 2, 2, f"Q1\n{q1_data['real']} Real ({q1_data['false']} False)", get_fmt(q1_data['yield']))
+    # Format: Q1- Real (Real): False (False)
+    sheet.write(map_start_row + 2, 1, f"Q2- {q2_data['real']} (Real): {q2_data['false']} (False)", get_fmt(q2_data['yield']))
+    sheet.write(map_start_row + 2, 2, f"Q1- {q1_data['real']} (Real): {q1_data['false']} (False)", get_fmt(q1_data['yield']))
     
     # Row 2: Q3, Q4
     q3_data = q_metrics.get('Q3', {'real': 0, 'false': 0, 'yield': 1.0})
     q4_data = q_metrics.get('Q4', {'real': 0, 'false': 0, 'yield': 1.0})
     
-    sheet.write(map_start_row + 3, 1, f"Q3\n{q3_data['real']} Real ({q3_data['false']} False)", get_fmt(q3_data['yield']))
-    sheet.write(map_start_row + 3, 2, f"Q4\n{q4_data['real']} Real ({q4_data['false']} False)", get_fmt(q4_data['yield']))
+    sheet.write(map_start_row + 3, 1, f"Q3- {q3_data['real']} (Real): {q3_data['false']} (False)", get_fmt(q3_data['yield']))
+    sheet.write(map_start_row + 3, 2, f"Q4- {q4_data['real']} (Real): {q4_data['false']} (False)", get_fmt(q4_data['yield']))
     
     sheet.set_column(1, 2, 20) # Wider columns for map boxes
     sheet.set_row(map_start_row + 2, 50)
