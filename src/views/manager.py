@@ -14,6 +14,8 @@ from src.analytics.yield_analysis import get_true_defect_coordinates
 from src.core.geometry import GeometryEngine
 from src.core.config import DEFAULT_OFFSET_X, DEFAULT_OFFSET_Y
 import streamlit.components.v1 as components
+from src.views.utils import get_geometry_context
+from src.core.layout import apply_layout_to_dataframe
 
 def _build_layer_labels(store: SessionStore, layer_nums: List[int]) -> List[dict]:
     """Build list of {num, label} for layer dropdowns/buttons. Label uses BU name from SOURCE_FILE when available."""
@@ -59,21 +61,18 @@ class ViewManager:
             return
 
         # --- Top Navigation Bar (Global) ---
-        # "Layer Inspection", "Analysis Page", "Reporting", "Documentation"
-        nav_cols = st.columns(4, gap="small")
+        # "Layer Inspection", "Analysis Page", "Reporting", "Sample Data", "Documentation"
+        nav_cols = st.columns(5, gap="small")
 
         def set_mode(m):
             if m == 'layer': self.store.active_view = 'layer'
             elif m == 'documentation': self.store.active_view = 'documentation'
             elif m == 'reporting': self.store.active_view = 'reporting'
+            elif m == 'sample_data': self.store.active_view = 'sample_data'
             else:
                 # Analysis default
-                # Changed default from HEATMAP to STILL_ALIVE as per user request
-                if self.store.active_view not in ['still_alive', 'multi_layer_defects', 'analysis_dashboard']:
-                     self.store.active_view = 'still_alive'
-                elif self.store.active_view == 'documentation':
-                     # Return to default analysis view if coming back
-                     self.store.active_view = 'still_alive'
+                if self.store.active_view not in ['multi_layer_defects', 'analysis_dashboard', 'sample_data']:
+                     self.store.active_view = 'analysis_dashboard'
 
         # Layer Inspection Button
         is_layer = self.store.active_view == 'layer'
@@ -81,24 +80,29 @@ class ViewManager:
 
         # Analysis Page Button
         # Analysis includes subviews: dashboard, still_alive, multi_layer
-        is_analysis = self.store.active_view in ['analysis_dashboard', 'still_alive', 'multi_layer_defects']
+        is_analysis = self.store.active_view in ['analysis_dashboard', 'multi_layer_defects']
         nav_cols[1].button("Analysis Page", type="primary" if is_analysis else "secondary", use_container_width=True, on_click=lambda: set_mode('analysis'))
 
-        # Documentation Button
-        is_doc = self.store.active_view == 'documentation'
-        nav_cols[2].button("Documentation", type="primary" if is_doc else "secondary", use_container_width=True, on_click=lambda: set_mode('documentation'))
-
-        # Reporting Button
+        # Reporting Button (3rd)
         is_rep = self.store.active_view == 'reporting'
-        nav_cols[3].button("Reporting", type="primary" if is_rep else "secondary", use_container_width=True, on_click=lambda: set_mode('reporting'))
+        nav_cols[2].button("Reporting", type="primary" if is_rep else "secondary", use_container_width=True, on_click=lambda: set_mode('reporting'))
+
+        # Documentation Button (4th)
+        is_doc = self.store.active_view == 'documentation'
+        nav_cols[3].button("Documentation", type="primary" if is_doc else "secondary", use_container_width=True, on_click=lambda: set_mode('documentation'))
+
+        # Sample Data Button (5th) - Colorful
+        is_sample = self.store.active_view == 'sample_data'
+        nav_cols[4].button("🎨 Sample Data", type="primary" if is_sample else "secondary", use_container_width=True, on_click=lambda: set_mode('sample_data'))
+
 
         # st.divider() # Removed as per user request
 
         if self.store.active_view == 'layer':
             self._render_layer_inspection_controls()
             # st.divider() # Removed as per user request
-        elif self.store.active_view in ['documentation', 'reporting']:
-            # No specific controls for documentation or reporting
+        elif self.store.active_view in ['documentation', 'reporting', 'sample_data']:
+            # No specific controls for documentation or reporting or sample data
             pass
         else:
             self._render_analysis_page_controls()
@@ -253,11 +257,12 @@ class ViewManager:
 
         # --- Tabs for View Mode (Full Width Buttons) ---
         st.markdown("") # Spacer
-        tab_labels = ["Defect View", "Summary View", "Pareto View"]
+        tab_labels = ["Defect View", "Summary View", "Pareto View", "Still Alive"]
         tab_map = {
             "Defect View": ViewMode.DEFECT.value,
             "Summary View": ViewMode.SUMMARY.value,
-            "Pareto View": ViewMode.PARETO.value
+            "Pareto View": ViewMode.PARETO.value,
+            "Still Alive": ViewMode.STILL_ALIVE.value
         }
 
         # Determine active view
@@ -601,9 +606,17 @@ class ViewManager:
         if st.button("📦 Generate Download Package", type="primary", use_container_width=True):
             with st.spinner("Generating Package..."):
                 full_df = self.store.layer_data.get_combined_dataframe()
+                
+                # FIX: Apply layout to ensures QUADRANT column exists for Excel export
+                if not full_df.empty:
+                    ctx = get_geometry_context(self.store)
+                    # We need panel dims
+                    panel_rows = self.store.analysis_params.get("panel_rows", 7)
+                    panel_cols = self.store.analysis_params.get("panel_cols", 7)
+                    full_df = apply_layout_to_dataframe(full_df, ctx, panel_rows, panel_cols)
 
                 # Get True Defect Coords (returns dict)
-                td_result = get_true_defect_coordinates(self.store.layer_data)
+                td_result = get_true_defect_coordinates(self.store.layer_data, store=self.store)
                 # Pass the full dictionary to the package generator so it can access metadata
                 true_defect_data = td_result if td_result else {}
 
@@ -739,5 +752,39 @@ class ViewManager:
         elif self.store.active_view == 'reporting':
              self.render_reporting_view()
 
+        elif self.store.active_view == 'sample_data':
+             self.render_sample_data_view()
+
         else:
             st.warning(f"Unknown view: {self.store.active_view}")
+
+    def render_sample_data_view(self):
+        """Renders the Sample Data view."""
+        st.header("Uploaded Data Preview")
+        st.info("Below is a sample of the data currently loaded into the application.")
+        
+        full_df = self.store.layer_data.get_combined_dataframe()
+        if not full_df.empty:
+            display_df = full_df.copy()
+            
+            # Filter columns: remove SOURCE_FILE and keep only up to 'Verification'
+            if 'SOURCE_FILE' in display_df.columns:
+                display_df = display_df.drop(columns=['SOURCE_FILE'])
+            
+            # Find column index of 'Verification' (or similar)
+            # The exact column name might be 'Verification' or 'HAS_VERIFICATION_DATA' based on screenshots/code
+            # The user said "Verifcation Status". In previous code I saw 'Verification'.
+            # Let's check for 'Verification' first.
+            target_col = 'Verification'
+            if target_col not in display_df.columns and 'HAS_VERIFICATION_DATA' in display_df.columns:
+                target_col = 'HAS_VERIFICATION_DATA'
+            
+            if target_col in display_df.columns:
+                 # Slice columns up to and including target_col
+                 loc_idx = display_df.columns.get_loc(target_col)
+                 display_df = display_df.iloc[:, :loc_idx+1]
+            
+            st.dataframe(display_df.head(100), use_container_width=True)
+            st.caption(f"Showing first 100 rows of {len(display_df)} total records.")
+        else:
+            st.warning("No data loaded.")

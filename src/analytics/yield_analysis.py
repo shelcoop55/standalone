@@ -71,13 +71,14 @@ def get_true_defect_coordinates(
         panel_rows = store.analysis_params.get("panel_rows", 7)
         panel_cols = store.analysis_params.get("panel_cols", 7)
     else:
-        # Fallback/Hack if store not passed (e.g. from tests or old calls)
-        # We really should pass store or dimensions.
-        # Let's import default_context? 
-        # For now, create a default context
-        from src.core.geometry import GeometryContext
-        ctx = GeometryContext() # Defaults
-        panel_rows, panel_cols = 7, 7 # Defaults
+        # Fallback if store not passed: Cannot apply advanced layout
+        # We could try to create a default context if we import config values
+        # But for now, let's just warn and skip layout application
+        # or better, do not try to instantiate GeometryContext without args.
+        ctx = None
+        panel_rows, panel_cols = 7, 7 
+        # Optional: Log warning?
+        pass
 
     true_defects_df = apply_layout_to_dataframe(true_defects_df, ctx, panel_rows, panel_cols)
 

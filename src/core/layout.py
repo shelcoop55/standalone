@@ -25,6 +25,11 @@ def apply_layout_to_dataframe(
     # Work on a copy to avoid SettingWithCopyMethod on slices
     df = df.copy()
 
+    if ctx is None:
+        # Cannot apply layout if context is missing.
+        # Fallback to Unit Index if not present, handled by caller.
+        return df
+
     # Dimensions from Context
     quad_width = ctx.quad_width
     quad_height = ctx.quad_height

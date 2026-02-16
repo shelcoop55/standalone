@@ -7,6 +7,7 @@ from src.plotting.renderers.maps import create_defect_map_figure
 from src.plotting.renderers.charts import create_pareto_figure
 from src.core.config import PLOT_AREA_COLOR, PANEL_COLOR, GAP_SIZE, PANEL_WIDTH, PANEL_HEIGHT, PlotTheme
 from src.analytics.verification import filter_true_defects
+from src.views.still_alive import render_still_alive_main # Imported for UI Refactor
 from src.views.utils import get_geometry_context
 from src.core.layout import apply_layout_to_dataframe
 
@@ -56,10 +57,12 @@ def render_layer_view(store: SessionStore, view_mode: str, quadrant_selection: s
                     panel_cols=panel_cols,
                     layer_info=layer_info,
                     selected_layer_num=selected_layer_num,
-                    filtered_df=filtered_df, # Passed for Quarterly breakdown logic
+                    filtered_df=filtered_df,
                     ctx=ctx,
                     theme_config=theme_config
                 )
+            elif view_mode == ViewMode.STILL_ALIVE.value:
+                render_still_alive_main(store, theme_config=theme_config)
 
 def render_summary_view(
     display_df: pd.DataFrame,
@@ -76,7 +79,7 @@ def render_summary_view(
     Renders the detailed Statistical Summary Dashboard.
     Logic restored from user request.
     """
-    st.header(f"Statistical Summary for Layer {selected_layer_num}, Quadrant: {quadrant_selection}")
+    st.header(f"Statistical Summary for Layer {selected_layer_num}, Quarter: {quadrant_selection}")
 
     if display_df.empty:
         st.info("No defects to summarize in the selected quadrant.")
