@@ -10,17 +10,6 @@ from src.analytics.verification import is_true_defect_value
 from src.enums import Quadrant
 from src.plotting.utils import apply_panel_theme, hex_to_rgba
 
-def create_pareto_trace(df: pd.DataFrame) -> go.Bar:
-    if df.empty: return go.Bar(name='Pareto')
-
-    has_verification_data = df['HAS_VERIFICATION_DATA'].any() if 'HAS_VERIFICATION_DATA' in df.columns else False
-    group_col = 'Verification' if has_verification_data else 'DEFECT_TYPE'
-
-    pareto_data = df[group_col].value_counts().reset_index()
-    pareto_data.columns = ['Label', 'Count']
-
-    return go.Bar(x=pareto_data['Label'], y=pareto_data['Count'], name='Pareto', marker_color='#4682B4')
-
 def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
     if df.empty: return []
 
@@ -28,7 +17,12 @@ def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
     group_col = 'Verification' if has_verification_data else 'DEFECT_TYPE'
 
     grouped_data = df.groupby(['QUADRANT', group_col], observed=True).size().reset_index(name='Count')
-    top_items = df[group_col].value_counts().index.tolist()
+    # Filter out zero counts
+    grouped_data = grouped_data[grouped_data['Count'] > 0]
+    
+    # Get top items, excluding zero counts
+    top_items_counts = df[group_col].value_counts()
+    top_items = top_items_counts[top_items_counts > 0].index.tolist()
 
     traces = []
     quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
@@ -45,22 +39,113 @@ def create_grouped_pareto_trace(df: pd.DataFrame) -> List[go.Bar]:
 
 def create_pareto_figure(df: pd.DataFrame, quadrant_selection: str = Quadrant.ALL.value, theme_config: Optional[PlotTheme] = None) -> go.Figure:
     """
-    Creates the Pareto Figure (Traces + Layout).
+    Creates the Pareto Figure with Dual Axis (Count + Cumulative %) and Smart Styling.
     """
+    if df.empty:
+        return go.Figure()
+
+    # 1. Prepare Aggregated Data for Sorting and Cumulative Line
+    has_verification_data = df['HAS_VERIFICATION_DATA'].any() if 'HAS_VERIFICATION_DATA' in df.columns else False
+    group_col = 'Verification' if has_verification_data else 'DEFECT_TYPE'
+    
+    # Total counts per type (descending)
+    counts = df[group_col].value_counts().reset_index()
+    counts.columns = ['Label', 'Count']
+    # Filter out zero counts (e.g. from unused categories like GE57, N)
+    counts = counts[counts['Count'] > 0]
+    
+    if counts.empty:
+        return go.Figure()
+
+    total_defects = counts['Count'].sum()
+    counts['Cumulative'] = counts['Count'].cumsum()
+    counts['CumulativePct'] = (counts['Cumulative'] / total_defects) * 100
+
     fig = go.Figure()
+
+    # 2. Add Bar Traces
     if quadrant_selection == Quadrant.ALL.value:
-        for trace in create_grouped_pareto_trace(df): fig.add_trace(trace)
+        # Stacked Bar by Quadrant (Keep existing logic but ensure sort order matches total)
+        traces = create_grouped_pareto_trace(df)
+        for trace in traces:
+            fig.add_trace(trace)
         fig.update_layout(barmode='stack')
     else:
-        fig.add_trace(create_pareto_trace(df))
+        # Single Series - Apply "Vital Few" Coloring
+        # Identify "Vital Few" (up to 80%)
+        # We assign color based on whether the *previous* bar was already past 80%? 
+        # Or if this bar *contributes* to the first 80%. 
+        # Usually vital few are the ones that BRING the line up to 80%.
+        
+        # Vectorized color assignment
+        # Logic: If CumulativePct <= 80 OR (it's the first one crossing 80), it's Vital.
+        # Actually simplest: distinct color for top N bars.
+        
+        colors = []
+        vital_color = '#EF553B' # Red/Orange
+        trivial_color = '#636EFA' # Blue/Grey
+        
+        for pct in counts['CumulativePct']:
+            if pct <= 80.0:
+                colors.append(vital_color)
+            else:
+                # Check if the *previous* one was <= 80. If so, this one *crossed* it. 
+                # But for simplicity, let's just use strict cut-off or handle the crossover.
+                # If we want to capture the bar that crosses 80%, we need slightly more logic.
+                # Let's stick to: if it's <= 85% it gets the color, to be safe? 
+                # Or just strictly <= 80. 
+                # Let's do: Strict <= 80 means "Inside Vital Zone".
+                colors.append(trivial_color)
+                
+        # Fix: Ensure at least one vital color if 80% is crossed immediately? 
+        # If the first bar is 90%, it should be vital.
+        if counts['CumulativePct'].iloc[0] > 80.0:
+            colors[0] = vital_color
+            
+        fig.add_trace(go.Bar(
+            name='Count',
+            x=counts['Label'],
+            y=counts['Count'],
+            marker_color=colors,
+            text=counts['Count'],            # Smart Annotation
+            textposition='auto',             # Auto inside/outside
+            hovertemplate='%{x}: %{y} defects<extra></extra>'
+        ))
 
+    # 3. Add Cumulative Percentage Line (Dual Axis)
+    fig.add_trace(go.Scatter(
+        x=counts['Label'],
+        y=counts['CumulativePct'],
+        name='Cumulative %',
+        mode='lines+markers',
+        marker=dict(symbol='circle', size=6, color="#00CC96"), # Green line
+        line=dict(width=2, color="#00CC96"),
+        yaxis='y2',
+        hovertemplate='Cumulative: %{y:.1f}%<extra></extra>'
+    ))
+
+    # 4. Layout Improvements
     apply_panel_theme(fig, f"Defect Pareto - Quadrant: {quadrant_selection}", height=600, theme_config=theme_config)
 
     fig.update_layout(
-        xaxis=dict(title="Defect Type", categoryorder='total descending'),
-        yaxis=dict(showgrid=True) # Override to show grid on Pareto
+        xaxis=dict(title="Defect Type", categoryorder='array', categoryarray=counts['Label']),
+        yaxis=dict(title="Defect Count", showgrid=True),
+        yaxis2=dict(
+            title="Cumulative %",
+            overlaying='y',
+            side='right',
+            range=[0, 105],
+            showgrid=False,
+            dtick=20,
+        ),
+        legend=dict(x=0.8, y=0.95),
+        showlegend=True
     )
+
     return fig
+
+# Removed separate create_pareto_trace as it is now integrated.
+
 
 def create_defect_sankey(df: pd.DataFrame, theme_config: Optional[PlotTheme] = None) -> go.Sankey:
     """

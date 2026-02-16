@@ -41,6 +41,11 @@ class ViewManager:
     def __init__(self, store: SessionStore):
         self.store = store
 
+    def _sync_widget_state(self, key: str):
+        """Callback to sync temporary widget state to persistent session state."""
+        if f"widget_{key}" in st.session_state:
+            st.session_state[key] = st.session_state[f"widget_{key}"]
+
     def render_navigation(self):
         # Inject Keyboard Shortcuts
         with open("src/components/keyboard_shortcuts.html", "r") as f:
@@ -452,45 +457,55 @@ class ViewManager:
 
         # --- ROW 3: CONTEXT FILTERS ---
         if current_tab_text == "Heatmap":
-             st.radio(
-                 "View",
-                 options=["Aggregated", "Per layer"],
-                 index=0,
-                 key="heatmap_view_mode",
-                 help="Aggregated: one heatmap for all selected layers. Per layer: one heatmap per selected layer (stacked).",
-             )
+             # Initialize persistent state defaults if missing
+             if "heatmap_view_mode" not in st.session_state: st.session_state["heatmap_view_mode"] = "Aggregated"
+             if "heatmap_defect_set" not in st.session_state: st.session_state["heatmap_defect_set"] = "Real defects only (verification rules)"
+             if "heatmap_bin_size_mm" not in st.session_state: st.session_state["heatmap_bin_size_mm"] = 25  # Default Bin Size: 25mm
+             if "heatmap_color_scale" not in st.session_state: st.session_state["heatmap_color_scale"] = "Count per bin"  # Default Scale
+             if "heatmap_zmax_density" not in st.session_state: st.session_state["heatmap_zmax_density"] = 1.0
+             if "heatmap_zmax_count" not in st.session_state: st.session_state["heatmap_zmax_count"] = 5  # Default Z-Max Count
+
+             if "heatmap_zmax_count" not in st.session_state: st.session_state["heatmap_zmax_count"] = 5  # Default Z-Max Count
+
+             # Enforce Aggregated View Mode (User Request: Remove toggle, default to All/Aggregated)
+             st.session_state["heatmap_view_mode"] = "Aggregated"
+
              st.radio(
                  "Defect set",
                  options=["Real defects only (verification rules)", "All read defects"],
-                 index=0,
-                 key="heatmap_defect_set",
+                 index=0 if st.session_state["heatmap_defect_set"] == "Real defects only (verification rules)" else 1,
+                 key="widget_heatmap_defect_set",
+                 on_change=self._sync_widget_state, args=("heatmap_defect_set",),
                  help="Real defects: excludes safe codes (e.g. GE57, N, TA, FALSE). All read: every defect from coordinates.",
              )
              st.slider(
                  "Bin size (mm)",
                  min_value=5,
                  max_value=50,
-                 value=10,
+                 value=int(st.session_state["heatmap_bin_size_mm"]),
                  step=1,
-                 key="heatmap_bin_size_mm",
+                 key="widget_heatmap_bin_size_mm",
+                 on_change=self._sync_widget_state, args=("heatmap_bin_size_mm",),
                  help="Cell size in mm. Each cell = bin_size × bin_size mm².",
              )
              st.radio(
                  "Color scale",
                  options=["Count per bin", "Defects per mm²"],
-                 index=1,
-                 key="heatmap_color_scale",
+                 index=0 if st.session_state["heatmap_color_scale"] == "Count per bin" else 1,
+                 key="widget_heatmap_color_scale",
+                 on_change=self._sync_widget_state, args=("heatmap_color_scale",),
                  help="Count per bin: defects in each cell. Defects per mm²: density (count / cell area in mm²).",
              )
-             heatmap_scale = st.session_state.get("heatmap_color_scale", "Defects per mm²")
+             heatmap_scale = st.session_state["heatmap_color_scale"]
              if heatmap_scale == "Defects per mm²":
                  st.slider(
                      "Color scale max (Z)",
                      min_value=0.0,
                      max_value=1.0,
-                     value=1.0,
+                     value=float(st.session_state["heatmap_zmax_density"]),
                      step=0.1,
-                     key="heatmap_zmax_density",
+                     key="widget_heatmap_zmax_density",
+                     on_change=self._sync_widget_state, args=("heatmap_zmax_density",),
                      help="Max value for the color bar (defects per mm²).",
                  )
              else:
@@ -498,9 +513,10 @@ class ViewManager:
                      "Color scale max (Z)",
                      min_value=0,
                      max_value=10,
-                     value=10,
+                     value=int(st.session_state["heatmap_zmax_count"]),
                      step=1,
-                     key="heatmap_zmax_count",
+                     key="widget_heatmap_zmax_count",
+                     on_change=self._sync_widget_state, args=("heatmap_zmax_count",),
                      help="Max value for the color bar (count per bin).",
                  )
         elif current_tab_text == "Stress Map":
@@ -520,26 +536,52 @@ class ViewManager:
         st.header("📥 Generate Analysis Reports")
         st.markdown("Use this page to generate and download comprehensive reports, including Excel data, defect maps, and charts.")
 
+        # Quick selection buttons
+        st.markdown("**Download selection**")
+        sel_col1, sel_col2 = st.columns([1,1])
+        with sel_col1:
+            if st.button("Select all downloads"):
+                for k in [
+                    'rep_include_excel','rep_include_coords','rep_include_map','rep_include_insights',
+                    'rep_include_png_all','rep_include_pareto','rep_include_heatmap_png','rep_include_heatmap_html',
+                    'rep_include_stress_png','rep_include_rca_html','rep_include_still_alive_png'
+                ]:
+                    st.session_state[k] = True
+        with sel_col2:
+            if st.button("Clear selection"):
+                for k in [
+                    'rep_include_excel','rep_include_coords','rep_include_map','rep_include_insights',
+                    'rep_include_png_all','rep_include_pareto','rep_include_heatmap_png','rep_include_heatmap_html',
+                    'rep_include_stress_png','rep_include_rca_html','rep_include_still_alive_png'
+                ]:
+                    st.session_state[k] = False
+                # restore sensible defaults
+                st.session_state['rep_include_excel'] = True
+                st.session_state['rep_include_map'] = True
+                st.session_state['rep_include_insights'] = True
+
         col1, col2 = st.columns(2, gap="medium")
 
         with col1:
             st.subheader("Report Content")
-            include_excel = st.checkbox("Excel Report", value=True, help="Includes summary stats, defect lists, and KPI tables.")
-            include_coords = st.checkbox("Coordinate List", value=True, help="Includes a list of defective cell coordinates.")
+            include_excel = st.checkbox("Excel Report", value=True, key="rep_include_excel", help="Includes summary stats, defect lists, and KPI tables.")
+            include_coords = st.checkbox("Coordinate List", value=True, key="rep_include_coords", help="Includes a list of defective cell coordinates.")
 
             st.subheader("Visualizations")
-            include_map = st.checkbox("Defect Map (HTML)", value=True, help="Interactive HTML map of defects.")
-            include_insights = st.checkbox("Insights Charts", value=True, help="Interactive Sunburst and Sankey charts.")
+            include_map = st.checkbox("Defect Map (HTML)", value=True, key="rep_include_map", help="Interactive HTML map of defects.")
+            include_insights = st.checkbox("Insights Charts", value=True, key="rep_include_insights", help="Interactive Sunburst and Sankey charts.")
 
         with col2:
             st.subheader("Image Exports")
             st.markdown("*(Optional) Include static images for offline viewing.*")
-            include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", value=False)
-            include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False)
+            include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", value=False, key="rep_include_png_all")
+            include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False, key="rep_include_pareto")
             st.markdown("##### Additional Analysis Charts")
-            include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False)
-            include_stress_png = st.checkbox("Stress Map (PNG)", value=False)
-            include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False)
+            include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False, key="rep_include_heatmap_png")
+            # HTML Heatmap removed as per user request
+            include_heatmap_html = False 
+            include_stress_png = st.checkbox("Stress Map (PNG)", value=False, key="rep_include_stress_png")
+            include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False, key="rep_include_rca_html")
 
             rca_slice_axis = 'Y'
             if include_root_cause_html:
@@ -552,7 +594,7 @@ class ViewManager:
                 )
                 rca_slice_axis = 'Y' if 'Y' in rca_choice else 'X'
 
-            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False)
+            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False, key="rep_include_still_alive_png")
 
         st.markdown("---")
 
@@ -589,6 +631,13 @@ class ViewManager:
                     visual_origin_y=params.get("visual_origin_y", 0.0)
                 )
 
+                # Pass current Heatmap UI parameters so exported heatmap matches on-screen
+                defect_set_choice = st.session_state.get("heatmap_defect_set", "Real defects only (verification rules)")
+                heatmap_real_defects_only = defect_set_choice == "Real defects only (verification rules)"
+                heatmap_bin_size_mm = float(st.session_state.get("heatmap_bin_size_mm", 10))
+                heatmap_use_density = st.session_state.get("heatmap_color_scale", "Defects per mm²") == "Defects per mm²"
+                heatmap_zmax_override = (float(st.session_state.get("heatmap_zmax_density", 1.0)) if heatmap_use_density else float(st.session_state.get("heatmap_zmax_count", 10)))
+
                 self.store.report_bytes = generate_zip_package(
                     full_df=full_df,
                     panel_rows=params.get('panel_rows', 7),
@@ -609,9 +658,15 @@ class ViewManager:
                     include_png_all_layers=include_png_all,
                     include_pareto_png=include_pareto_png,
                     include_heatmap_png=include_heatmap_png,
+                    include_heatmap_html=include_heatmap_html,
                     include_stress_png=include_stress_png,
                     include_root_cause_html=include_root_cause_html,
                     include_still_alive_png=include_still_alive_png,
+                    # heatmap UI options
+                    heatmap_bin_size_mm=heatmap_bin_size_mm,
+                    heatmap_use_density=heatmap_use_density,
+                    heatmap_real_defects_only=heatmap_real_defects_only,
+                    heatmap_zmax_override=heatmap_zmax_override,
                     rca_slice_axis=rca_slice_axis,
                     layer_data=self.store.layer_data,
                     process_comment=params.get("process_comment", ""),

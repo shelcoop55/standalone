@@ -3,6 +3,7 @@ import pandas as pd
 from src.analysis.base import AnalysisTool
 from src.plotting.renderers.maps import create_spatial_grid_heatmap
 from src.views.utils import get_geometry_context
+from src.core.config import PNG_EXPORT_SCALE, PNG_EXPORT_WIDTH, PNG_EXPORT_HEIGHT
 
 @st.cache_data
 def get_filtered_heatmap_data(
@@ -127,6 +128,32 @@ class HeatmapTool(AnalysisTool):
                     zmax_override=zmax_override,
                 )
                 st.plotly_chart(fig, use_container_width=True)
+
+                # --- Downloads that use the currently rendered figure ---
+                try:
+                    png_bytes = fig.to_image(
+                        format="png",
+                        engine="kaleido",
+                        scale=PNG_EXPORT_SCALE,
+                        width=PNG_EXPORT_WIDTH,
+                        height=PNG_EXPORT_HEIGHT,
+                    )
+                    st.download_button(
+                        label="Download heatmap (PNG)",
+                        data=png_bytes,
+                        file_name="heatmap.png",
+                        mime="image/png",
+                    )
+                except Exception:
+                    st.warning("PNG export unavailable in this environment.")
+
+                html_str = fig.to_html(full_html=True, include_plotlyjs='cdn')
+                st.download_button(
+                    label="Download heatmap (HTML, interactive)",
+                    data=html_str,
+                    file_name="heatmap.html",
+                    mime="text/html",
+                )
             else:
                 st.warning("No data available for the selected filters.")
         else:
@@ -155,5 +182,33 @@ class HeatmapTool(AnalysisTool):
                     zmax_override=zmax_override,
                 )
                 st.plotly_chart(fig, use_container_width=True)
+
+                # Per-layer downloads
+                try:
+                    png_bytes = fig.to_image(
+                        format="png",
+                        engine="kaleido",
+                        scale=PNG_EXPORT_SCALE,
+                        width=PNG_EXPORT_WIDTH,
+                        height=PNG_EXPORT_HEIGHT,
+                    )
+                    st.download_button(
+                        label=f"Download Layer {layer_num} (PNG)",
+                        data=png_bytes,
+                        file_name=f"heatmap_layer_{layer_num}.png",
+                        mime="image/png",
+                        key=f"download_heatmap_png_layer_{layer_num}",
+                    )
+                except Exception:
+                    st.warning(f"PNG export unavailable for Layer {layer_num}.")
+
+                html_str = fig.to_html(full_html=True, include_plotlyjs='cdn')
+                st.download_button(
+                    label=f"Download Layer {layer_num} (HTML)",
+                    data=html_str,
+                    file_name=f"heatmap_layer_{layer_num}.html",
+                    mime="text/html",
+                    key=f"download_heatmap_html_layer_{layer_num}",
+                )
             if not any_shown:
                 st.warning("No data available for the selected filters.")

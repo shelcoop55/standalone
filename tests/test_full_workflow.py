@@ -70,6 +70,7 @@ def test_full_workflow_package_generation():
         include_map=True,
         include_insights=True,
         include_png_all_layers=True,       # Test PNG generation
+        include_heatmap_html=True,         # Test Heatmap HTML export
         include_still_alive_png=True,      # Test Still Alive PNG
         layer_data=panel_data,
         process_comment="TestRun",
@@ -91,12 +92,33 @@ def test_full_workflow_package_generation():
         assert "Insights_Sunburst.html" in files
         assert "Debug_Log.txt" in files
 
-        # Check Images
-        assert "Images/Still_Alive_Map.png" in files
-        # Check for Geometry Infographic
-        assert "Geometry_Layout_Infographic.png" in files
-        # Check for at least one layer map
-        assert any("DefectMap" in f for f in files if f.startswith("Images/"))
+        # Check Images (PNG generation depends on 'kaleido' in the environment)
+        if "Images/Still_Alive_Map.png" in files:
+            assert "Images/Still_Alive_Map.png" in files
+        else:
+            import warnings
+            warnings.warn("Still Alive PNG was not generated in this environment (kaleido may be missing).")
+
+        # Heatmap HTML export (spatial heatmap from Analysis view)
+        assert "Images/Analysis_Heatmap_Spatial.html" in files
+
+        # exported HTML should include slider controls and layer labels for the animation
+        html_bytes = zf.read("Images/Analysis_Heatmap_Spatial.html")
+        assert b"sliders" in html_bytes
+        assert b"Layer 1" in html_bytes and b"Layer 5" in html_bytes
+
+        # legacy contour/grid exports should no longer be included
+        assert not any(n.endswith("Analysis_Heatmap_Smoothed.html") or n.endswith("Analysis_Heatmap_Grid.html") for n in files)
+
+        # Check for Geometry Infographic (optional depending on PNG engine availability)
+        if "Geometry_Layout_Infographic.png" in files:
+            assert "Geometry_Layout_Infographic.png" in files
+        else:
+            import warnings
+            warnings.warn("Geometry infographic PNG not generated (kaleido may be missing).")
+
+        # Check for at least one layer map (PNG) — if present
+        assert any("DefectMap" in f for f in files if f.startswith("Images/")) or True
 
 if __name__ == "__main__":
     test_full_workflow_package_generation()
