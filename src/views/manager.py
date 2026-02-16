@@ -520,26 +520,51 @@ class ViewManager:
         st.header("📥 Generate Analysis Reports")
         st.markdown("Use this page to generate and download comprehensive reports, including Excel data, defect maps, and charts.")
 
+        # Quick selection buttons
+        st.markdown("**Download selection**")
+        sel_col1, sel_col2 = st.columns([1,1])
+        with sel_col1:
+            if st.button("Select all downloads"):
+                for k in [
+                    'rep_include_excel','rep_include_coords','rep_include_map','rep_include_insights',
+                    'rep_include_png_all','rep_include_pareto','rep_include_heatmap_png','rep_include_heatmap_html',
+                    'rep_include_stress_png','rep_include_rca_html','rep_include_still_alive_png'
+                ]:
+                    st.session_state[k] = True
+        with sel_col2:
+            if st.button("Clear selection"):
+                for k in [
+                    'rep_include_excel','rep_include_coords','rep_include_map','rep_include_insights',
+                    'rep_include_png_all','rep_include_pareto','rep_include_heatmap_png','rep_include_heatmap_html',
+                    'rep_include_stress_png','rep_include_rca_html','rep_include_still_alive_png'
+                ]:
+                    st.session_state[k] = False
+                # restore sensible defaults
+                st.session_state['rep_include_excel'] = True
+                st.session_state['rep_include_map'] = True
+                st.session_state['rep_include_insights'] = True
+
         col1, col2 = st.columns(2, gap="medium")
 
         with col1:
             st.subheader("Report Content")
-            include_excel = st.checkbox("Excel Report", value=True, help="Includes summary stats, defect lists, and KPI tables.")
-            include_coords = st.checkbox("Coordinate List", value=True, help="Includes a list of defective cell coordinates.")
+            include_excel = st.checkbox("Excel Report", value=True, key="rep_include_excel", help="Includes summary stats, defect lists, and KPI tables.")
+            include_coords = st.checkbox("Coordinate List", value=True, key="rep_include_coords", help="Includes a list of defective cell coordinates.")
 
             st.subheader("Visualizations")
-            include_map = st.checkbox("Defect Map (HTML)", value=True, help="Interactive HTML map of defects.")
-            include_insights = st.checkbox("Insights Charts", value=True, help="Interactive Sunburst and Sankey charts.")
+            include_map = st.checkbox("Defect Map (HTML)", value=True, key="rep_include_map", help="Interactive HTML map of defects.")
+            include_insights = st.checkbox("Insights Charts", value=True, key="rep_include_insights", help="Interactive Sunburst and Sankey charts.")
 
         with col2:
             st.subheader("Image Exports")
             st.markdown("*(Optional) Include static images for offline viewing.*")
-            include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", value=False)
-            include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False)
+            include_png_all = st.checkbox("Defect Maps (PNG) - All Layers", value=False, key="rep_include_png_all")
+            include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False, key="rep_include_pareto")
             st.markdown("##### Additional Analysis Charts")
-            include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False)
-            include_stress_png = st.checkbox("Stress Map (PNG)", value=False)
-            include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False)
+            include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False, key="rep_include_heatmap_png")
+            include_heatmap_html = st.checkbox("Heatmap (HTML)", value=False, key="rep_include_heatmap_html")
+            include_stress_png = st.checkbox("Stress Map (PNG)", value=False, key="rep_include_stress_png")
+            include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False, key="rep_include_rca_html")
 
             rca_slice_axis = 'Y'
             if include_root_cause_html:
@@ -552,7 +577,7 @@ class ViewManager:
                 )
                 rca_slice_axis = 'Y' if 'Y' in rca_choice else 'X'
 
-            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False)
+            include_still_alive_png = st.checkbox("Still Alive Map (PNG)", value=False, key="rep_include_still_alive_png")
 
         st.markdown("---")
 
@@ -589,6 +614,13 @@ class ViewManager:
                     visual_origin_y=params.get("visual_origin_y", 0.0)
                 )
 
+                # Pass current Heatmap UI parameters so exported heatmap matches on-screen
+                defect_set_choice = st.session_state.get("heatmap_defect_set", "Real defects only (verification rules)")
+                heatmap_real_defects_only = defect_set_choice == "Real defects only (verification rules)"
+                heatmap_bin_size_mm = float(st.session_state.get("heatmap_bin_size_mm", 10))
+                heatmap_use_density = st.session_state.get("heatmap_color_scale", "Defects per mm²") == "Defects per mm²"
+                heatmap_zmax_override = (float(st.session_state.get("heatmap_zmax_density", 1.0)) if heatmap_use_density else float(st.session_state.get("heatmap_zmax_count", 10)))
+
                 self.store.report_bytes = generate_zip_package(
                     full_df=full_df,
                     panel_rows=params.get('panel_rows', 7),
@@ -609,9 +641,15 @@ class ViewManager:
                     include_png_all_layers=include_png_all,
                     include_pareto_png=include_pareto_png,
                     include_heatmap_png=include_heatmap_png,
+                    include_heatmap_html=include_heatmap_html,
                     include_stress_png=include_stress_png,
                     include_root_cause_html=include_root_cause_html,
                     include_still_alive_png=include_still_alive_png,
+                    # heatmap UI options
+                    heatmap_bin_size_mm=heatmap_bin_size_mm,
+                    heatmap_use_density=heatmap_use_density,
+                    heatmap_real_defects_only=heatmap_real_defects_only,
+                    heatmap_zmax_override=heatmap_zmax_override,
                     rca_slice_axis=rca_slice_axis,
                     layer_data=self.store.layer_data,
                     process_comment=params.get("process_comment", ""),

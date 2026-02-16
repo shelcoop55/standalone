@@ -1166,6 +1166,125 @@ def create_spatial_grid_heatmap(
     return fig
 
 
+@track_performance("Plot: Animated Spatial Heatmap (per-layer)")
+def create_animated_spatial_heatmap(
+    layer_dfs: List[Tuple[str, pd.DataFrame]],
+    ctx: GeometryContext,
+    panel_rows: int,
+    panel_cols: int,
+    bin_size_mm: float = 10.0,
+    real_defects_only: bool = True,
+    use_density: bool = False,
+    theme_config: Optional[PlotTheme] = None,
+    zmax_override: Optional[float] = None,
+) -> go.Figure:
+    """
+    Builds an animated spatial heatmap (one frame per layer) with slider + play controls.
+    - layer_dfs: list of tuples (label, dataframe) where each dataframe contains defects for that layer (both sides combined).
+    - Returns a Plotly Figure with frames and slider.
+    """
+    # Guard
+    if not layer_dfs:
+        return go.Figure()
+
+    # Generate a static spatial heatmap for each provided layer and extract the Heatmap trace
+    extracted = []  # list of (label, heatmap_trace)
+    global_zmax = 0.0
+
+    for label, df in layer_dfs:
+        # Ensure we call the same renderer so visuals match on-screen
+        fig_layer = create_spatial_grid_heatmap(
+            df if not df is None else pd.DataFrame(),
+            ctx,
+            bin_size_mm=bin_size_mm,
+            real_defects_only=real_defects_only,
+            use_density=use_density,
+            theme_config=theme_config,
+            zmax_override=zmax_override,
+        )
+        # Extract first heatmap trace (renderer returns a single-heatmap fig)
+        heat_traces = [t for t in fig_layer.data if getattr(t, 'type', '') == 'heatmap']
+        if not heat_traces:
+            # Fallback: empty heatmap
+            heat = go.Heatmap(z=[[0]], x=[0], y=[0], colorscale='Turbo', zmin=0, zmax=1)
+            extracted.append((label, heat))
+            continue
+        trace = heat_traces[0]
+        # compute numeric max
+        try:
+            z_arr = np.array(trace.z, dtype=float)
+            local_max = float(np.nanmax(z_arr)) if z_arr.size else 0.0
+        except Exception:
+            local_max = 0.0
+        global_zmax = max(global_zmax, local_max)
+        extracted.append((label, trace))
+
+    # If zmax_override provided, respect it
+    if zmax_override is not None:
+        global_zmax = float(zmax_override)
+
+    # Build initial figure from first extracted trace (but enforce common zmax)
+    first_label, first_trace = extracted[0]
+    initial_heat = go.Heatmap(
+        z=first_trace.z,
+        x=getattr(first_trace, 'x', None),
+        y=getattr(first_trace, 'y', None),
+        colorscale=getattr(first_trace, 'colorscale', 'Turbo'),
+        zmin=0,
+        zmax=global_zmax,
+        hovertemplate=getattr(first_trace, 'hovertemplate', None),
+        showscale=True,
+    )
+
+    fig = go.Figure(data=[initial_heat])
+
+    frames = []
+    steps = []
+    for idx, (label, trace) in enumerate(extracted):
+        heat = go.Heatmap(
+            z=trace.z,
+            x=getattr(trace, 'x', None),
+            y=getattr(trace, 'y', None),
+            colorscale=getattr(trace, 'colorscale', 'Turbo'),
+            zmin=0,
+            zmax=global_zmax,
+            hovertemplate=getattr(trace, 'hovertemplate', None),
+            showscale=(idx == 0),
+        )
+        frame = go.Frame(data=[heat], name=str(idx), layout=go.Layout(title_text=f"Spatial Heatmap — {label}"))
+        frames.append(frame)
+
+        step = dict(
+            method="animate",
+            args=[[str(idx)], {"frame": {"duration": 300, "redraw": True}, "mode": "immediate", "transition": {"duration": 0}}],
+            label=label
+        )
+        steps.append(step)
+
+    fig.frames = frames
+
+    sliders = [dict(active=0, currentvalue={"prefix": "Layer: "}, pad={"t": 50}, steps=steps)]
+
+    apply_panel_theme(fig, "Spatial Heatmap (per-layer)", height=700, theme_config=theme_config)
+
+    fig.update_layout(
+        sliders=sliders,
+        updatemenus=[dict(
+            type="buttons",
+            showactive=False,
+            y=1.05,
+            x=1.02,
+            xanchor="right",
+            buttons=[
+                dict(label="Play", method="animate", args=[None, {"frame": {"duration": 500, "redraw": True}, "fromcurrent": True}]),
+                dict(label="Pause", method="animate", args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}])
+            ]
+        )]
+    )
+
+    return fig
+
+
 def create_unit_grid_heatmap(
     df: pd.DataFrame,
     panel_rows: int,

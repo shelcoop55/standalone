@@ -6,6 +6,7 @@ import io
 import logging
 import zipfile
 import json
+import pandas as pd
 from typing import Dict, Any, Optional, Union, List, Tuple
 from datetime import datetime
 
@@ -20,9 +21,9 @@ from src.core.models import PanelData
 from src.enums import Quadrant
 from src.io.exporters.excel import generate_excel_report, generate_coordinate_list_report
 from src.plotting.renderers.maps import (
-    create_defect_map_figure, create_still_alive_figure, create_density_contour_map,
-    create_stress_heatmap, create_cross_section_heatmap,
-    create_animated_cross_section_heatmap, create_unit_grid_heatmap
+    create_defect_map_figure, create_still_alive_figure, create_spatial_grid_heatmap,
+    create_density_contour_map, create_stress_heatmap, create_cross_section_heatmap,
+    create_animated_cross_section_heatmap, create_unit_grid_heatmap, create_animated_spatial_heatmap
 )
 from src.plotting.renderers.infographics import create_geometry_infographic
 from src.plotting.renderers.charts import (
@@ -47,6 +48,7 @@ def generate_zip_package(
     include_png_all_layers: bool = False,
     include_pareto_png: bool = False,
     include_heatmap_png: bool = False,
+    include_heatmap_html: bool = False,
     include_stress_png: bool = False,
     include_root_cause_html: bool = False,
     include_still_alive_png: bool = False,
@@ -66,6 +68,11 @@ def generate_zip_package(
     fixed_offset_y: float = 0.0,
     panel_width: float = PANEL_WIDTH,
     panel_height: float = PANEL_HEIGHT,
+    # Heatmap export options (use UI values when available)
+    heatmap_bin_size_mm: Optional[float] = None,
+    heatmap_use_density: Optional[bool] = None,
+    heatmap_real_defects_only: Optional[bool] = None,
+    heatmap_zmax_override: Optional[float] = None,
     rca_slice_axis: str = 'Y'
 ) -> bytes:
     """
@@ -82,7 +89,7 @@ def generate_zip_package(
 
     log("Starting generate_zip_package")
     log(f"Options: PNG_Maps={include_png_all_layers}, PNG_Pareto={include_pareto_png}")
-    log(f"New Options: Heatmap={include_heatmap_png}, Stress={include_stress_png}, RCA={include_root_cause_html}, Alive={include_still_alive_png}")
+    log(f"New Options: Heatmap PNG={include_heatmap_png}, Heatmap HTML={include_heatmap_html}, Stress={include_stress_png}, RCA={include_root_cause_html}, Alive={include_still_alive_png}")
     log(f"Verification Selection: {verification_selection}")
     if ctx:
         offset_x, offset_y = ctx.offset_x, ctx.offset_y
@@ -261,25 +268,91 @@ def generate_zip_package(
 
         # 7. Additional Analysis Charts
 
-        if include_heatmap_png:
-            log("Generating Heatmap PNGs (Global)...")
+        if include_heatmap_png or include_heatmap_html:
+            log("Generating Heatmap exports from the *analysis* view (Spatial heatmap)...")
             try:
-                # 1. Smoothed Density Contour Map
-                # Fix: Hide Grid for clean export
-                fig_heat_smooth = create_density_contour_map(
-                    full_df, panel_rows, panel_cols, ctx,
-                    theme_config=theme_config,
-                    show_grid=False
-                )
-                img_bytes_smooth = fig_heat_smooth.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                zip_file.writestr("Images/Analysis_Heatmap_Smoothed.png", img_bytes_smooth)
+                # Export the same spatial heatmap shown in the Analysis -> Heatmap view
+                bin_size = heatmap_bin_size_mm or 10.0
+                use_density = bool(heatmap_use_density) if heatmap_use_density is not None else False
+                real_defects = True if heatmap_real_defects_only is None else bool(heatmap_real_defects_only)
 
-                # 2. Unit Grid Heatmap
-                fig_heat_grid = create_unit_grid_heatmap(
-                    full_df, panel_rows, panel_cols, theme_config=theme_config
+                fig_spatial = create_spatial_grid_heatmap(
+                    full_df,
+                    ctx,
+                    bin_size_mm=bin_size,
+                    real_defects_only=real_defects,
+                    use_density=use_density,
+                    theme_config=theme_config,
+                    zmax_override=heatmap_zmax_override,
                 )
-                img_bytes_grid = fig_heat_grid.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                zip_file.writestr("Images/Analysis_Heatmap_Grid.png", img_bytes_grid)
+
+                if include_heatmap_png:
+                    img_bytes_spatial = fig_spatial.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
+                    zip_file.writestr("Images/Analysis_Heatmap_Spatial.png", img_bytes_spatial)
+
+                if include_heatmap_html:
+                    # If layer_data is available, build an animated per-layer spatial heatmap (slider)
+                    try:
+                        if layer_data:
+                            layer_frames = []
+                            for layer_num in layer_data.get_all_layer_nums():
+                                dfs = []
+                                for side in layer_data.get_sides_for_layer(layer_num):
+                                    layer_obj = layer_data.get_layer(layer_num, side)
+                                    if not layer_obj:
+                                        continue
+                                    dfs.append(layer_obj.data.copy())
+                                if not dfs:
+                                    layer_df = pd.DataFrame()
+                                else:
+                                    layer_df = pd.concat(dfs, ignore_index=True)
+
+                                # Apply verification filter (same logic used elsewhere)
+                                if verification_selection != 'All' and not layer_df.empty:
+                                    if isinstance(verification_selection, list):
+                                        if not verification_selection:
+                                            layer_df = layer_df.iloc[0:0]
+                                        else:
+                                            layer_df = layer_df[layer_df['Verification'].isin(verification_selection)]
+                                    else:
+                                        layer_df = layer_df[layer_df['Verification'] == verification_selection]
+
+                                # Apply quadrant filter
+                                if quadrant_selection != 'All' and 'QUADRANT' in layer_df.columns and not layer_df.empty:
+                                    layer_df = layer_df[layer_df['QUADRANT'] == quadrant_selection]
+
+                                layer_frames.append((f"Layer {layer_num}", layer_df))
+
+                            # Build animated figure using the plotting renderer
+                            if layer_frames:
+                                anim_fig = create_animated_spatial_heatmap(
+                                    layer_frames,
+                                    ctx,
+                                    panel_rows,
+                                    panel_cols,
+                                    bin_size_mm=bin_size,
+                                    real_defects_only=real_defects,
+                                    use_density=use_density,
+                                    theme_config=theme_config,
+                                    zmax_override=heatmap_zmax_override,
+                                )
+                                html_anim = anim_fig.to_html(full_html=True, include_plotlyjs='cdn')
+                                zip_file.writestr("Images/Analysis_Heatmap_Spatial.html", html_anim)
+                                log("Wrote animated spatial heatmap HTML.")
+                                # Skip fallback
+                                raise StopIteration
+
+                        # Fallback: write single static spatial heatmap HTML
+                        html_spatial = fig_spatial.to_html(full_html=True, include_plotlyjs='cdn')
+                        zip_file.writestr("Images/Analysis_Heatmap_Spatial.html", html_spatial)
+                    except StopIteration:
+                        # Expected control flow when animated HTML already written
+                        pass
+                    except Exception as e:
+                        # Fallback to static HTML on error
+                        logger.exception("Failed to generate animated spatial heatmap HTML: %s", e)
+                        html_spatial = fig_spatial.to_html(full_html=True, include_plotlyjs='cdn')
+                        zip_file.writestr("Images/Analysis_Heatmap_Spatial.html", html_spatial)
 
                 log("Success.")
             except Exception as e:
