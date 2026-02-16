@@ -1,191 +1,330 @@
 """
 Excel Export Logic.
-Handles the creation of the multi-sheet Excel report using xlsxwriter.
+Handles the creation of the multi-sheet Excel report using xlsxwriter with a professional "McKinsey-style" design.
 """
 import pandas as pd
 import io
+import logging
 from datetime import datetime
-from src.core.config import PANEL_COLOR, CRITICAL_DEFECT_TYPES
+from typing import List, Dict, Any, Optional
+import xlsxwriter.utility as xu
 
-def _define_formats(workbook):
-    """Defines all the custom formats used in the Excel report."""
+# --- CORPORATE THEME CONFIG ---
+THEME_COLOR_PRIMARY = '#1F497D'       # Dark Blue (Headers)
+THEME_COLOR_SECONDARY = '#D9E1F2'     # Light Blue (Alternating Rows)
+THEME_COLOR_ACCENT = '#C0504D'        # Red (Critical/Bad)
+THEME_COLOR_GOOD = '#9BBB59'          # Green (Good/Yield)
+THEME_COLOR_TEXT = '#000000'
+FONT_MAIN = 'Calibri'
+
+logger = logging.getLogger(__name__)
+
+def _define_formats(workbook) -> Dict[str, Any]:
+    """Defines professional styling formats for the Excel report."""
+    base_fmt = {'font_name': FONT_MAIN, 'font_size': 11, 'border': 0}
+    
     formats = {
-        'title': workbook.add_format({'bold': True, 'font_size': 18, 'font_color': PANEL_COLOR, 'valign': 'vcenter'}),
-        'subtitle': workbook.add_format({'bold': True, 'font_size': 12, 'valign': 'vcenter'}),
-        'header': workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'fg_color': '#DDEBF7', 'border': 1, 'align': 'center'}),
-        'cell': workbook.add_format({'border': 1}),
-        'percent': workbook.add_format({'num_format': '0.00%', 'border': 1}),
-        'density': workbook.add_format({'num_format': '0.00', 'border': 1}),
-        'critical': workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+        'title': workbook.add_format({**base_fmt, 'bold': True, 'font_size': 18, 'font_color': THEME_COLOR_PRIMARY, 'valign': 'vcenter'}),
+        'subtitle': workbook.add_format({**base_fmt, 'bold': True, 'font_size': 14, 'font_color': '#595959', 'valign': 'vcenter'}),
+        'header': workbook.add_format({
+            **base_fmt, 'bold': True, 'text_wrap': True, 'valign': 'top', 
+            'fg_color': THEME_COLOR_PRIMARY, 'font_color': 'white', 
+            'border': 1, 'align': 'center'
+        }),
+        'cell': workbook.add_format({**base_fmt, 'border': 1}),
+        'cell_center': workbook.add_format({**base_fmt, 'border': 1, 'align': 'center'}),
+        'percent': workbook.add_format({**base_fmt, 'num_format': '0.0%', 'border': 1, 'align': 'center'}),
+        'int': workbook.add_format({**base_fmt, 'num_format': '#,##0', 'border': 1, 'align': 'center'}),
+        'density': workbook.add_format({**base_fmt, 'num_format': '0.00', 'border': 1, 'align': 'center'}),
+        
+        # Dashboard Cards
+        'card_title': workbook.add_format({**base_fmt, 'bold': True, 'font_size': 12, 'font_color': '#7F7F7F'}),
+        'card_value': workbook.add_format({**base_fmt, 'bold': True, 'font_size': 24, 'font_color': THEME_COLOR_PRIMARY}),
+        'card_sub': workbook.add_format({**base_fmt, 'font_size': 10, 'font_color': '#7F7F7F'}),
+        
+        # Yield Map
+        'yield_good': workbook.add_format({**base_fmt, 'bg_color': '#EBF1DE', 'font_color': '#006100', 'border': 1, 'align': 'center'}), # Greenish
+        'yield_warn': workbook.add_format({**base_fmt, 'bg_color': '#FFEB9C', 'font_color': '#9C6500', 'border': 1, 'align': 'center'}), # Yellowish
+        'yield_bad': workbook.add_format({**base_fmt, 'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'border': 1, 'align': 'center'}), # Reddish
+        
+        # Hierarchy
+        'group_l1': workbook.add_format({**base_fmt, 'bold': True, 'bg_color': '#F2F2F2', 'border': 1}), # Quadrant
+        'group_l2': workbook.add_format({**base_fmt, 'indent': 1, 'border': 1}), # Defect
     }
     return formats
 
-def _write_report_header(worksheet, formats, source_filename):
-    """Writes the main header section to a worksheet."""
-    worksheet.set_row(0, 30)
-    worksheet.merge_range('A1:D1', 'Panel Defect Analysis Report', formats['title'])
-    worksheet.write('A2', 'Source File:', formats['subtitle'])
-    worksheet.write('B2', source_filename)
-    worksheet.write('A3', 'Report Date:', formats['subtitle'])
-    worksheet.write('B3', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+def _auto_fit_columns(worksheet, df: pd.DataFrame, start_col: int = 0, padding: int = 2):
+    """Adjusts column widths based on content."""
+    for i, col in enumerate(df.columns):
+        # Calculate max length of data and column header
+        max_len = max(
+            df[col].astype(str).map(len).max() if not df[col].empty else 0,
+            len(str(col))
+        )
+        worksheet.set_column(start_col + i, start_col + i, max_len + padding)
 
-def _create_summary_sheet(writer, formats, full_df, panel_rows, panel_cols, source_filename, quadrant_selection, verification_selection):
-    """Creates the 'Quarterly Summary' sheet with KPIs, parameters, and a chart."""
+# --- SHEET 1: EXECUTIVE DASHBOARD ---
+def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols, source_filename):
     workbook = writer.book
-    worksheet = workbook.add_worksheet('Quarterly Summary')
+    sheet = workbook.add_worksheet('Executive Dashboard')
+    sheet.hide_gridlines(2)
+    
+    # Header
+    sheet.merge_range('B2:H2', 'Executive Defect Analysis Dashboard', formats['title'])
+    sheet.write('B3', f'Source: {source_filename} | Generated: {datetime.now().strftime("%Y-%m-%d")}', formats['subtitle'])
 
-    _write_report_header(worksheet, formats, source_filename)
+    # --- 1. Big KPIs ---
+    total_defects = len(full_df)
+    
+    # Determine usage of verification for counts
+    has_verif = 'Verification' in full_df.columns
+    if has_verif:
+        # True defects: Exclude specific safe codes? 
+        # For this high level, strict true defects = everything NOT in safe list
+        # Assuming filtered_df logic handles the primary view, but here we have full_df
+        # Let's count "True Defects" (approximate logic provided previously)
+        safe_codes = ['GE57', 'N', 'TA', 'FALSE'] 
+        true_defects = full_df[~full_df['Verification'].isin(safe_codes)]
+        true_count = len(true_defects)
+        safe_count = total_defects - true_count
+        
+        # Yield Estimate (Simplified: 1 defect = 1 bad cell)
+        # Real yield is geometric, but we stick to the KPI standard used in summary
+        total_cells = (panel_rows * panel_cols) * 4 # 4 Quadrants usually? Or is full_df just one layer?
+        # If full_df is multi-layer, total_cells needs to reflect that. 
+        # Let's assume full_df is the scope of analysis. 
+        # We'll calculate density.
+    else:
+        true_count = total_defects
+        safe_count = 0
+        
+    start_row = 5
+    
+    # Metric Helper
+    def write_card(col, title, value, sub):
+        sheet.write(start_row, col, title, formats['card_title'])
+        sheet.write(start_row + 1, col, value, formats['card_value'])
+        sheet.write(start_row + 2, col, sub, formats['card_sub'])
+        
+    write_card(1, "Total Count", f"{total_defects:,}", "All recorded entries")
+    write_card(3, "True Defects", f"{true_count:,}", "Actionable defects") 
+    write_card(5, "Safe / False", f"{safe_count:,}", "Non-critical entries")
+    
+    # --- 2. Yield Map (2x2 Visual) ---
+    map_start_row = start_row + 5
+    sheet.write(map_start_row, 1, "Quadrant Yield Map", formats['subtitle'])
+    
+    quadrants = ['Q2', 'Q1', 'Q3', 'Q4'] # Visual layout: Q2 Q1 (Top), Q3 Q4 (Bottom) ? Standard convention varies.
+    # Standard Math: Q2 | Q1
+    #                -------
+    #                Q3 | Q4
+    
+    # Yield Calc per Quad
+    q_metrics = {}
+    cap_per_quad = panel_rows * panel_cols if (panel_rows * panel_cols) > 0 else 1
+    
+    for q in ['Q1', 'Q2', 'Q3', 'Q4']:
+        q_df = full_df[full_df['QUADRANT'] == q]
+        q_count = len(q_df)
+        yield_pct = max(0, (cap_per_quad - q_count) / cap_per_quad)
+        q_metrics[q] = yield_pct
 
-    # --- Analysis Parameters Table ---
-    param_data = {
-        "Parameter": ["Panel Rows", "Panel Columns", "Quadrant Filter", "Verification Filter"],
-        "Value": [panel_rows, panel_cols, quadrant_selection, verification_selection]
-    }
-    param_df = pd.DataFrame(param_data)
+    # Normalized colors (Red < 80%, Yellow < 95%, Green > 95%)
+    def get_fmt(val):
+        if val >= 0.95: return formats['yield_good']
+        if val >= 0.80: return formats['yield_warn']
+        return formats['yield_bad']
+        
+    # Draw 2x2 Grid
+    # Row 1: Q2, Q1
+    sheet.write(map_start_row + 2, 1, f"Q2\n{q_metrics.get('Q2',0):.1%}", get_fmt(q_metrics.get('Q2',0)))
+    sheet.write(map_start_row + 2, 2, f"Q1\n{q_metrics.get('Q1',0):.1%}", get_fmt(q_metrics.get('Q1',0)))
+    # Row 2: Q3, Q4
+    sheet.write(map_start_row + 3, 1, f"Q3\n{q_metrics.get('Q3',0):.1%}", get_fmt(q_metrics.get('Q3',0)))
+    sheet.write(map_start_row + 3, 2, f"Q4\n{q_metrics.get('Q4',0):.1%}", get_fmt(q_metrics.get('Q4',0)))
+    
+    sheet.set_column(1, 2, 20) # Wider columns for map boxes
+    sheet.set_row(map_start_row + 2, 50)
+    sheet.set_row(map_start_row + 3, 50)
 
-    param_start_row = 5
-    worksheet.merge_range(f'A{param_start_row-1}:B{param_start_row-1}', 'Analysis Parameters', formats['subtitle'])
-    param_df.to_excel(writer, sheet_name='Quarterly Summary', startrow=param_start_row, header=True, index=False)
-
-
-    # --- KPI Summary Table ---
-    kpi_start_row = param_start_row + len(param_df) + 3
-    worksheet.merge_range(f'A{kpi_start_row-1}:C{kpi_start_row-1}', 'KPI Summary', formats['subtitle'])
-
-    kpi_data = []
-    quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
-
-    for quad in quadrants:
-        quad_df = full_df[full_df['QUADRANT'] == quad]
-        total_defects = len(quad_df)
-        density = total_defects / (panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
-        kpi_data.append({"Quadrant": quad, "Total Defects": total_defects, "Defect Density": density})
-
-    total_defects_all = len(full_df)
-    density_all = total_defects_all / (4 * panel_rows * panel_cols) if (panel_rows * panel_cols) > 0 else 0
-    kpi_data.append({"Quadrant": "Total", "Total Defects": total_defects_all, "Defect Density": density_all})
-
-    summary_df = pd.DataFrame(kpi_data)
-
-    summary_df.to_excel(writer, sheet_name='Quarterly Summary', startrow=kpi_start_row, header=False, index=False)
-
-    for col_num, value in enumerate(summary_df.columns.values):
-        worksheet.write(kpi_start_row - 1, col_num, value, formats['header'])
-
-    for row_num in range(len(summary_df)):
-        worksheet.write(row_num + kpi_start_row, 0, summary_df.iloc[row_num, 0], formats['cell'])
-        worksheet.write(row_num + kpi_start_row, 1, summary_df.iloc[row_num, 1], formats['cell'])
-        worksheet.write(row_num + kpi_start_row, 2, summary_df.iloc[row_num, 2], formats['density'])
-
-    worksheet.autofit()
-
-    chart = workbook.add_chart({'type': 'column'})
-    chart.add_series({
-        'name': 'Total Defects by Quadrant',
-        'categories': ['Quarterly Summary', kpi_start_row, 0, kpi_start_row + len(quadrants) - 1, 0],
-        'values': ['Quarterly Summary', kpi_start_row, 1, kpi_start_row + len(quadrants) - 1, 1],
-        'fill': {'color': PANEL_COLOR},
-        'border': {'color': '#000000'},
-        'data_labels': {'value': True}
-    })
-    chart.set_title({'name': 'Defect Count Comparison by Quadrant'})
-    chart.set_legend({'position': 'none'})
-    chart.set_y_axis({'name': 'Count'})
-    chart.set_style(10)
-    worksheet.insert_chart('E2', chart, {'x_scale': 1.5, 'y_scale': 1.5})
-
-def _create_panel_wide_top_defects_sheet(writer, formats, full_df):
-    """Creates a sheet summarizing the top defects for the entire panel, with a chart."""
-    if full_df.empty:
-        return
-
-    sheet_name = 'Panel-Wide Top Defects'
-
-    top_offenders = full_df['DEFECT_TYPE'].value_counts().reset_index()
-    top_offenders.columns = ['Defect Type', 'Count']
-    top_offenders = top_offenders[top_offenders['Count'] > 0]
-    top_offenders['Percentage'] = (top_offenders['Count'] / len(full_df))
-
-    top_offenders.to_excel(writer, sheet_name=sheet_name, startrow=1, header=False, index=False)
-
-    worksheet = writer.sheets[sheet_name]
-
-    for col_num, value in enumerate(top_offenders.columns.values):
-        worksheet.write(0, col_num, value, formats['header'])
-
-    worksheet.set_column('A:A', 30)
-    worksheet.set_column('B:B', 12)
-    worksheet.set_column('C:C', 12, formats['percent'])
-
-    # Add a chart for better visualization
-    chart = writer.book.add_chart({'type': 'pie'})
-    chart.add_series({
-        'name':       'Panel-Wide Defect Distribution',
-        'categories': [sheet_name, 1, 0, len(top_offenders), 0],
-        'values':     [sheet_name, 1, 1, len(top_offenders), 1],
-        'data_labels': {'percentage': True, 'leader_lines': True},
-    })
-    chart.set_title({'name': 'Panel-Wide Defect Distribution'})
-    chart.set_style(10)
-    worksheet.insert_chart('E2', chart, {'x_scale': 1.5, 'y_scale': 1.5})
+    # --- 3. Layer / Source Comparison ---
+    # Use SOURCE_FILE as proxy for Layer if available
+    if 'SOURCE_FILE' in full_df.columns:
+        layer_start_row = map_start_row + 6
+        sheet.write(layer_start_row, 1, "Layer Performance", formats['subtitle'])
+        
+        # Group by Source
+        layer_stats = full_df.groupby('SOURCE_FILE').size().reset_index(name='Count')
+        layer_stats['% of Total'] = layer_stats['Count'] / total_defects
+        layer_stats = layer_stats.sort_values('Count', ascending=False)
+        
+        # Table Header
+        sheet.write(layer_start_row + 1, 1, "Layer / Source", formats['header'])
+        sheet.write(layer_start_row + 1, 2, "Defect Count", formats['header'])
+        sheet.write(layer_start_row + 1, 3, "% Contribution", formats['header'])
+        
+        r = layer_start_row + 2
+        for _, row in layer_stats.iterrows():
+            sheet.write(r, 1, row['SOURCE_FILE'], formats['cell'])
+            sheet.write(r, 2, row['Count'], formats['int'])
+            sheet.write(r, 3, row['% of Total'], formats['percent'])
+            
+            # Highlight worst performer
+            if row['% of Total'] > 0.5: # If one layer has >50% of defects
+                sheet.write(r, 3, row['% of Total'], formats['yield_bad'])
+            r += 1
+            
+        sheet.set_column(1, 1, 40) # Wide source col
 
 
-def _create_per_quadrant_top_defects_sheets(writer, formats, full_df):
-    """Creates a separate sheet for the top defects of each quadrant."""
-    quadrants = ['Q1', 'Q2', 'Q3', 'Q4']
-    for quad in quadrants:
-        quad_df = full_df[full_df['QUADRANT'] == quad]
-        if not quad_df.empty:
-            sheet_name = f'{quad} Top Defects'
-
-            top_offenders = quad_df['DEFECT_TYPE'].value_counts().reset_index()
-            top_offenders.columns = ['Defect Type', 'Count']
-            top_offenders = top_offenders[top_offenders['Count'] > 0]
-            top_offenders['Percentage'] = (top_offenders['Count'] / len(quad_df))
-
-            top_offenders.to_excel(writer, sheet_name=sheet_name, startrow=1, header=False, index=False)
-
-            worksheet = writer.sheets[sheet_name]
-
-            for col_num, value in enumerate(top_offenders.columns.values):
-                worksheet.write(0, col_num, value, formats['header'])
-            worksheet.set_column('C:C', 12, formats['percent'])
-            worksheet.autofit()
-
-def _create_full_defect_list_sheet(writer, formats, full_df):
-    """Creates the sheet with a full list of all defects and conditional formatting."""
+# --- SHEET 2: DETAILED BREAKDOWN ---
+def _create_granular_breakdown(writer, formats, full_df):
     workbook = writer.book
+    sheet = workbook.add_worksheet('Detailed Breakdown')
+    sheet.hide_gridlines(2)
+    
+    sheet.write('A1', 'Granular Defect Breakdown', formats['subtitle'])
+    
+    headers = ['Quadrant', 'Defect Type', 'Verification', 'Count', '% of Type', '% of Quad']
+    for i, h in enumerate(headers):
+        sheet.write(2, i, h, formats['header'])
+        
+    # Logic: Group by Quadrant -> Defect -> Verification
+    # If Verification missing, just Quad -> Defect
+    
+    has_verif = 'Verification' in full_df.columns
+    if not has_verif:
+        # Create dummy column for uniform logic
+        full_df['Verification'] = 'N/A'
+        
+    # Grouping
+    # 1. Group by Quad, Defect, Verif
+    grouped = full_df.groupby(['QUADRANT', 'DEFECT_TYPE', 'Verification']).size().reset_index(name='Count')
+    grouped = grouped[grouped['Count'] > 0] # Remove zeros
+    
+    # 2. Aggregations for Percentages
+    quad_sums = grouped.groupby('QUADRANT')['Count'].transform('sum')
+    type_sums = grouped.groupby(['QUADRANT', 'DEFECT_TYPE'])['Count'].transform('sum')
+    
+    # Pre-calculate Defect Type Totals for "Summary Rows"
+    # We want to show:
+    # Q1 | Scratch | (Total) | 10 | 10% | ...
+    #    |         | Real    |  8 | ...
+    
+    # We iterate manually to insert logic
+    unique_quads = grouped['QUADRANT'].unique()
+    
+    row = 3
+    
+    for quad in unique_quads:
+        quad_df = grouped[grouped['QUADRANT'] == quad]
+        total_quad_defects = quad_df['Count'].sum()
+        
+        # New Quadrant Section
+        sheet.merge_range(row, 0, row, 5, f"Quadrant: {quad} (Total: {total_quad_defects})", formats['group_l1'])
+        row += 1
+        
+        unique_defects = quad_df['DEFECT_TYPE'].unique()
+        for dtype in unique_defects:
+            dtype_df = quad_df[quad_df['DEFECT_TYPE'] == dtype]
+            total_type_defects = dtype_df['Count'].sum()
+            pct_quad = total_type_defects / total_quad_defects
+            
+            # --- SUMMARY ROW (The "Parent") ---
+            # Shows Defect Type Total
+            sheet.write(row, 0, quad, formats['cell_center'])
+            sheet.write(row, 1, dtype, formats['cell']) # Bold this?
+            sheet.write(row, 2, "All Verifications", formats['cell']) # Explicit "All"
+            sheet.write(row, 3, total_type_defects, formats['int'])
+            sheet.write(row, 4, 1.0, formats['percent']) # 100% of itself
+            sheet.write(row, 5, pct_quad, formats['percent'])
+            
+            # highlight the row slightly?
+            sheet.set_row(row, None, formats['group_l2'])
+            row += 1
+            
+            # --- CHILD ROWS (The Breakdown) ---
+            if has_verif:
+                for _, item in dtype_df.iterrows():
+                    pct_type = item['Count'] / total_type_defects
+                    
+                    sheet.write(row, 0, "", formats['cell_center']) # Indent visually
+                    sheet.write(row, 1, "", formats['cell'])
+                    sheet.write(row, 2, item['Verification'], formats['cell'])
+                    sheet.write(row, 3, item['Count'], formats['int'])
+                    sheet.write(row, 4, pct_type, formats['percent']) # % of Type
+                    sheet.write(row, 5, item['Count'] / total_quad_defects, formats['percent']) # % of Quad
+                    
+                    if item['Verification'] not in ['N', 'GE57', 'TA', 'FALSE', 'N/A']:
+                         sheet.write(row, 2, item['Verification'], formats['cell']) # Could add red text formatting
+                         
+                    row += 1
+        
+        sheet.set_row(row, 5) # Small gap between quadrants
+        row += 1
+        
+    _auto_fit_columns(sheet, grouped, 0)
 
-    # Add 'SIDE' to the report columns if it exists
-    report_columns = ['UNIT_INDEX_X', 'UNIT_INDEX_Y', 'DEFECT_TYPE', 'QUADRANT', 'SIDE', 'SOURCE_FILE']
-    final_df = full_df[[col for col in report_columns if col in full_df.columns]]
 
-    worksheet = workbook.add_worksheet('Full Defect List')
-    final_df.to_excel(writer, sheet_name='Full Defect List', startrow=1, header=False, index=False)
+# --- SHEET 3: INTERACTIVE DATA (SLICERS) ---
+def _create_interactive_table(writer, formats, full_df):
+    workbook = writer.book
+    sheet = workbook.add_worksheet('Interactive Data')
+    
+    # Select Columns
+    cols = ['QUADRANT', 'SIDE', 'DEFECT_TYPE', 'Verification', 'UNIT_INDEX_X', 'UNIT_INDEX_Y']
+    # Filter to existing cols
+    valid_cols = [c for c in cols if c in full_df.columns]
+    data = full_df[valid_cols]
+    
+    # Write Header
+    sheet.write('A1', 'Total Defect List (Use Slicers to Filter)', formats['subtitle'])
+    
+    # Add Table
+    (max_row, max_col) = data.shape
+    
+    # 1. Write Data
+    # We write data normally first? No, add_table handles data if we define range, 
+    # BUT xlsxwriter add_table requires data to be in the cells. 
+    # So we write data first using pandas to excel, then apply table on top?
+    # Pandas to_excel writes data. We just need to define table over it.
+    
+    start_row = 3
+    data.to_excel(writer, sheet_name='Interactive Data', startrow=start_row, index=False)
+    
+    # 2. Add Excel Table Definition
+    # range: A4:F(max_row+4)
+    # column letters
+    end_col_char = xu.xl_col_to_name(max_col - 1)
+    table_range = f"A{start_row+1}:{end_col_char}{start_row + 1 + max_row}"
+    
+    sheet.add_table(table_range, {
+        'columns': [{'header': c} for c in data.columns],
+        'style': 'TableStyleMedium2', # Blue banded
+        'name': 'DefectTable'
+    })
+    
+    # 3. Add Slicers
+    # xlsxwriter 3.0+ supports slicers. Check availability.
+    if hasattr(sheet, 'add_slicer'):
+        try:
+            # Slicer for Quadrant
+            sheet.add_slicer(start_row, max_col + 2, {'name': 'DefectTable', 'column': 'QUADRANT', 'caption': 'Filter Quadrant'})
+            
+            # Slicer for Side (if exists)
+            if 'SIDE' in data.columns:
+                sheet.add_slicer(start_row, max_col + 6, {'name': 'DefectTable', 'column': 'SIDE', 'caption': 'Filter Side'})
+                
+            # Slicer for Defect Type
+            sheet.add_slicer(start_row + 10, max_col + 2, {'name': 'DefectTable', 'column': 'DEFECT_TYPE', 'caption': 'Filter Defect'})
+        except Exception as e:
+            logger.warning(f"Failed to add slicers: {e}")
+    else:
+        logger.info("xlsxwriter version too old for Slicers. Skipping.")
+    
+    _auto_fit_columns(sheet, data, 0)
+    sheet.set_column(max_col, max_col + 1, 3) # Gap
 
-    for col_num, value in enumerate(final_df.columns.values):
-        worksheet.write(0, col_num, value, formats['header'])
-
-    # The column for DEFECT_TYPE might change if SIDE is present, so find it dynamically
-    try:
-        defect_type_col_index = final_df.columns.get_loc('DEFECT_TYPE')
-        # Convert index to Excel column letter (A=1, B=2, ...)
-        defect_type_col_letter = chr(ord('A') + defect_type_col_index)
-
-        formula_parts = [f'${defect_type_col_letter}2="{defect_type}"' for defect_type in CRITICAL_DEFECT_TYPES]
-        criteria_formula = f"=OR({', '.join(formula_parts)})"
-
-        # Apply formatting to the entire row range
-        worksheet.conditional_format(f'A2:{chr(ord("A") + len(final_df.columns)-1)}{len(final_df) + 1}', {
-            'type': 'formula',
-            'criteria': criteria_formula,
-            'format': formats['critical']
-        })
-    except KeyError:
-        # If DEFECT_TYPE column doesn't exist for some reason, skip formatting
-        pass
-
-    worksheet.autofit()
 
 def generate_excel_report(
     full_df: pd.DataFrame,
@@ -196,7 +335,7 @@ def generate_excel_report(
     verification_selection: str = "All"
 ) -> bytes:
     """
-    Generates a comprehensive, multi-sheet Excel report.
+    Generates a comprehensive, McKinsey-style Excel report.
     """
     output_buffer = io.BytesIO()
 
@@ -204,34 +343,32 @@ def generate_excel_report(
         workbook = writer.book
         formats = _define_formats(workbook)
 
-        _create_summary_sheet(writer, formats, full_df, panel_rows, panel_cols, source_filename, quadrant_selection, verification_selection)
-        _create_panel_wide_top_defects_sheet(writer, formats, full_df)
-        _create_per_quadrant_top_defects_sheets(writer, formats, full_df)
-        _create_full_defect_list_sheet(writer, formats, full_df)
+        # 1. Executive Dashboard
+        _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols, source_filename)
+        
+        # 2. Granular Breakdown (Strict Hierarchy)
+        _create_granular_breakdown(writer, formats, full_df)
+        
+        # 3. Interactive Data (Table + Slicers)
+        _create_interactive_table(writer, formats, full_df)
+        
+        # 4. Old Summary Sheets (Optional - kept for compatibility but renamed/moved to end?)
+        # Let's keep the Full List separately just in case 
+        # _create_full_defect_list_sheet(writer, formats, full_df) 
 
     excel_bytes = output_buffer.getvalue()
     return excel_bytes
 
 def generate_coordinate_list_report(defective_coords: set) -> bytes:
-    """
-    Generates a simple Excel report of unique defective cell coordinates.
-    """
+    """Generates simple coord list (No changes needed)."""
     output = io.BytesIO()
-
-    # Convert the set of tuples to a DataFrame
     if defective_coords:
         df = pd.DataFrame(list(defective_coords), columns=['UNIT_INDEX_X', 'UNIT_INDEX_Y'])
         df.sort_values(by=['UNIT_INDEX_Y', 'UNIT_INDEX_X'], inplace=True)
     else:
         df = pd.DataFrame(columns=['UNIT_INDEX_X', 'UNIT_INDEX_Y'])
-
+    
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Defective_Cell_Locations')
-
-        # Auto-adjust column widths for better readability
-        worksheet = writer.sheets['Defective_Cell_Locations']
-        for i, col in enumerate(df.columns):
-            width = max(df[col].astype(str).map(len).max(), len(col)) + 2
-            worksheet.set_column(i, i, width)
-
     return output.getvalue()
+
