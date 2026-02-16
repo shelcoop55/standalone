@@ -71,4 +71,4 @@ class RootCauseTool(AnalysisTool):
             matrix, layer_labels, axis_labels,
             f"Virtual Slice: {axis_name} {slice_index}"
         )
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
