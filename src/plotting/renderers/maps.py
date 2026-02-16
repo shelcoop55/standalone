@@ -1177,6 +1177,7 @@ def create_animated_spatial_heatmap(
     use_density: bool = False,
     theme_config: Optional[PlotTheme] = None,
     zmax_override: Optional[float] = None,
+    show_play_button: bool = True,
 ) -> go.Figure:
     """
     Builds an animated spatial heatmap (one frame per layer) with slider + play controls.
@@ -1267,9 +1268,12 @@ def create_animated_spatial_heatmap(
 
     apply_panel_theme(fig, "Spatial Heatmap (per-layer)", height=700, theme_config=theme_config)
 
-    fig.update_layout(
-        sliders=sliders,
-        updatemenus=[dict(
+    # Configure Layout with Sliders
+    layout_update = dict(sliders=sliders)
+
+    # Optionally add Play/Pause buttons
+    if show_play_button:
+        layout_update['updatemenus'] = [dict(
             type="buttons",
             showactive=False,
             y=1.05,
@@ -1280,7 +1284,8 @@ def create_animated_spatial_heatmap(
                 dict(label="Pause", method="animate", args=[[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}])
             ]
         )]
-    )
+
+    fig.update_layout(**layout_update)
 
     return fig
 

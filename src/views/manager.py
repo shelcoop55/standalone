@@ -41,6 +41,11 @@ class ViewManager:
     def __init__(self, store: SessionStore):
         self.store = store
 
+    def _sync_widget_state(self, key: str):
+        """Callback to sync temporary widget state to persistent session state."""
+        if f"widget_{key}" in st.session_state:
+            st.session_state[key] = st.session_state[f"widget_{key}"]
+
     def render_navigation(self):
         # Inject Keyboard Shortcuts
         with open("src/components/keyboard_shortcuts.html", "r") as f:
@@ -452,45 +457,55 @@ class ViewManager:
 
         # --- ROW 3: CONTEXT FILTERS ---
         if current_tab_text == "Heatmap":
-             st.radio(
-                 "View",
-                 options=["Aggregated", "Per layer"],
-                 index=0,
-                 key="heatmap_view_mode",
-                 help="Aggregated: one heatmap for all selected layers. Per layer: one heatmap per selected layer (stacked).",
-             )
+             # Initialize persistent state defaults if missing
+             if "heatmap_view_mode" not in st.session_state: st.session_state["heatmap_view_mode"] = "Aggregated"
+             if "heatmap_defect_set" not in st.session_state: st.session_state["heatmap_defect_set"] = "Real defects only (verification rules)"
+             if "heatmap_bin_size_mm" not in st.session_state: st.session_state["heatmap_bin_size_mm"] = 25  # Default Bin Size: 25mm
+             if "heatmap_color_scale" not in st.session_state: st.session_state["heatmap_color_scale"] = "Count per bin"  # Default Scale
+             if "heatmap_zmax_density" not in st.session_state: st.session_state["heatmap_zmax_density"] = 1.0
+             if "heatmap_zmax_count" not in st.session_state: st.session_state["heatmap_zmax_count"] = 5  # Default Z-Max Count
+
+             if "heatmap_zmax_count" not in st.session_state: st.session_state["heatmap_zmax_count"] = 5  # Default Z-Max Count
+
+             # Enforce Aggregated View Mode (User Request: Remove toggle, default to All/Aggregated)
+             st.session_state["heatmap_view_mode"] = "Aggregated"
+
              st.radio(
                  "Defect set",
                  options=["Real defects only (verification rules)", "All read defects"],
-                 index=0,
-                 key="heatmap_defect_set",
+                 index=0 if st.session_state["heatmap_defect_set"] == "Real defects only (verification rules)" else 1,
+                 key="widget_heatmap_defect_set",
+                 on_change=self._sync_widget_state, args=("heatmap_defect_set",),
                  help="Real defects: excludes safe codes (e.g. GE57, N, TA, FALSE). All read: every defect from coordinates.",
              )
              st.slider(
                  "Bin size (mm)",
                  min_value=5,
                  max_value=50,
-                 value=10,
+                 value=int(st.session_state["heatmap_bin_size_mm"]),
                  step=1,
-                 key="heatmap_bin_size_mm",
+                 key="widget_heatmap_bin_size_mm",
+                 on_change=self._sync_widget_state, args=("heatmap_bin_size_mm",),
                  help="Cell size in mm. Each cell = bin_size × bin_size mm².",
              )
              st.radio(
                  "Color scale",
                  options=["Count per bin", "Defects per mm²"],
-                 index=1,
-                 key="heatmap_color_scale",
+                 index=0 if st.session_state["heatmap_color_scale"] == "Count per bin" else 1,
+                 key="widget_heatmap_color_scale",
+                 on_change=self._sync_widget_state, args=("heatmap_color_scale",),
                  help="Count per bin: defects in each cell. Defects per mm²: density (count / cell area in mm²).",
              )
-             heatmap_scale = st.session_state.get("heatmap_color_scale", "Defects per mm²")
+             heatmap_scale = st.session_state["heatmap_color_scale"]
              if heatmap_scale == "Defects per mm²":
                  st.slider(
                      "Color scale max (Z)",
                      min_value=0.0,
                      max_value=1.0,
-                     value=1.0,
+                     value=float(st.session_state["heatmap_zmax_density"]),
                      step=0.1,
-                     key="heatmap_zmax_density",
+                     key="widget_heatmap_zmax_density",
+                     on_change=self._sync_widget_state, args=("heatmap_zmax_density",),
                      help="Max value for the color bar (defects per mm²).",
                  )
              else:
@@ -498,9 +513,10 @@ class ViewManager:
                      "Color scale max (Z)",
                      min_value=0,
                      max_value=10,
-                     value=10,
+                     value=int(st.session_state["heatmap_zmax_count"]),
                      step=1,
-                     key="heatmap_zmax_count",
+                     key="widget_heatmap_zmax_count",
+                     on_change=self._sync_widget_state, args=("heatmap_zmax_count",),
                      help="Max value for the color bar (count per bin).",
                  )
         elif current_tab_text == "Stress Map":
@@ -562,7 +578,8 @@ class ViewManager:
             include_pareto_png = st.checkbox("Pareto Charts (PNG) - All Layers", value=False, key="rep_include_pareto")
             st.markdown("##### Additional Analysis Charts")
             include_heatmap_png = st.checkbox("Heatmap (PNG)", value=False, key="rep_include_heatmap_png")
-            include_heatmap_html = st.checkbox("Heatmap (HTML)", value=False, key="rep_include_heatmap_html")
+            # HTML Heatmap removed as per user request
+            include_heatmap_html = False 
             include_stress_png = st.checkbox("Stress Map (PNG)", value=False, key="rep_include_stress_png")
             include_root_cause_html = st.checkbox("Root Cause (HTML)", value=False, key="rep_include_rca_html")
 

@@ -268,7 +268,7 @@ def generate_zip_package(
 
         # 7. Additional Analysis Charts
 
-        if include_heatmap_png or include_heatmap_html:
+        if include_heatmap_png:
             log("Generating Heatmap exports from the *analysis* view (Spatial heatmap)...")
             try:
                 # Export the same spatial heatmap shown in the Analysis -> Heatmap view
@@ -289,70 +289,6 @@ def generate_zip_package(
                 if include_heatmap_png:
                     img_bytes_spatial = fig_spatial.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
                     zip_file.writestr("Images/Analysis_Heatmap_Spatial.png", img_bytes_spatial)
-
-                if include_heatmap_html:
-                    # If layer_data is available, build an animated per-layer spatial heatmap (slider)
-                    try:
-                        if layer_data:
-                            layer_frames = []
-                            for layer_num in layer_data.get_all_layer_nums():
-                                dfs = []
-                                for side in layer_data.get_sides_for_layer(layer_num):
-                                    layer_obj = layer_data.get_layer(layer_num, side)
-                                    if not layer_obj:
-                                        continue
-                                    dfs.append(layer_obj.data.copy())
-                                if not dfs:
-                                    layer_df = pd.DataFrame()
-                                else:
-                                    layer_df = pd.concat(dfs, ignore_index=True)
-
-                                # Apply verification filter (same logic used elsewhere)
-                                if verification_selection != 'All' and not layer_df.empty:
-                                    if isinstance(verification_selection, list):
-                                        if not verification_selection:
-                                            layer_df = layer_df.iloc[0:0]
-                                        else:
-                                            layer_df = layer_df[layer_df['Verification'].isin(verification_selection)]
-                                    else:
-                                        layer_df = layer_df[layer_df['Verification'] == verification_selection]
-
-                                # Apply quadrant filter
-                                if quadrant_selection != 'All' and 'QUADRANT' in layer_df.columns and not layer_df.empty:
-                                    layer_df = layer_df[layer_df['QUADRANT'] == quadrant_selection]
-
-                                layer_frames.append((f"Layer {layer_num}", layer_df))
-
-                            # Build animated figure using the plotting renderer
-                            if layer_frames:
-                                anim_fig = create_animated_spatial_heatmap(
-                                    layer_frames,
-                                    ctx,
-                                    panel_rows,
-                                    panel_cols,
-                                    bin_size_mm=bin_size,
-                                    real_defects_only=real_defects,
-                                    use_density=use_density,
-                                    theme_config=theme_config,
-                                    zmax_override=heatmap_zmax_override,
-                                )
-                                html_anim = anim_fig.to_html(full_html=True, include_plotlyjs='cdn')
-                                zip_file.writestr("Images/Analysis_Heatmap_Spatial.html", html_anim)
-                                log("Wrote animated spatial heatmap HTML.")
-                                # Skip fallback
-                                raise StopIteration
-
-                        # Fallback: write single static spatial heatmap HTML
-                        html_spatial = fig_spatial.to_html(full_html=True, include_plotlyjs='cdn')
-                        zip_file.writestr("Images/Analysis_Heatmap_Spatial.html", html_spatial)
-                    except StopIteration:
-                        # Expected control flow when animated HTML already written
-                        pass
-                    except Exception as e:
-                        # Fallback to static HTML on error
-                        logger.exception("Failed to generate animated spatial heatmap HTML: %s", e)
-                        html_spatial = fig_spatial.to_html(full_html=True, include_plotlyjs='cdn')
-                        zip_file.writestr("Images/Analysis_Heatmap_Spatial.html", html_spatial)
 
                 log("Success.")
             except Exception as e:
