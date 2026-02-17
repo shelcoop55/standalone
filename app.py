@@ -157,14 +157,35 @@ def main() -> None:
                 # Determine Dataset ID based on files
                 current_uploader_key = f"uploaded_files_{st.session_state['uploader_key']}"
                 files = st.session_state.get(current_uploader_key, [])
+                
+                # Import here to avoid circular dependency in state.py
+                from src.io.ingestion import load_panel_data
 
                 if not files:
                     store.dataset_id = "sample_data"
                 else:
                     store.dataset_id = str(hash(tuple(f.name for f in files)))
 
-                # Access layer_data to trigger the cached load and verify data
+                # EXPLICIT LOAD
+                result = load_panel_data(
+                    files, p_rows, p_cols,
+                    layout_ctx.panel_width, layout_ctx.panel_height,
+                    layout_ctx.effective_gap_x, layout_ctx.effective_gap_y
+                )
+                
+                # Handle Errors/Warnings
+                if result.errors:
+                    for err in result.errors:
+                        st.error(err)
+                
+                if result.warnings:
+                    for warn in result.warnings:
+                        st.warning(warn)
+                
+                # Set Data in Store
+                store.layer_data = result.panel_data
                 data = store.layer_data
+                
                 if data:
                     # Update Metadata
                     meta = {}

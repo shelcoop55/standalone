@@ -3,6 +3,7 @@ import pandas as pd
 from src.analysis.base import AnalysisTool
 from src.plotting.renderers.maps import create_spatial_grid_heatmap
 from src.views.utils import get_geometry_context
+from src.core.layout import apply_layout_to_dataframe
 from src.core.config import PNG_EXPORT_SCALE, PNG_EXPORT_WIDTH, PNG_EXPORT_HEIGHT
 
 @st.cache_data
@@ -118,6 +119,9 @@ class HeatmapTool(AnalysisTool):
                 selected_quadrant
             )
             if not combined_heatmap_df.empty:
+                # Apply layout to dataframe
+                combined_heatmap_df = apply_layout_to_dataframe(combined_heatmap_df, ctx, panel_rows, panel_cols)
+
                 fig = create_spatial_grid_heatmap(
                     combined_heatmap_df,
                     ctx=ctx,
@@ -172,6 +176,9 @@ class HeatmapTool(AnalysisTool):
                     continue
                 any_shown = True
                 st.subheader(f"Layer {layer_num}")
+                # Apply layout to dataframe
+                layer_df = apply_layout_to_dataframe(layer_df, ctx, panel_rows, panel_cols)
+                
                 fig = create_spatial_grid_heatmap(
                     layer_df,
                     ctx=ctx,

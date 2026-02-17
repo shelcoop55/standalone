@@ -65,7 +65,8 @@ def render_still_alive_main(store: SessionStore, theme_config=None):
         store.layer_data,
         excluded_layers=excluded_layers,
         excluded_defect_types=excluded_defects,
-        included_sides=included_sides
+        included_sides=included_sides,
+        store=store
     )
 
     # If side_mode != Both, we might need to post-filter the true_defect_data?

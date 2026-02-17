@@ -1,119 +1,50 @@
 # Panel Defect Analysis - Engineering Manual
 
 ## 📘 Overview
-This document serves as the "Technical Bible" for the Panel Defect Analysis application. It details the architectural decisions, mathematical formulas, and system assumptions that drive the software.
+This application provides advanced spatial and statistical analysis of defect data for multi-layer panel manufacturing. It enables traceability, yield estimation, and root-cause diagnostics through interactive dashboards and high-fidelity visualizations.
 
 ## 🏗️ Architecture
-The application follows a Domain-Driven Design (DDD) inspired structure:
+The system follows a clean, modular architecture:
 
-*   **`src/core`**: The domain heart. Contains the `GeometryEngine` (physical layout logic) and `PanelData` models.
-*   **`src/io`**: Data ingress and egress.
-    *   `ingestion.py`: Handles Excel parsing and loading.
-    *   `validation.py`: Enforces strict schema validation.
-    *   `sample_generator.py`: Generates geometrically accurate synthetic data for demonstration.
-    *   `naming.py`: Standardizes filename parsing and generation.
-*   **`src/analytics`**: Pure business logic. Vectorized calculation of Yield, Stress Maps, and Root Cause matrices.
-*   **`src/plotting`**: Visualization layer. Decoupled into `generators` (data prep) and `renderers` (Plotly object creation).
-*   **`src/state`**: State management. Encapsulates `st.session_state` mutations in a `SessionStore`.
-*   **`src/utils`**: Utility modules, including the centralized `Logger`.
+*   **`src/core`**: Domain logic. Contains `GeometryEngine` and `PanelData` models.
+*   **`src/io`**: Data management (Ingestion, Validation, Exporting).
+    *   `naming.py`: Handles professional, token-aware filename generation.
+*   **`src/analytics`**: Computational modules (Yield, Stress Maps, Root Cause Analysis).
+*   **`src/views`**: Streamlit-based presentation layer.
+*   **`src/state`**: Centralized state management using `SessionStore`.
+*   **`src/plotting`**: High-performance visualization using Plotly.
 
 ---
 
-## 🧮 The Mathematical Engine
+## 🧮 Core Logic
 
-### 1. Coordinate System & Yield Calculation
-The application operates on two coordinate systems:
-*   **Logical Grid (`UNIT_INDEX_X`, `UNIT_INDEX_Y`)**: Integer indices of the units. Used for aggregation.
-*   **Physical Layout (mm)**: Floating point coordinates for visualization.
+### 1. Yield Calculation
+Yield is calculated using a **Geometric Zero-Defect** approach:
+*   **Alive Unit**: A cell with zero "True Defects" across all selected layers and sides.
+*   **True Defect**: Defined by verification rules (Status NOT in SAFE list: 'False', 'N', 'GE57', etc.).
 
-**Yield Logic:**
-A unit is considered "Alive" (Yielding) if and only if:
-1.  It exists in the grid (within `rows` x `cols`).
-2.  It has **zero** "True Defects" across **all** active layers.
+### 2. Physical Layout & Geometry
+The `GeometryEngine` handles multi-quadrant mapping with dynamic gaps and offsets.
+*   **Zonal Yield**: Analyzes yield in concentric rings (Edge, Middle, Center) to detect process uniformity issues.
+*   **Alignment**: Automatically handles horizontal mirroring for Back-Side inspection data.
 
-**True Defect Definition:**
-A defect is "True" if its `Verification` status is **NOT** in the `SAFE_VERIFICATION_VALUES` list (e.g., 'False Alarm', 'N', 'Safe').
-
-### 2. Stress Map Aggregation
-The Stress Map (`src/analytics/stress.py`) computes a 2D histogram of defect density.
-*   **Formula**: $H_{x,y} = \sum_{l \in Layers} \mathbb{1}(Defect_{l,x,y} \text{ is True})$
-*   **Delta Mode**: $H_{Delta} = H_{GroupA} - H_{GroupB}$.
-
-### 3. Zonal Yield
-Yield is calculated per concentric zone (Ring) from the edge:
-*   **Edge (Ring 0)**: The outermost perimeter (1 unit thick).
-*   **Middle (Ring 1-2)**: The next 2 layers inward.
-*   **Center (Ring 3+)**: The remaining core.
+### 3. File Naming Convention
+Exported reports follow a standardized, intuitive naming convention for maximum traceability:
+`[ReportType]_[LotNumber]_[ProcessRequest]_[SourceFile]_[Date].[ext]`
 
 ---
 
-## 📐 The Geometry Registry
+## 🧭 System Requirements & Assumptions
 
-The `GeometryEngine` (`src/core/geometry.py`) is the single source of truth for all layout dimensions. It ensures that both the Sample Data Generator and the Visualization Layer use the exact same logic to position units.
+1.  **Data Schema**: Input files must contain `DEFECT_TYPE`, `UNIT_INDEX_X`, and `UNIT_INDEX_Y`.
+2.  **Naming Pattern**: Input files should typically follow the pattern `BU-{LayerNum}{Side}.xlsx` for automatic metadata extraction.
+3.  **Performance**: Large datasets are processed using vectorized Pandas operations and cached Plotly generations to ensure a responsive UI.
 
-| Constant | Default Value | Description |
-| :--- | :--- | :--- |
-| `FRAME_WIDTH` | 510 mm | Total physical width of the panel frame. |
-| `FRAME_HEIGHT` | 515 mm | Total physical height of the panel frame. |
-| `DEFAULT_OFFSET_X` | 13.5 mm | Structural margin from Frame Left to Active Area. |
-| `DEFAULT_OFFSET_Y` | 15.0 mm | Structural margin from Frame Top to Active Area. |
-| `DEFAULT_GAP` | 3.0 mm | Fixed structural gap between quadrants. |
-| `DYNAMIC_GAP` | 5.0 / 3.5 mm | Additional dynamic gap configurable by user. |
+## 🛠️ Operation & Exporting
 
-**Unit Cell Calculation:**
-$$ CellWidth = \frac{QuadrantWidth - (Cols + 1) \times InterUnitGap}{Cols} $$
-*(Note: Uses (n+1) gaps to ensure separation from quadrant edges)*
-
-### Sample Data Generation
-When no files are uploaded, the application uses `src/io/sample_generator.py` to create synthetic data. This generator:
-1.  Respects the **Dynamic Gaps** and **Offsets** defined in the Geometry Engine.
-2.  Ensures defect coordinates fall strictly within valid unit boundaries (avoiding gaps).
-3.  Simulates realistic defect distributions across layers (Front/Back) and defect types.
+*   **Interactive Analysis**: Real-time filtering by Layer, Side, Quadrant, and Verification status.
+*   **Package Export**: Generates a comprehensive ZIP package containing Excel reports, interactive HTML maps, and high-resolution PNGs.
+*   **Pick Lists**: Real-time generation of CSV coordinate lists for "Good" units to support downstream sorting.
 
 ---
-
-## 🧭 The "Golden Path" Assumptions
-
-1.  **File Naming**: Input files **MUST** follow the pattern `BU-{LayerNum}{Side}.xlsx` (e.g., `BU-01F.xlsx`).
-    *   *Why*: The parser relies on regex to extract Layer Number and Side (Front/Back) automatically.
-    *   *Configuration*: This pattern is defined in `src/core/config.py` as `FILENAME_PATTERN`.
-2.  **Data Schema**:
-    *   Required Columns: `DEFECT_TYPE`, `UNIT_INDEX_X`, `UNIT_INDEX_Y`.
-    *   Optional: `Verification` (defaults to 'Under Verification' if missing), `X_COORDINATES` (for precise plotting).
-    *   Data Types: Indices must be integers.
-3.  **Coordinate Alignment**:
-    *   **Front Side**: `Physical X` = `Unit Index X`.
-    *   **Back Side**: `Physical X` = `(Total Width - 1) - Unit Index X` (Mirrored horizontally for through-board alignment).
-4.  **Immutability**:
-    *   Once loaded, `PanelData` is cached and treated as immutable. Changing parameters (e.g., Rows/Cols) triggers a full reload/revalidation cycle.
-
-## 🛠️ Logging & Debugging
-
-The application utilizes a centralized logging system (`src/utils/logger.py`) to track events and errors.
-*   **Configuration**: Logs are configured to output to `sys.stdout` (console) by default.
-*   **Usage**: Critical data loading steps, validation warnings, and export operations are logged. This replaces ad-hoc `print()` statements for better observability in production environments.
-
-## ⏱️ Performance Monitoring
-
-The application includes a built-in telemetry system to track execution time and memory usage for optimization purposes.
-
-*   **Enabling Debug Mode**: In the sidebar, expand **"Advanced Configuration"** and check **"Show Debug Telemetry"**.
-*   **Metrics Displayed**: A table will appear at the bottom of the dashboard showing:
-    *   **Operation**: The function being tracked (e.g., `Data Ingestion`, `Geometry Calculation`).
-    *   **Duration (s)**: Execution time in seconds.
-    *   **Memory Delta (MB)**: Change in process memory usage during the operation.
-*   **Key Optimizations**:
-    *   **Column Pruning**: Input DataFrames are stripped of unused columns to save RAM.
-    *   **Vectorization**: Plotting logic uses Numpy/Pandas vector operations instead of loops.
-    *   **Caching**: Heavy geometry and layout calculations are cached using `st.cache_data`.
-
-## 🚦 Tab Logic & View Modes
-
-*   **Still Alive**: The primary executive view. Aggregates everything to show net yield. Filters work as "Exclusions" (Remove layers/defects to see what survives).
-*   **Multi-Layer**: Visualizes alignment stack-up. Shows raw defects from selected layers/sides.
-*   **Root Cause**: Virtual Cross-Sectioning. Slices the panel (X or Y axis) to show defect depth through the stack.
-*   **Heatmap / Stress**: Density visualization. Heatmap uses Gaussian smoothing; Stress Map uses exact grid counting.
-
----
-
-*Generated by Jules (AI Engineering Agent)*
+*Professional Engineering Documentation*

@@ -3,6 +3,9 @@ import pandas as pd
 from src.analysis.base import AnalysisTool
 from src.plotting.renderers.charts import create_defect_sunburst, create_defect_sankey
 
+from src.views.utils import get_geometry_context
+from src.core.layout import apply_layout_to_dataframe
+
 class InsightsTool(AnalysisTool):
     @property
     def name(self) -> str:
@@ -19,6 +22,9 @@ class InsightsTool(AnalysisTool):
         side_pills = st.session_state.get("analysis_side_pills", ["Front", "Back"])
         selected_verifs = st.session_state.get("multi_verification_selection", [])
         selected_quadrant = st.session_state.get("analysis_quadrant_selection", "All")
+        
+        params = self.store.analysis_params
+        panel_rows, panel_cols = params.get("panel_rows", 7), params.get("panel_cols", 7)
 
         # Collect Data
         dfs = []
@@ -38,6 +44,10 @@ class InsightsTool(AnalysisTool):
 
         if dfs:
             combined_df = pd.concat(dfs, ignore_index=True)
+            
+            # Apply Layout to ensure QUADRANT exists
+            ctx = get_geometry_context(self.store)
+            combined_df = apply_layout_to_dataframe(combined_df, ctx, panel_rows, panel_cols)
 
             # 1. Filter Verif
             if 'Verification' in combined_df.columns and selected_verifs:
@@ -90,7 +100,7 @@ class InsightsTool(AnalysisTool):
                         st.dataframe(
                             stats_df,
                             hide_index=True,
-                            use_container_width=True,
+                            width="stretch",
                             column_config={
                                 "Defect Type": st.column_config.TextColumn("Type"),
                                 "Count": st.column_config.TextColumn("Count (% Total)"),

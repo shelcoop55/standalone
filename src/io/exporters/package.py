@@ -31,6 +31,7 @@ from src.plotting.renderers.charts import (
 )
 from src.analytics.stress import aggregate_stress_data_from_df
 from src.analytics.yield_analysis import get_cross_section_matrix
+from src.io.naming import generate_standard_filename
 
 def generate_zip_package(
     full_df, # pandas.DataFrame
@@ -144,17 +145,24 @@ def generate_zip_package(
             excel_bytes = generate_excel_report(
                 full_df, panel_rows, panel_cols, source_filename, quadrant_selection, verification_selection
             )
-            name_suffix = f"_{process_comment}" if process_comment else ""
-            zip_file.writestr(f"Defect_Analysis_Report{name_suffix}.xlsx", excel_bytes)
+            excel_filename = generate_standard_filename(
+                prefix="Defect_Report",
+                selected_layer=None, # Already combined
+                analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                extension="xlsx"
+            )
+            zip_file.writestr(excel_filename, excel_bytes)
 
         # 2. Coordinate List (CSV/Excel)
         if include_coords:
-            # generate_coordinate_list_report expects a SET of coords if it just lists them,
-            # or maybe it can handle the dict? Let's check its definition.
-            # Assuming it wants keys.
             coord_bytes = generate_coordinate_list_report(set(true_defect_data.keys()))
-            name_suffix = f"_{process_comment}" if process_comment else ""
-            zip_file.writestr(f"Defective_Cell_Coordinates{name_suffix}.xlsx", coord_bytes)
+            coord_filename = generate_standard_filename(
+                prefix="Defective_Coordinates",
+                selected_layer=None,
+                analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                extension="xlsx"
+            )
+            zip_file.writestr(coord_filename, coord_bytes)
 
         # 3. Defect Map (Interactive HTML) - CURRENT VIEW
         if include_map:
@@ -164,16 +172,34 @@ def generate_zip_package(
                 theme_config=theme_config
             )
             html_content = fig.to_html(full_html=True, include_plotlyjs='cdn')
-            zip_file.writestr("Defect_Map.html", html_content)
+            map_filename = generate_standard_filename(
+                prefix="Defect_Map",
+                selected_layer=None,
+                analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                extension="html"
+            )
+            zip_file.writestr(map_filename, html_content)
 
         # 4. Insights Charts (Interactive HTML) - CURRENT VIEW
         if include_insights:
             sunburst_fig = create_defect_sunburst(full_df, theme_config=theme_config)
-            zip_file.writestr("Insights_Sunburst.html", sunburst_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+            sunburst_name = generate_standard_filename(
+                prefix="Insights_Sunburst",
+                selected_layer=None,
+                analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                extension="html"
+            )
+            zip_file.writestr(sunburst_name, sunburst_fig.to_html(full_html=True, include_plotlyjs='cdn'))
 
             sankey_fig = create_defect_sankey(full_df, theme_config=theme_config)
             if sankey_fig:
-                zip_file.writestr("Insights_Sankey.html", sankey_fig.to_html(full_html=True, include_plotlyjs='cdn'))
+                sankey_name = generate_standard_filename(
+                    prefix="Insights_Sankey",
+                    selected_layer=None,
+                    analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                    extension="html"
+                )
+                zip_file.writestr(sankey_name, sankey_fig.to_html(full_html=True, include_plotlyjs='cdn'))
 
         # 5. PNG Images (All Layers/Sides) - OPTIONAL
         if (include_png_all_layers or include_pareto_png):
@@ -223,7 +249,15 @@ def generate_zip_package(
                             )
                             try:
                                 img_bytes = fig_map.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_DefectMap{img_suffix}.png", img_bytes)
+                                # Consistent naming for internal images as well
+                                img_name = generate_standard_filename(
+                                    prefix=f"Map_L{layer_num}_{side_name}",
+                                    selected_layer=layer_num,
+                                    layer_data=layer_data,
+                                    analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                                    extension="png"
+                                )
+                                zip_file.writestr(f"Images/{img_name}", img_bytes)
                                 log("  Success.")
                             except Exception as e:
                                 msg = f"Failed to generate map PNG for Layer {layer_num} {side}: {e}"
@@ -239,7 +273,14 @@ def generate_zip_package(
                             )
                             try:
                                 img_bytes = fig_pareto.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT_PARETO)
-                                zip_file.writestr(f"Images/Layer_{layer_num}_{side_name}_Pareto{img_suffix}.png", img_bytes)
+                                pareto_name = generate_standard_filename(
+                                    prefix=f"Pareto_L{layer_num}_{side_name}",
+                                    selected_layer=layer_num,
+                                    layer_data=layer_data,
+                                    analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                                    extension="png"
+                                )
+                                zip_file.writestr(f"Images/{pareto_name}", img_bytes)
                                 log("  Success.")
                             except Exception as e:
                                 msg = f"Failed to generate pareto PNG for Layer {layer_num} {side}: {e}"
@@ -257,7 +298,13 @@ def generate_zip_package(
                 )
                 try:
                     img_bytes = fig_alive.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                    zip_file.writestr("Images/Still_Alive_Map.png", img_bytes)
+                    alive_name = generate_standard_filename(
+                        prefix="Still_Alive_Map",
+                        selected_layer=None,
+                        analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                        extension="png"
+                    )
+                    zip_file.writestr(f"Images/{alive_name}", img_bytes)
                     log("Success.")
                 except Exception as e:
                     msg = f"Failed to generate Still Alive Map PNG: {e}"
@@ -288,7 +335,13 @@ def generate_zip_package(
 
                 if include_heatmap_png:
                     img_bytes_spatial = fig_spatial.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                    zip_file.writestr("Images/Analysis_Heatmap_Spatial.png", img_bytes_spatial)
+                    heatmap_name = generate_standard_filename(
+                        prefix="Analysis_Heatmap_Spatial",
+                        selected_layer=None,
+                        analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                        extension="png"
+                    )
+                    zip_file.writestr(f"Images/{heatmap_name}", img_bytes_spatial)
 
                 log("Success.")
             except Exception as e:
@@ -302,7 +355,13 @@ def generate_zip_package(
                     stress_data, panel_rows, panel_cols, ctx, view_mode="Continuous", theme_config=theme_config
                 )
                 img_bytes = fig_stress.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                zip_file.writestr("Images/Analysis_StressMap_Cumulative.png", img_bytes)
+                stress_name = generate_standard_filename(
+                    prefix="Analysis_StressMap_Cumulative",
+                    selected_layer=None,
+                    analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                    extension="png"
+                )
+                zip_file.writestr(f"Images/{stress_name}", img_bytes)
                 log("Success.")
             except Exception as e:
                 log(f"ERROR Generating Stress Map: {e}")
@@ -333,7 +392,13 @@ def generate_zip_package(
                 # but for now let's just provide the full scanner starting from 0.
 
                 html_content = fig_rca.to_html(full_html=True, include_plotlyjs='cdn', auto_play=False)
-                zip_file.writestr("Root_Cause_Analysis.html", html_content)
+                rca_name = generate_standard_filename(
+                    prefix="Root_Cause_Analysis",
+                    selected_layer=None,
+                    analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                    extension="html"
+                )
+                zip_file.writestr(rca_name, html_content)
                 log("Success.")
 
             except Exception as e:
@@ -349,7 +414,13 @@ def generate_zip_package(
                     ctx, fixed_offset_x, fixed_offset_y, dyn_gap_x, dyn_gap_y
                 )
                 img_bytes = fig_geo.to_image(format="png", engine="kaleido", scale=PNG_EXPORT_SCALE, width=PNG_EXPORT_WIDTH, height=PNG_EXPORT_HEIGHT)
-                zip_file.writestr("Geometry_Layout_Infographic.png", img_bytes)
+                geo_name = generate_standard_filename(
+                    prefix="Geometry_Layout_Infographic",
+                    selected_layer=None,
+                    analysis_params={"lot_number": lot_number, "process_comment": process_comment},
+                    extension="png"
+                )
+                zip_file.writestr(geo_name, img_bytes)
                 log("Success.")
             except Exception as e:
                 msg = f"Failed to generate Geometry Infographic: {e}"

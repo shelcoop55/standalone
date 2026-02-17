@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import xlsxwriter.utility as xu
+from src.analytics.verification import filter_true_defects
 
 # --- CORPORATE THEME CONFIG ---
 THEME_COLOR_PRIMARY = '#1F497D'       # Dark Blue (Headers)
@@ -42,10 +43,15 @@ def _define_formats(workbook) -> Dict[str, Any]:
         'card_value': workbook.add_format({**base_fmt, 'bold': True, 'font_size': 24, 'font_color': THEME_COLOR_PRIMARY}),
         'card_sub': workbook.add_format({**base_fmt, 'font_size': 10, 'font_color': '#7F7F7F'}),
         
+        # Source of Truth Header
+        'meta_label': workbook.add_format({**base_fmt, 'bold': True, 'font_color': '#7F7F7F', 'font_size': 8}),
+        'meta_value': workbook.add_format({**base_fmt, 'font_color': '#000000', 'font_size': 8}),
+
         # Yield Map
-        'yield_good': workbook.add_format({**base_fmt, 'bg_color': '#EBF1DE', 'font_color': '#006100', 'border': 1, 'align': 'center'}), # Greenish
-        'yield_warn': workbook.add_format({**base_fmt, 'bg_color': '#FFEB9C', 'font_color': '#9C6500', 'border': 1, 'align': 'center'}), # Yellowish
-        'yield_bad': workbook.add_format({**base_fmt, 'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'border': 1, 'align': 'center'}), # Reddish
+        # Yield Map - Percentage Format fix
+        'yield_good': workbook.add_format({**base_fmt, 'bg_color': '#EBF1DE', 'font_color': '#006100', 'border': 1, 'align': 'center', 'num_format': '0.0%'}), # Greenish
+        'yield_warn': workbook.add_format({**base_fmt, 'bg_color': '#FFEB9C', 'font_color': '#9C6500', 'border': 1, 'align': 'center', 'num_format': '0.0%'}), # Yellowish
+        'yield_bad': workbook.add_format({**base_fmt, 'bg_color': '#FFC7CE', 'font_color': '#9C0006', 'border': 1, 'align': 'center', 'num_format': '0.0%'}), # Reddish
         
         # Hierarchy
         'group_l1': workbook.add_format({**base_fmt, 'bold': True, 'bg_color': '#F2F2F2', 'border': 1}), # Quadrant
@@ -69,9 +75,20 @@ def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols
     sheet = workbook.add_worksheet('Executive Dashboard')
     sheet.hide_gridlines(2)
     
+    # --- 0. Source of Truth Header Block ---
+    # Rows 0-1 reserved for metadata
+    sheet.write('A1', 'CONFIDENTIALITY:', formats['meta_label'])
+    sheet.write('B1', 'INTERNAL USE ONLY', formats['meta_value'])
+    sheet.write('D1', 'GENERATED:', formats['meta_label'])
+    sheet.write('E1', datetime.now().strftime("%Y-%m-%d %H:%M:%S"), formats['meta_value'])
+    sheet.write('A2', 'SOURCE HASH:', formats['meta_label'])
+    sheet.write('B2', f"{abs(hash(source_filename)) % 10**8} (Verifiable)", formats['meta_value']) # Pseudo-hash
+    
     # Header
-    sheet.merge_range('B2:H2', 'Executive Defect Analysis Dashboard', formats['title'])
-    sheet.write('B3', f'Source: {source_filename} | Generated: {datetime.now().strftime("%Y-%m-%d")}', formats['subtitle'])
+    sheet.merge_range('B4:H4', 'Executive Defect Analysis Dashboard', formats['title'])
+    sheet.write('B5', f'Source: {source_filename}', formats['subtitle'])
+    
+    start_row = 7
 
     # --- 1. Big KPIs ---
     total_defects = len(full_df)
@@ -110,9 +127,24 @@ def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols
     write_card(3, "True Defects", f"{true_count:,}", "Actionable defects") 
     write_card(5, "Safe / False", f"{safe_count:,}", "Non-critical entries")
     
+    # --- 1.5 Dynamic Executive Summary Text Box ---
+    # Analyze data for top insight
+    top_insight = "No significant defects found."
+    if not full_df.empty:
+        # Find top defect type
+        top_defect = full_df['DEFECT_TYPE'].mode().iloc[0] if not full_df['DEFECT_TYPE'].empty else "N/A"
+        # Find top quadrant
+        top_quad = full_df['QUADRANT'].mode().iloc[0] if not full_df['QUADRANT'].empty else "N/A"
+        top_insight = f"Primary Analysis: The dominant defect is '{top_defect}', most concentrated in Quarter {top_quad}."
+        
+    sheet.merge_range(start_row, 1, start_row + 2, 6, top_insight, workbook.add_format({
+        'border': 1, 'bg_color': '#FFFFCC', 'valign': 'top', 'text_wrap': True, 'font_size': 10, 'font_name': FONT_MAIN
+    }))
+    start_row += 4
+
     # --- 2. Yield Map (2x2 Visual) ---
-    map_start_row = start_row + 5
-    sheet.write(map_start_row, 1, "Quadrant Yield Map", formats['subtitle'])
+    map_start_row = start_row
+    sheet.write(map_start_row, 1, "Quarter Yield Map", formats['subtitle'])
     
     quadrants = ['Q2', 'Q1', 'Q3', 'Q4'] # Visual layout: Q2 Q1 (Top), Q3 Q4 (Bottom) ? Standard convention varies.
     # Standard Math: Q2 | Q1
@@ -123,11 +155,30 @@ def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols
     q_metrics = {}
     cap_per_quad = panel_rows * panel_cols if (panel_rows * panel_cols) > 0 else 1
     
+    # Filter for Real Defects Only for Yield Map - Calculate Both Total (for False Alarm) and Real
+    # "This Quarter kpi you are generating should show Real defects (False Alarms) ... defect count should be Just real one"
+    
     for q in ['Q1', 'Q2', 'Q3', 'Q4']:
-        q_df = full_df[full_df['QUADRANT'] == q]
-        q_count = len(q_df)
-        yield_pct = max(0, (cap_per_quad - q_count) / cap_per_quad)
-        q_metrics[q] = yield_pct
+        # We start with the full DF filtered by quadrant to get TOTAL
+        q_total_df = full_df[full_df['QUADRANT'] == q]
+        q_total_count = len(q_total_df)
+        
+        # Calculate Real Defects
+        q_real_df = filter_true_defects(q_total_df)
+        q_real_count = len(q_real_df)
+        
+        # False Alarms
+        q_false_count = q_total_count - q_real_count
+        
+        # Yield is based on (Total Cells - Bad Cells) / Total Cells
+        # Using Real Defects count for yield calculation
+        yield_pct = max(0, (cap_per_quad - q_real_count) / cap_per_quad)
+        
+        q_metrics[q] = {
+            'real': q_real_count,
+            'false': q_false_count,
+            'yield': yield_pct
+        }
 
     # Normalized colors (Red < 80%, Yellow < 95%, Green > 95%)
     def get_fmt(val):
@@ -137,11 +188,19 @@ def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols
         
     # Draw 2x2 Grid
     # Row 1: Q2, Q1
-    sheet.write(map_start_row + 2, 1, f"Q2\n{q_metrics.get('Q2',0):.1%}", get_fmt(q_metrics.get('Q2',0)))
-    sheet.write(map_start_row + 2, 2, f"Q1\n{q_metrics.get('Q1',0):.1%}", get_fmt(q_metrics.get('Q1',0)))
+    q2_data = q_metrics.get('Q2', {'real': 0, 'false': 0, 'yield': 1.0})
+    q1_data = q_metrics.get('Q1', {'real': 0, 'false': 0, 'yield': 1.0})
+    
+    # Format: Q1- Real (Real): False (False)
+    sheet.write(map_start_row + 2, 1, f"Q2- {q2_data['real']} (Real): {q2_data['false']} (False)", get_fmt(q2_data['yield']))
+    sheet.write(map_start_row + 2, 2, f"Q1- {q1_data['real']} (Real): {q1_data['false']} (False)", get_fmt(q1_data['yield']))
+    
     # Row 2: Q3, Q4
-    sheet.write(map_start_row + 3, 1, f"Q3\n{q_metrics.get('Q3',0):.1%}", get_fmt(q_metrics.get('Q3',0)))
-    sheet.write(map_start_row + 3, 2, f"Q4\n{q_metrics.get('Q4',0):.1%}", get_fmt(q_metrics.get('Q4',0)))
+    q3_data = q_metrics.get('Q3', {'real': 0, 'false': 0, 'yield': 1.0})
+    q4_data = q_metrics.get('Q4', {'real': 0, 'false': 0, 'yield': 1.0})
+    
+    sheet.write(map_start_row + 3, 1, f"Q3- {q3_data['real']} (Real): {q3_data['false']} (False)", get_fmt(q3_data['yield']))
+    sheet.write(map_start_row + 3, 2, f"Q4- {q4_data['real']} (Real): {q4_data['false']} (False)", get_fmt(q4_data['yield']))
     
     sheet.set_column(1, 2, 20) # Wider columns for map boxes
     sheet.set_row(map_start_row + 2, 50)
@@ -169,12 +228,23 @@ def _create_executive_dashboard(writer, formats, full_df, panel_rows, panel_cols
             sheet.write(r, 2, row['Count'], formats['int'])
             sheet.write(r, 3, row['% of Total'], formats['percent'])
             
-            # Highlight worst performer
-            if row['% of Total'] > 0.5: # If one layer has >50% of defects
+            # Conditional Formatting "Heatmap" for % Contribution
+            # Simple manual check for now
+            if row['% of Total'] > 0.20:
                 sheet.write(r, 3, row['% of Total'], formats['yield_bad'])
+            elif row['% of Total'] > 0.10:
+                sheet.write(r, 3, row['% of Total'], formats['yield_warn'])
+            else:
+                 sheet.write(r, 3, row['% of Total'], formats['percent']) # Standard
+
             r += 1
             
         sheet.set_column(1, 1, 40) # Wide source col
+        
+    # --- Print Settings ---
+    sheet.set_landscape()
+    sheet.set_paper(9) # A4
+    sheet.fit_to_pages(1, 0) # Fit width to 1 page
 
 
 # --- SHEET 2: DETAILED BREAKDOWN ---
@@ -185,7 +255,8 @@ def _create_granular_breakdown(writer, formats, full_df):
     
     sheet.write('A1', 'Granular Defect Breakdown', formats['subtitle'])
     
-    headers = ['Quadrant', 'Defect Type', 'Verification', 'Count', '% of Type', '% of Quad']
+    # Rename Quadrant -> Quarter
+    headers = ['Quarter', 'Defect Type', 'Verification', 'Count', '% of Type', '% of Quad']
     for i, h in enumerate(headers):
         sheet.write(2, i, h, formats['header'])
         
@@ -220,8 +291,8 @@ def _create_granular_breakdown(writer, formats, full_df):
         quad_df = grouped[grouped['QUADRANT'] == quad]
         total_quad_defects = quad_df['Count'].sum()
         
-        # New Quadrant Section
-        sheet.merge_range(row, 0, row, 5, f"Quadrant: {quad} (Total: {total_quad_defects})", formats['group_l1'])
+        # New Quarter Section
+        sheet.merge_range(row, 0, row, 5, f"Quarter: {quad} (Total: {total_quad_defects})", formats['group_l1'])
         row += 1
         
         unique_defects = quad_df['DEFECT_TYPE'].unique()

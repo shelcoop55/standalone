@@ -18,6 +18,7 @@ from src.analytics.models import StressMapData
 from src.documentation import VERIFICATION_DESCRIPTIONS
 from src.utils.telemetry import track_performance
 from src.analytics.yield_analysis import get_cross_section_matrix
+from src.core.layout import apply_layout_to_dataframe
 
 @track_performance("Plot: Multi-Layer Map")
 def create_multi_layer_defect_map(
@@ -31,6 +32,10 @@ def create_multi_layer_defect_map(
     """
     Creates a defect map visualizing defects from ALL layers simultaneously.
     """
+    # Apply Layout Logic (Enrich DF with coordinates)
+    if not df.empty:
+        df = apply_layout_to_dataframe(df, ctx, panel_rows, panel_cols)
+
     fig = go.Figure()
 
     if not df.empty:
@@ -122,9 +127,9 @@ def create_multi_layer_defect_map(
 
     apply_panel_theme(fig, "Multi-Layer Combined Defect Map (True Defects Only)", theme_config=theme_config)
 
-    # FIXED AXIS RANGES (0-510)
-    x_range = [0, 510]
-    y_range = [0, 515]
+    # FIXED AXIS RANGES (0-FRAME_WIDTH)
+    x_range = [0, FRAME_WIDTH]
+    y_range = [0, FRAME_HEIGHT]
 
     fig.update_layout(
         xaxis=dict(title="Unit Column Index", tickvals=x_tick_vals_q1 + x_tick_vals_q2, ticktext=x_tick_text, range=x_range, constrain='domain'),
@@ -148,6 +153,10 @@ def create_defect_map_figure(
     """
     Creates the full Defect Map Figure (Traces + Grid + Layout).
     """
+    # Apply Layout
+    if not df.empty:
+        df = apply_layout_to_dataframe(df, ctx, panel_rows, panel_cols)
+
     quad_width = ctx.quad_width
     quad_height = ctx.quad_height
     offset_x, offset_y = ctx.offset_x, ctx.offset_y
@@ -156,6 +165,7 @@ def create_defect_map_figure(
 
     # Traces with Visual Shift (Additive)
     fig = go.Figure(data=create_defect_traces(df, ctx))
+
     # Grid FIXED
     fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, ctx, quadrant_selection, theme_config=theme_config))
 
@@ -168,8 +178,8 @@ def create_defect_map_figure(
     x_tick_text, y_tick_text = list(range(panel_cols * 2)), list(range(panel_rows * 2))
 
     # Ranges FIXED
-    x_axis_range = [0, 510]
-    y_axis_range = [0, 515]
+    x_axis_range = [0, FRAME_WIDTH]
+    y_axis_range = [0, FRAME_HEIGHT]
     show_ticks = True
 
     if quadrant_selection != Quadrant.ALL.value:
@@ -234,7 +244,7 @@ def _create_still_alive_map_shapes(
     # 0a. Draw Outer Copper Frame (Standard)
     border_color = theme_config.axis_color if theme_config else GRID_COLOR
     bg_color = theme_config.panel_background_color if theme_config else PANEL_BACKGROUND_COLOR
-    path_frame = get_rounded_rect_path(0, 0, 510, 515, 20.0)
+    path_frame = get_rounded_rect_path(0, 0, FRAME_WIDTH, FRAME_HEIGHT, 20.0)
     shapes.append(dict(
         type="path",
         path=path_frame,
@@ -359,8 +369,8 @@ def create_still_alive_figure(
     apply_panel_theme(fig, f"Still Alive Map ({len(true_defect_data)} Defective Cells)", theme_config=theme_config)
 
     # Fixed Ranges
-    x_range = [0, 510]
-    y_range = [0, 515]
+    x_range = [0, FRAME_WIDTH]
+    y_range = [0, FRAME_HEIGHT]
 
     fig.update_layout(
         xaxis=dict(
@@ -469,8 +479,8 @@ def create_stress_heatmap(
 
         # Ranges (FIXED)
         fig.update_layout(
-            xaxis=dict(title="Physical X", range=[0, 510], constrain='domain', showticklabels=False),
-            yaxis=dict(title="Physical Y", range=[0, 515], showticklabels=False)
+            xaxis=dict(title="Physical X", range=[0, FRAME_WIDTH], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[0, FRAME_HEIGHT], showticklabels=False)
         )
 
     else:
@@ -582,8 +592,8 @@ def create_delta_heatmap(
         fig.update_layout(shapes=create_grid_shapes(panel_rows, panel_cols, ctx, quadrant='All', fill=False, theme_config=theme_config))
 
         fig.update_layout(
-            xaxis=dict(title="Physical X", range=[0, 510], constrain='domain', showticklabels=False),
-            yaxis=dict(title="Physical Y", range=[0, 515], showticklabels=False)
+            xaxis=dict(title="Physical X", range=[0, FRAME_WIDTH], constrain='domain', showticklabels=False),
+            yaxis=dict(title="Physical Y", range=[0, FRAME_HEIGHT], showticklabels=False)
         )
 
     else:
@@ -642,6 +652,9 @@ def create_density_contour_map(
     """
     if df.empty:
         return go.Figure()
+
+    # Apply Layout
+    df = apply_layout_to_dataframe(df, ctx, panel_rows, panel_cols)
 
     quad_width = ctx.quad_width
     quad_height = ctx.quad_height
